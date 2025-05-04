@@ -1,6 +1,6 @@
 WinterForge License
 
-Copyright (c) [Your Name / Your Organization]
+Copyright (c) Job Bouwhuis
 
 Permission is hereby granted to use this software in any project, including commercial projects, provided that the software is used as a dependency and is not itself redistributed or republished, either in original or modified form.
 
