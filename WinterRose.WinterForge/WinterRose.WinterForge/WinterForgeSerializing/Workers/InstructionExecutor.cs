@@ -393,13 +393,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private static Type ResolveType(string typeName)
         {
             ValidateKeywordType(ref typeName);
-            // Check if the type is already cached
+            
             if (typeCache.TryGetValue(typeName, out Type cachedType))
                 return cachedType;
 
             Type resolvedType;
 
-            // parse generic types
+            
             if (typeName.Contains('<') && typeName.Contains('>'))
             {
                 int startIndex = typeName.IndexOf('<');

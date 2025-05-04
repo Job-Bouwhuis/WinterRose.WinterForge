@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="WinterRose" Version="25.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\WinterRose.WinterForge\WinterRose.WinterForge.csproj" />
   </ItemGroup>
 

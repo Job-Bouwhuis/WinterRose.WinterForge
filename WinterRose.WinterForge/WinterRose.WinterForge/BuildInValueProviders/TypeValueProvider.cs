@@ -3,9 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Workers;
 
-namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
+namespace WinterRose.WinterForgeSerialization.BuildInValueProviders
 {
     internal class TypeValueProvider : CustomValueProvider<Type>
     {
@@ -13,6 +14,9 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
         {
             return TypeWorker.FindType(value);
         }
-        public override string CreateString(Type obj, ObjectSerializer serializer) => throw new NotImplementedException();
+        public override string CreateString(Type obj, ObjectSerializer serializer)
+        {
+            return obj.FullName;
+        }
     }
 }

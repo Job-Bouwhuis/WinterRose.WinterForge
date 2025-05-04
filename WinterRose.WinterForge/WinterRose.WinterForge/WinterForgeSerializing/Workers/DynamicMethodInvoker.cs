@@ -119,6 +119,11 @@ namespace WinterRose.WinterForgeSerialization.Workers
                     converted = input;
                     return true;
                 }
+                else if (input.GetType().IsAssignableTo(targetType))
+                {
+                    converted = input;
+                    return true;
+                }
                 else if (input is string s)
                 {
                     converted = Convert.ChangeType(s, targetType);
