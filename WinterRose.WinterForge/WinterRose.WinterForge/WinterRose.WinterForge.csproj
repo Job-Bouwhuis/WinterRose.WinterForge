@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.1</Version>
+    <Version>25.2.2</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -19,7 +19,9 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <PackageReleaseNotes>Fixed value provider for System.Type throwing "NotImplementedException"
 Fixed attributes being internal rather than public
-Added value providers for DateTime, TimeOnly, and TimeSpan (DateOnly aready existsed)</PackageReleaseNotes>
+Added value providers for DateTime, TimeOnly, and TimeSpan (DateOnly aready existsed)
+
+Added several more Deserialize methods to WinterForge</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

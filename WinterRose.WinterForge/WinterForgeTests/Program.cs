@@ -12,10 +12,11 @@ internal class Program
         (1..2).Contains(1);
 
         WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
-        WinterForge.DeserializeFromFile<Nothing>("opcodes.txt");
+        object result = WinterForge.DeserializeFromFile("opcodes.txt");
 
         Console.WriteLine(File.ReadAllText("Human.txt"));
         Console.WriteLine("\n");
         Console.WriteLine(data);
+        Console.WriteLine(result.ToString());
     }
 }
