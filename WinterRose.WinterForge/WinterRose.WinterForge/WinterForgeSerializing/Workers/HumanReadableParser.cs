@@ -565,7 +565,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     writer.WriteLine(opcodeMap["START_STR"]);
                     foreach (string line in fullString.Split('\n'))
-                        writer.WriteLine($"{opcodeMap["STR"]} {line}");
+                        writer.WriteLine($"{opcodeMap["STR"]} \"{line}\"");
                     writer.WriteLine(opcodeMap["END_STR"]);
 
                     return "_stack()";
@@ -578,29 +578,50 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             StringBuilder content = new();
             bool inEscape = false;
+            bool isMultiline = false;
             bool inside = false;
+            int quoteCount = 0;
 
-            // Start parsing after the opening quote
+            // Determine quote style (single vs 5x)
             for (int i = 0; i < start.Length; i++)
+            {
+                if (start[i] == '"')
+                {
+                    quoteCount++;
+                    inside = true;
+                }
+                else if (!char.IsWhiteSpace(start[i]))
+                {
+                    break;
+                }
+            }
+
+            if (!inside)
+                throw new InvalidOperationException("String must start with at least one quote.");
+
+            if (quoteCount == 1)
+                isMultiline = false;
+            else if (quoteCount == 5)
+                isMultiline = true;
+            else
+                throw new InvalidOperationException("Invalid number of quotes to start string. Use 1 or 5.");
+
+            int startOffset = quoteCount;
+
+            for (int i = startOffset; i < start.Length; i++)
             {
                 char c = start[i];
 
-                if (!inside)
-                {
-                    if (c == '"')
-                    {
-                        inside = true;
-                        continue;
-                    }
-                    continue; // skip anything before the first quote
-                }
-
                 if (inEscape)
                 {
-                    if (c == '"')
-                        content.Append('"');
-                    else
-                        content.Append('\\').Append(c); // keep unknown escape sequences intact
+                    content.Append(c switch
+                    {
+                        '"' => '"',
+                        '\\' => '\\',
+                        'n' => '\n',
+                        't' => '\t',
+                        _ => '\\' + c.ToString()
+                    });
 
                     inEscape = false;
                 }
@@ -610,7 +631,20 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
                 else if (c == '"')
                 {
-                    return "\"" + content.ToString() + "\"";
+                    // check ahead to see if we hit the closing quote sequence
+                    int remaining = start.Length - i;
+                    if (isMultiline && remaining >= 5 && start.Substring(i, 5) == "\"\"\"\"\"")
+                    {
+                        return content.ToString();
+                    }
+                    else if (!isMultiline)
+                    {
+                        return content.ToString();
+                    }
+                    else
+                    {
+                        content.Append('"');
+                    }
                 }
                 else
                 {
@@ -618,14 +652,17 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
             }
 
-            // if we reach here, string wasn't closed in the starting line
+            if (!isMultiline)
+                throw new InvalidOperationException("Malformed multiline string: unexpected line break in single-quote string.");
+
+            // Keep reading until we find the closing 5x quote
             while (true)
             {
                 string? nextLine = ReadNonEmptyLine(allowEmptyLines: true);
                 if (nextLine == null)
-                    throw new InvalidOperationException("Unexpected end of stream while reading string.");
+                    throw new InvalidOperationException("Unexpected end of stream while reading multiline string.");
 
-                content.Append('\n'); // preserve line break
+                content.Append('\n');
 
                 for (int i = 0; i < nextLine.Length; i++)
                 {
@@ -633,10 +670,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                     if (inEscape)
                     {
-                        if (c == '"')
-                            content.Append('"');
-                        else
-                            content.Append('\\').Append(c);
+                        content.Append(c switch
+                        {
+                            '"' => '"',
+                            '\\' => '\\',
+                            'n' => '\n',
+                            't' => '\t',
+                            _ => '\\' + c.ToString()
+                        });
 
                         inEscape = false;
                     }
@@ -646,7 +687,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     }
                     else if (c == '"')
                     {
-                        return content.ToString();
+                        // lookahead for 5x quote
+                        if (i + 4 < nextLine.Length && nextLine.Substring(i, 5) == "\"\"\"\"\"")
+                        {
+                            return content.ToString();
+                        }
+                        else
+                        {
+                            content.Append('"');
+                        }
                     }
                     else
                     {
@@ -655,6 +704,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
             }
         }
+
 
 
 

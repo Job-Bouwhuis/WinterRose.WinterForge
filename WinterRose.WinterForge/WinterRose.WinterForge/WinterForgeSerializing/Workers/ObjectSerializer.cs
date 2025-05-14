@@ -148,6 +148,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
             int linePos = serializedString.IndexOf('\n');
             if (linePos != -1)
             {
+                if(serializedString.StartsWith('"') && serializedString.EndsWith('"'))
+                {
+                    WriteToStream(destinationStream, $"{member.Name} = {serializedString}");
+                    WriteToStream(destinationStream, ";\n");
+                    return;
+                }
                 string line = serializedString[0..linePos];
                 linePos = line.IndexOf(':');
                 if (linePos != -1)
@@ -214,8 +220,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             Type valueType = value.GetType();
 
-            if(value is string)
+            if(value is string s)
+            {
+                if(s.Contains('\n'))
+                    return $"\"\"\"\"\"{s}\"\"\"\"\"";
                 return $"\"{value}\"";
+            }
 
             // Check if the value is a primitive or string
             if (valueType.IsPrimitive)

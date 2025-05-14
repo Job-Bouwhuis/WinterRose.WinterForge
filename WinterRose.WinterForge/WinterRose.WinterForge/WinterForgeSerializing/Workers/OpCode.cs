@@ -98,7 +98,11 @@
         /// 12 - AS<br></br>
         /// 0 - store the stack item on ID 0. even if an object at that ID already exists
         /// </summary>
-        AS = 12
+        AS = 12,
+
+        START_STR,
+        STR,
+        END_STR
     }
 
 }

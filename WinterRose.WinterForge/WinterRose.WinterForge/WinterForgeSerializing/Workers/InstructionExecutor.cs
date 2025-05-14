@@ -21,7 +21,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private readonly Stack<int> instanceIDStack;
         private readonly Stack<KeyValuePair<Type, IList>> listStack = new();
         private readonly List<DispatchedReference> dispatchedReferences = [];
-
+        private StringBuilder? sb;
 
         private int i = 0;
 
@@ -90,6 +90,20 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             }
                             else
                                 context.ValueStack.Push(val);
+                            break;
+                        case OpCode.START_STR:
+                            sb = new StringBuilder();
+                            break;
+                        case OpCode.STR:
+                            if (sb is null)
+                                throw new InvalidOperationException("Missing 'START_STR' instruction before 'STR' operation");
+                            sb.AppendLine(instruction.Args[0]);
+                            break;
+                        case OpCode.END_STR:
+                            if (sb is null)
+                                throw new InvalidOperationException("Missing 'START_STR' instruction before 'END_STR' operation");
+                            context.ValueStack.Push(sb.ToString());
+                            sb = null;
                             break;
                         case OpCode.CALL:
                             HandleCall(instruction.Args[0], int.Parse(instruction.Args[1]));
@@ -392,7 +406,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             if (raw is "null")
                 return null;
-            raw = raw.Replace('.', ',');
+            string r = raw.Replace('.', ',');
             return TypeWorker.CastPrimitive(raw, target);
         }
         private static int ParseRef(string raw)
