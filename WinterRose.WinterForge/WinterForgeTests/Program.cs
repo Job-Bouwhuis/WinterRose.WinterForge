@@ -20,3 +20,11 @@ internal class Program
         Console.WriteLine(result.ToString());
     }
 }
+
+public class demo
+{
+    [IncludeWithSerialization]
+    public string test { get; set; }
+
+    public override string ToString() => $"test: {test ?? "null"}";
+}

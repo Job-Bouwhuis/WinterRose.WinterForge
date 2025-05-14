@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
@@ -190,7 +191,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
                 if (line.Contains("->"))
                     HandleAccessing(id);
-                else if (line.Contains('=') && line.EndsWith(";"))
+                else if (line.Contains('=') && line.EndsWith(';'))
+                    ParseAssignment(line);
+                else if (line.Contains('=') && line.Contains('\"'))
                     ParseAssignment(line);
                 else if (line.Contains(':'))
                 {
@@ -312,7 +315,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 WriteLine($"{opcodeMap["PUSH"]} _ref({id})");
             }
-            else if(first.StartsWith("_ref("))
+            else if (first.StartsWith("_ref("))
             {
                 WriteLine($"{opcodeMap["PUSH"]} {first}");
             }
@@ -385,6 +388,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
             StringBuilder currentElement = new();
 
             bool collectingDefinition = false;
+            bool collectingString = false;
+            int stringDepth = 0;
+            char prefStringChar = '\0';
             int depth = 0;
             int listDepth = 1;
             char? currentChar;
@@ -396,7 +402,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 foreach (char c in currentLine)
                 {
-                    int res = handleChar(ref insideFunction, currentElement, ref collectingDefinition, ref depth, ref listDepth, c);
+                    int res = handleChar(ref insideFunction, currentElement, ref collectingDefinition, ref depth, ref listDepth, c, ref prefStringChar);
                     if (res == -1)
                         return true;
                 }
@@ -439,12 +445,33 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
             }
 
-            int handleChar(ref bool insideFunction, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref int listDepth, char? currentChar)
+            int handleChar(ref bool insideFunction, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref int listDepth, char? currentChar, ref char prefStringChar)
             {
                 char character = currentChar.Value;
 
                 if (!collectingDefinition && char.IsWhiteSpace(character))
                     return 1;
+                if (collectingString)
+                {
+                    currentElement.Append(character);
+                    if (character == '"' && prefStringChar != '\\')
+                    {
+                            collectingString = false;
+                        prefStringChar = '\0';
+                        return 1;
+                    }
+
+                    prefStringChar = character;
+                    return 1;
+                }
+
+                if (character == '"' && !collectingString)
+                {
+                    collectingString = true;
+                    stringDepth = 1;
+                    currentElement.Append(character);
+                    return 1;
+                }
 
                 if (character == '{')
                 {
@@ -528,13 +555,110 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private string ValidateValue(string value)
         {
-            //if (value.Length >= 2 && value.StartsWith("\"") && value.EndsWith("\""))
-            //    value = value[1..^1];
+            if (value.StartsWith('\"'))
+            {
+                string fullString = ReadString(value);
 
+                if (!fullString.Contains('\n'))
+                    return fullString;
+                else
+                {
+                    writer.WriteLine(opcodeMap["START_STR"]);
+                    foreach (string line in fullString.Split('\n'))
+                        writer.WriteLine($"{opcodeMap["STR"]} {line}");
+                    writer.WriteLine(opcodeMap["END_STR"]);
+
+                    return "_stack()";
+                }
+            }
             return value;
         }
 
-        private string? ReadNonEmptyLine()
+        private string ReadString(string start)
+        {
+            StringBuilder content = new();
+            bool inEscape = false;
+            bool inside = false;
+
+            // Start parsing after the opening quote
+            for (int i = 0; i < start.Length; i++)
+            {
+                char c = start[i];
+
+                if (!inside)
+                {
+                    if (c == '"')
+                    {
+                        inside = true;
+                        continue;
+                    }
+                    continue; // skip anything before the first quote
+                }
+
+                if (inEscape)
+                {
+                    if (c == '"')
+                        content.Append('"');
+                    else
+                        content.Append('\\').Append(c); // keep unknown escape sequences intact
+
+                    inEscape = false;
+                }
+                else if (c == '\\')
+                {
+                    inEscape = true;
+                }
+                else if (c == '"')
+                {
+                    return "\"" + content.ToString() + "\"";
+                }
+                else
+                {
+                    content.Append(c);
+                }
+            }
+
+            // if we reach here, string wasn't closed in the starting line
+            while (true)
+            {
+                string? nextLine = ReadNonEmptyLine(allowEmptyLines: true);
+                if (nextLine == null)
+                    throw new InvalidOperationException("Unexpected end of stream while reading string.");
+
+                content.Append('\n'); // preserve line break
+
+                for (int i = 0; i < nextLine.Length; i++)
+                {
+                    char c = nextLine[i];
+
+                    if (inEscape)
+                    {
+                        if (c == '"')
+                            content.Append('"');
+                        else
+                            content.Append('\\').Append(c);
+
+                        inEscape = false;
+                    }
+                    else if (c == '\\')
+                    {
+                        inEscape = true;
+                    }
+                    else if (c == '"')
+                    {
+                        return content.ToString();
+                    }
+                    else
+                    {
+                        content.Append(c);
+                    }
+                }
+            }
+        }
+
+
+
+        private string? ReadNonEmptyLine(bool allowEmptyLines = false)
         {
             string? line;
             do
@@ -552,15 +676,50 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         lineBuffers.Pop();
                         return null;
                     }
-                    continue;
                 }
-                if (reader.EndOfStream)
-                    return null;
-                line = reader.ReadLine();
+                else
+                {
+                    if (reader.EndOfStream)
+                        return null;
+                    line = reader.ReadLine();
+                }
+
+                if (allowEmptyLines)
+                    return line;
+
             } while (string.IsNullOrWhiteSpace(line));
 
             return line;
         }
+
+
+        //private string? ReadNonEmptyLine()
+        //{
+        //    string? line;
+        //    do
+        //    {
+        //        if (lineBuffers.Count > 0)
+        //        {
+        //            if ((lineBuffers.Peek()?.Count ?? 0) > 0)
+        //            {
+        //                line = lineBuffers.Peek().Pop();
+        //                if (lineBuffers.Peek().Count == 0)
+        //                    lineBuffers.Pop();
+        //            }
+        //            else
+        //            {
+        //                lineBuffers.Pop();
+        //                return null;
+        //            }
+        //            continue;
+        //        }
+        //        if (reader.EndOfStream)
+        //            return null;
+        //        line = reader.ReadLine();
+        //    } while (string.IsNullOrWhiteSpace(line));
+
+        //    return line;
+        //}
 
         private char? ReadNonEmptyChar(bool acceptEmptyCharsAnyway)
         {

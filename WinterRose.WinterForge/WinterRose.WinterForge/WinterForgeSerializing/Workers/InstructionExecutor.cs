@@ -1,16 +1,7 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices.Marshalling;
 using System.Text;
-using System.Threading.Tasks;
-using WinterRose;
 using WinterRose.Reflection;
-using WinterRose.WinterForgeSerialization.Workers;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
@@ -345,6 +336,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 case string s when s.StartsWith("_type("):
                     value = ParseTypeLiteral(s);
                     break;
+                case string s when s.StartsWith("_str("):
+                    value = ParseStringFunc(s);
+                    break; 
                 case string s when CustomValueProviderCache.Get(desiredType, out var provider):
                     value = provider._CreateObject(s, this);
                     break;
@@ -355,6 +349,29 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             return value;
         }
+
+        private string? ParseStringFunc(string s)
+        {
+            if (!s.StartsWith("_str(") || !s.EndsWith(")"))
+                return null;
+
+            string inner = s[5..^1];
+            if (string.IsNullOrWhiteSpace(inner))
+                return string.Empty;
+
+            string[] parts = inner.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            byte[] bytes = new byte[parts.Length];
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!byte.TryParse(parts[i].Trim(), out bytes[i]))
+                    return null; // invalid byte value
+            }
+
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+
         private void HandleEnd()
         {
             int currentID = instanceIDStack.Peek();

@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using WinterRose.WinterForgeSerializing;
 
-namespace WinterRose.WinterForgeSerialization.Workers
+namespace WinterRose.WinterForgeSerializing.Workers
 {
     public class DynamicMethodInvoker
     {

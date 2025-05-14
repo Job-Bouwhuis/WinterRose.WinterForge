@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Workers;
 
-namespace WinterRose.WinterForgeSerialization.BuildInValueProviders
+namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
 {
     internal class TypeValueProvider : CustomValueProvider<Type>
     {

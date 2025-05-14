@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WinterRose.WinterForgeSerializing.Workers;
 
 namespace WinterRose.WinterForgeSerializing
 {
     /// <summary>
-    /// <see cref="InstructionExecutor"/> has no specific object to return. Can be passed as the deserialize generic argument to inform the deserializer its okey to return <see cref="Nothing"/>
+    /// <see cref="InstructionExecutor"/> has no specific object to return. 
     /// </summary>
     public class Nothing
     {
