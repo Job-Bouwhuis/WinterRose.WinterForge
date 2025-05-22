@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design.Serialization;
 using WinterRose.Reflection;
 
 namespace WinterRose.WinterForgeSerializing.Workers
@@ -9,6 +10,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         internal Dictionary<int, object> ObjectTable { get; } = [];
         internal Stack<object> ValueStack { get; } = new();
         internal List<DeferredObject> DeferredObjects { get; } = [];
+
         public bool IsDisposed { get; private set; }
 
         internal void AddObject(int id, ref object instance)

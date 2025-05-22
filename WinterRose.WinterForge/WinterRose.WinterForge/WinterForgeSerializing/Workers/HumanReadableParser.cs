@@ -17,8 +17,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private StreamWriter writer = null!;
         private string? currentLine;
         private int depth = 0;
+        private Dictionary<string, int> aliasMap = [];
         private readonly Stack<OverridableStack<string>> lineBuffers = new();
-
+        List<int> foundIds = [];
         private static readonly Dictionary<string, int> opcodeMap = Enum
             .GetValues<OpCode>()
             .ToDictionary(op => op.ToString(), op => (int)op);
@@ -46,6 +47,26 @@ namespace WinterRose.WinterForgeSerializing.Workers
             writer.Flush();
         }
 
+        private int NextAvalible()
+        {
+            if (foundIds.Count == 0)
+                return 0;
+
+            foundIds.Sort();
+
+            int lastNumber = 0;
+
+            for (int i = 0; i < foundIds.Count; i++)
+            {
+                if (foundIds[i] != i)
+                    return lastNumber + 1;
+                lastNumber = i;
+            }
+
+            return lastNumber + 1;
+
+        }
+
         private void ParseObjectOrAssignment()
         {
             string line = currentLine!.Trim();
@@ -61,6 +82,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 string type = line[..openParenIndex].Trim();
                 string arguments = line.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
                 string id = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                if(id is "nextid")
+                    id = NextAvalible().ToString();
+                foundIds.Add(int.Parse(id));
 
                 var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 foreach (string arg in args)
@@ -80,6 +105,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 string arguments = line.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
                 string id = line.Substring(colonIndex + 1, line.Length - colonIndex - 2).Trim();
 
+                if (id is "nextid")
+                    id = NextAvalible().ToString();
+                foundIds.Add(int.Parse(id));
+
                 var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 foreach (string arg in args)
                     WriteLine($"{opcodeMap["PUSH"]} " + arg);
@@ -95,11 +124,31 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 string type = line[..colonIndex].Trim();
                 string id = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
+                if (id is "nextid")
+                    id = NextAvalible().ToString();
+                foundIds.Add(int.Parse(id));
+
                 WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
                 depth++;
                 ParseBlock(id);
             }
-            else if (line.Contains(':')) // maybe brace is on next line
+            else if (line.Contains(':') && line.EndsWith(';'))
+            {
+                string type;
+                string id;
+
+                var parts = line[..^1].Split(':');
+                type = parts[0].Trim();
+                id = parts[1].Trim();
+
+                if (id is "nextid")
+                    id = NextAvalible().ToString();
+                foundIds.Add(int.Parse(id));
+
+                WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
+                WriteLine($"{opcodeMap["END"]} {id}");
+            }
+            else if (line.Contains(':'))
             {
                 string type;
                 string id;
@@ -108,6 +157,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 type = parts[0].Trim();
                 id = parts[1].Trim();
 
+                if (id is "nextid")
+                    id = NextAvalible().ToString();
+
+                foundIds.Add(int.Parse(id));
                 ReadNextLineExpecting("{");
 
                 WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
@@ -135,11 +188,24 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 string id = line[2..].Trim();
                 if (id.EndsWith(';'))
                     id = id[..^1];
+
+                if (id is "nextid")
+                    id = NextAvalible().ToString();
+
                 WriteLine($"{opcodeMap["AS"]} {id}");
+                foundIds.Add(int.Parse(id));
             }
             else if (HasValidGenericFollowedByBracket(line))
             {
                 ParseList();
+            }
+            else if (line.StartsWith("alias"))
+            {
+                string[] parts = line.Split(' ');
+                int id = int.Parse(parts[1]);
+
+                string alias = parts[2].EndsWith(';') ? parts[2][..^1] : parts[2];
+                aliasMap.Add(alias, id);
             }
             else
                 throw new Exception($"Unexpected top-level line: {line}");
@@ -175,7 +241,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             return false;
         }
 
-
         private void ParseBlock(string id)
         {
             while ((currentLine = ReadNonEmptyLine()) != null)
@@ -207,6 +272,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         asid = asid[..^1];
                     WriteLine($"{opcodeMap["AS"]} {asid}");
                 }
+                else if (line.StartsWith("alias"))
+                {
+                    string[] parts = line.Split(' ');
+                    int aliasid = int.Parse(parts[0]);
+                    WriteLine($"{opcodeMap["ALIAS"]} {aliasid} {parts[1]}");
+                }
                 else if (line.Contains('['))
                 {
                     currentLine = line;
@@ -235,7 +306,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
                 else
                 {
-                    throw new Exception($"Unhandled block content: {line}");
+                    throw new Exception($"unexpected block content: {line}");
                 }
             }
         }
@@ -265,6 +336,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     }
                     else if (firstRhs.StartsWith("_ref("))
                         WriteLine($"{opcodeMap["PUSH"]} {firstRhs}");
+                    else if (aliasMap.TryGetValue(firstRhs, out int aliasID))
+                        WriteLine($"{opcodeMap["PUSH"]} _ref({aliasID})");
                     else // assume value is a type literal
                         WriteLine($"{opcodeMap["PUSH"]} _type({firstRhs})");
 
@@ -289,10 +362,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 else
                     throw new Exception($"nothing to access on the right side...");
             }
-            //else if (rhs.Contains('(') && rhs.Contains(')'))
-            //{
-            //    ParseMethodCall(id, rhs);
-            //}
 
             // Step 3: Process LHS
             var lhsParts = accessPart.Split("->", StringSplitOptions.RemoveEmptyEntries);
@@ -316,9 +385,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 WriteLine($"{opcodeMap["PUSH"]} _ref({id})");
             }
             else if (first.StartsWith("_ref("))
-            {
                 WriteLine($"{opcodeMap["PUSH"]} {first}");
-            }
+            else if (aliasMap.TryGetValue(first, out int aliasID))
+                WriteLine($"{opcodeMap["PUSH"]} _ref({aliasID})");
             else // assume value is a type literal
                 WriteLine($"{opcodeMap["PUSH"]} _type({first})");
 
@@ -705,9 +774,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
         }
 
-
-
-
         private string? ReadNonEmptyLine(bool allowEmptyLines = false)
         {
             string? line;
@@ -740,80 +806,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             } while (string.IsNullOrWhiteSpace(line));
 
             return line;
-        }
-
-
-        //private string? ReadNonEmptyLine()
-        //{
-        //    string? line;
-        //    do
-        //    {
-        //        if (lineBuffers.Count > 0)
-        //        {
-        //            if ((lineBuffers.Peek()?.Count ?? 0) > 0)
-        //            {
-        //                line = lineBuffers.Peek().Pop();
-        //                if (lineBuffers.Peek().Count == 0)
-        //                    lineBuffers.Pop();
-        //            }
-        //            else
-        //            {
-        //                lineBuffers.Pop();
-        //                return null;
-        //            }
-        //            continue;
-        //        }
-        //        if (reader.EndOfStream)
-        //            return null;
-        //        line = reader.ReadLine();
-        //    } while (string.IsNullOrWhiteSpace(line));
-
-        //    return line;
-        //}
-
-        private char? ReadNonEmptyChar(bool acceptEmptyCharsAnyway)
-        {
-            char? c = null;
-
-            while (true)
-            {
-                if (lineBuffers.Count > 0
-                    && lineBuffers.Peek().Count > 0)
-                {
-                    string line = lineBuffers.Peek().Peek();
-
-                    if (line.Length > 0)
-                    {
-                        c = line[0];
-
-                        // Replace the line with the rest, or remove if empty
-                        if (line.Length == 1)
-                            lineBuffers.Peek().Pop();
-                        else
-                            lineBuffers.Peek().OverrideAt(0, line[1..]);
-
-                        if (acceptEmptyCharsAnyway || !char.IsWhiteSpace(c.Value))
-                            return c;
-
-                        continue; // Continue if whitespace and we're not accepting empty
-                    }
-                    else
-                    {
-                        // Remove empty string
-                        lineBuffers.Peek().Pop();
-                        continue;
-                    }
-                }
-
-                // Refill line buffer
-                string? newLine = reader.ReadLine() + "\n";
-                if (newLine == null)
-                    return null;
-
-                if (lineBuffers.Count == 0)
-                    lineBuffers.Push(new());
-                lineBuffers.Peek().PushEnd(newLine);
-            }
         }
 
         private void ReadNextLineExpecting(string expected)

@@ -1,7 +1,7 @@
 # WinterForge
 
 WinterForge is a high-performance, human-readable object serialization framework built for environments where speed and developer clarity matter.
-Using the two sided format. one for humans, one for the computer, WinterForge achieves high preformant serialization cycles while remaining to be readable for a developer.
+Using the two sided format. one for humans, one for the computer, WinterForge achieves high performant serialization cycles while remaining to be readable for a developer.
 The system can also immediately go from the intermediate representation for that little extra speed.
 
 ## Features
@@ -10,7 +10,7 @@ The system can also immediately go from the intermediate representation for that
 - Optimized to handle thousands of types and objects in milliseconds.
 
 ### Dual-Sided Format
-- Human-readable format for clarity, debugging, and version control.
+- Human-readable format for debugging, and version control.
 - Opcode-based intermediate representation encodes object data using structured, sequential opcodes.
 - Supports direct serialization from and deserialization to the opcode format for maximum performance.
 - Unlike binary blobs, the opcode format remains readable and traceable, enabling debugging, diffing, and manual editing.

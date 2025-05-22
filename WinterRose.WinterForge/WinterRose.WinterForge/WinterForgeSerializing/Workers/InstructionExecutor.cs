@@ -67,7 +67,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 for (i = 0; i < instructions.Count; i++)
                 {
-                    Instruction? instruction = instructions[i];
+                    Instruction instruction = instructions[i];
                     switch (instruction.OpCode)
                     {
                         case OpCode.DEFINE:
@@ -352,7 +352,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     break;
                 case string s when s.StartsWith("_str("):
                     value = ParseStringFunc(s);
-                    break; 
+                    break;
                 case string s when CustomValueProviderCache.Get(desiredType, out var provider):
                     value = provider._CreateObject(s, this);
                     break;

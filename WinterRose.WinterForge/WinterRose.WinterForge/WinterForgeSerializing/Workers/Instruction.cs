@@ -2,5 +2,5 @@
 
 namespace WinterRose.WinterForgeSerializing
 {
-    public record Instruction(OpCode OpCode, string[] Args);
+    public unsafe record struct Instruction(OpCode OpCode, string[] Args);
 }

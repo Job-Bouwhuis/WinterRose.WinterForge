@@ -99,10 +99,34 @@
         /// 0 - store the stack item on ID 0. even if an object at that ID already exists
         /// </summary>
         AS = 12,
+        /// <summary>
+        /// Starts a multiline string
+        /// </summary>
+        START_STR = 13,
+        /// <summary>
+        /// Adds a line inside a multiline string
+        /// </summary>
+        STR = 14,
+        /// <summary>
+        /// Ends a multiline string
+        /// </summary>
+        END_STR = 15,
+        /// <summary>
+        /// aliases a ref object under the given name
+        /// 
+        /// eg:
+        /// 16 0 player
+        /// 16 - ALIAS
+        /// 0 - the ref id
+        /// player - the alias to give it
+        /// </summary>
 
-        START_STR,
-        STR,
-        END_STR
+        TEMPLATE_CREATE = 16,
+        TEMPLATE_END = 17,
+
+        DICT_START = 18,
+        DICT_ELEMENT = 19,
+        DICT_END = 20,
     }
 
 }
