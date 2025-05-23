@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.4</Version>
+    <Version>25.2.5</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -19,7 +19,8 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <PackageReleaseNotes>Added id keyword "nextid" to automatically assign a non existing id
 added aliasing for _ref() calls. eg _ref(0) has alias "player"
-fixed decimal numbers not parsing correctly</PackageReleaseNotes>
+fixed decimal numbers not parsing correctly
+CustomValueProvider&lt;T&gt; now has a OnNull virtual method that by default returns null. so that a value of null from the serialized data is by default a actual null value, but can be overridden if desired</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
   </PropertyGroup>
 

@@ -23,7 +23,7 @@ internal class Program
 public class demo
 {
     [IncludeWithSerialization]
-    public string test { get; set; }
+    public DateTime? test { get; set; }
 
-    public override string ToString() => $"test: {test ?? "null"}";
+    public override string ToString() => $"test: {test}";
 }

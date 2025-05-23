@@ -354,7 +354,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     value = ParseStringFunc(s);
                     break;
                 case string s when CustomValueProviderCache.Get(desiredType, out var provider):
-                    value = provider._CreateObject(s, this);
+                    if(s is "null")
+                        value = provider.OnNull();
+                    else
+                        value = provider._CreateObject(s, this);
                     break;
                 default:
                     value = ParseLiteral(arg, desiredType);
