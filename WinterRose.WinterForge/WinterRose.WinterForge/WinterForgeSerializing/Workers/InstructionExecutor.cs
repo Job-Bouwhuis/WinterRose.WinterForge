@@ -407,7 +407,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (raw is "null")
                 return null;
             string r = raw.Replace('.', ',');
-            return TypeWorker.CastPrimitive(raw, target);
+            return TypeWorker.CastPrimitive(r, target);
         }
         private static int ParseRef(string raw)
         {
