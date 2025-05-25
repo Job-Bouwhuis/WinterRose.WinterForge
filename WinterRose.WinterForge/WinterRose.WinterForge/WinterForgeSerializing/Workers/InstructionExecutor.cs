@@ -1,7 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
+using System.Data;
 using System.Text;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
@@ -10,12 +12,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
     /// </summary>
     public class InstructionExecutor : IDisposable
     {
-        /// <summary>
-        /// Invoked when <see cref="OpCode.PROGRESS"/> is invoked
-        /// </summary>
-        public event Action<ProgressMark> ProgressMark = delegate { };
         public bool IsDisposed { get; private set; }
 
+        internal WinterForgeProgressTracker? progressTracker;
         private static readonly ConcurrentDictionary<string, Type> typeCache = new();
         private DeserializationContext context = null!;
         private readonly Stack<int> instanceIDStack;
@@ -23,7 +22,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private readonly List<DispatchedReference> dispatchedReferences = [];
         private StringBuilder? sb;
 
-        private int i = 0;
+        private int instructionIndex = 0;
+        private int instructionTotal;
 
         /// <summary>
         /// Create a new instance of the <see cref="InstructionExecutor"/> to deserialize objects
@@ -57,17 +57,17 @@ namespace WinterRose.WinterForgeSerializing.Workers
         public unsafe object Execute(List<Instruction> instructions)
         {
             ObjectDisposedException.ThrowIf(IsDisposed, this);
+            instructionTotal = instructions.Count;
             try
             {
-                int instructionCount = instructions.FindIndex(inst => inst.OpCode == OpCode.RET);
-                if (instructionCount == -1)
-                    instructionCount = instructions.Count - 1;
+                progressTracker?.Report(0);
+                progressTracker?.Report("Starting...");
 
                 context = new();
 
-                for (i = 0; i < instructions.Count; i++)
+                for (instructionIndex = 0; instructionIndex < instructions.Count; instructionIndex++)
                 {
-                    Instruction instruction = instructions[i];
+                    Instruction instruction = instructions[instructionIndex];
                     switch (instruction.OpCode)
                     {
                         case OpCode.DEFINE:
@@ -126,7 +126,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                                 return context.ValueStack.Peek();
                             return context.GetObject(int.Parse(instruction.Args[0])) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
                         case OpCode.PROGRESS:
-                            ProgressMark(new ProgressMark(i + 1, instructionCount));
+                            progressTracker?.Report((instructionIndex + 1) / (float)instructions.Count);
                             break;
                         case OpCode.ACCESS:
                             {
@@ -176,6 +176,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
             finally
             {
+                progressTracker?.Report(1);
+                progressTracker?.Report("Finishing up");
 
                 context.Dispose();
                 dispatchedReferences.Clear();
@@ -248,6 +250,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
             context.AddObject(id, ref instance);
 
             instanceIDStack.Push(id);
+
+            FlowHookItem item = FlowHookCache.Get(type);
+            if (item.Any)
+                item.InvokeBeforeDeserialize(instance);
+
+            progressTracker?.OnInstance("Creating " + type.Name, type.Name, !type.IsClass, instructionIndex + 1, instructionTotal);
         }
         private void HandleSet(string[] args)
         {
@@ -259,6 +267,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             ReflectionHelper helper = CreateReflectionHelper(ref target, out object actualTarget);
             MemberData member = helper.GetMember(field);
+            progressTracker?.OnField(field, instructionIndex + 1, instructionTotal);
 
             object? value = GetArgumentValue(rawValue, member.Type, val =>
             {
@@ -280,7 +289,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         }
         private void Dispatch(int refID, Action<object?> method)
         {
-            dispatchedReferences.Add(new(refID, i, method));
+            dispatchedReferences.Add(new(refID, instructionIndex, method));
         }
         private record DispatchedReference(int RefID, int lineNum, Action<object?> method);
         private unsafe void HandleCall(string methodName, int argCount)
@@ -296,6 +305,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
 
             var target = context.ValueStack.Pop();
+            progressTracker?.OnMethod(target.GetType().Name, methodName);
+
             object? val = DynamicMethodInvoker.InvokeMethodWithArguments(
                 targetType: target is Type t ? t : target.GetType(),
                 methodName, 
@@ -404,6 +415,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
 
             instanceIDStack.Pop();
+
+            FlowHookItem item = FlowHookCache.Get(currentObj.GetType());
+            if (item.Any)
+                item.InvokeAfterDeserialize(currentObj);
         }
         private static object? ParseLiteral(string raw, Type target)
         {

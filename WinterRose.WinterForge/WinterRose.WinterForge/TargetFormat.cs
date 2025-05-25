@@ -1,0 +1,30 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace WinterRose.WinterForgeSerializing
+{
+    /// <summary>
+    /// What format should <see cref="WinterForge"/> serialize to
+    /// </summary>
+    public enum TargetFormat
+    {
+        /// <summary>
+        /// Plain text format, easer to read than <see cref="Optimized"/> but minimal formatting.
+        /// </summary>
+        HumanReadable,
+
+        /// <summary>
+        /// Text format with indentation for better readability.
+        /// </summary>
+        FormattedHumanReadable,
+
+        /// <summary>
+        /// Format optimized for speed.
+        /// </summary>
+        Optimized
+    }
+
+}

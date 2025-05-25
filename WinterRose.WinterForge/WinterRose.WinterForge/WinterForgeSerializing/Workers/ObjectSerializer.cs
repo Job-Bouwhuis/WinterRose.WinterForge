@@ -8,10 +8,11 @@ using System.Threading.Tasks;
 using WinterRose.Reflection;
 using System.Collections;
 using System.Reflection.Metadata;
+using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
-    public class ObjectSerializer
+    public class ObjectSerializer(WinterForgeProgressTracker? progressTracker)
     {
         private readonly Dictionary<object, int> cache = [];
         private int currentKey = 0;
@@ -67,6 +68,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             string name = GetTypeName(objType);
 
+
             WriteToStream(destinationStream, $"{name} : {key} {{\n");
             var helper = new ReflectionHelper(ref obj);
 
@@ -75,7 +77,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 if (!objType.IsValueType)
                     cache.Add(obj, key);
 
-            SerializePropertiesAndFields(obj, helper, destinationStream);
+            progressTracker?.OnInstance($"Serializing {objType.Name}", objType.Name, objType.IsClass, 0, 0);
+
+            FlowHookItem item = FlowHookCache.Get(objType);
+            if (item.Any)
+                item.InvokeBeforeSerialize(obj);
+
+            SerializePropertiesAndFields(obj, helper, destinationStream, progressTracker);
             WriteToStream(destinationStream, "}\n");
 
             if (isRootCall)
@@ -102,7 +110,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         }
 
 
-        private void SerializePropertiesAndFields(object obj, ReflectionHelper rh, Stream destinationStream)
+        private void SerializePropertiesAndFields(object obj, ReflectionHelper rh, Stream destinationStream, WinterForgeProgressTracker? progressTracker)
         {
             Type objType = obj.GetType();
 
@@ -137,7 +145,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 // Commit the value to the stream with proper formatting
                 if (member.CanWrite)
+                {
+                    progressTracker?.OnField(member.Name, 0, 0);
                     CommitValue(obj, destinationStream, member);
+                }
             }
         }
         private void CommitValue(object obj, Stream destinationStream, MemberData member)
@@ -148,7 +159,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             int linePos = serializedString.IndexOf('\n');
             if (linePos != -1)
             {
-                if(serializedString.StartsWith('"') && serializedString.EndsWith('"'))
+                if (serializedString.StartsWith('"') && serializedString.EndsWith('"'))
                 {
                     WriteToStream(destinationStream, $"{member.Name} = {serializedString}");
                     WriteToStream(destinationStream, ";\n");
@@ -220,9 +231,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             Type valueType = value.GetType();
 
-            if(value is string s)
+            if (value is string s)
             {
-                if(s.Contains('\n'))
+                if (s.Contains('\n'))
                     return $"\"\"\"\"\"{s}\"\"\"\"\"";
                 return $"\"{value}\"";
             }

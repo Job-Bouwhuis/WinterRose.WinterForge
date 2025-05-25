@@ -1,5 +1,7 @@
 ﻿using WinterRose;
 using WinterRose.WinterForgeSerializing;
+using WinterRose.WinterForgeSerializing.Logging;
+using WinterRose.WIP.TestClasses;
 
 internal class Program
 {
@@ -10,10 +12,16 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
-        object result = WinterForge.DeserializeFromFile("opcodes.txt");
+        Everything d = Everything.Random();
 
-        Console.WriteLine(File.ReadAllText("Human.txt"));
+        WinterForge.SerializeToFile(d, "opcodes.txt", TargetFormat.Optimized, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
+
+        Console.WriteLine("\n\n");
+
+        //WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
+        object result = WinterForge.DeserializeFromFile("opcodes.txt", new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
+
+        //Console.WriteLine(File.ReadAllText("Human.txt"));
         Console.WriteLine("\n");
         Console.WriteLine(data);
         Console.WriteLine(result.ToString());
@@ -23,7 +31,25 @@ internal class Program
 public class demo
 {
     [IncludeWithSerialization]
-    public DateTime? test { get; set; }
+    public string test { get; set; }
 
-    public override string ToString() => $"test: {test}";
+    public override string ToString() => $"test: {test ?? "null"}";
+
+    [BeforeSerialize]
+    public void beforeSer()
+    {
+        Console.WriteLine("Im gonna be serialized!");
+    }
+
+    [BeforeDeserialize]
+    public void beforeDeser()
+    {
+        Console.WriteLine("Im going to be deserialized!");
+    }
+
+    [AfterDeserialize]
+    public void afterDeser()
+    {
+        Console.WriteLine("I have been deserialized!");
+    }
 }
