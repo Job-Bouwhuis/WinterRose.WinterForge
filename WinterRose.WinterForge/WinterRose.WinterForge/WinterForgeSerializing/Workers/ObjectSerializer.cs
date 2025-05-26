@@ -9,13 +9,33 @@ using WinterRose.Reflection;
 using System.Collections;
 using System.Reflection.Metadata;
 using WinterRose.WinterForgeSerializing.Logging;
+using System.Data;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
+    /// <summary>
+    /// The system to automatically serialize a runtime object to the <see cref="WinterForge"/> human readable format
+    /// </summary>
+    /// <param name="progressTracker"></param>
     public class ObjectSerializer(WinterForgeProgressTracker? progressTracker)
     {
         private readonly Dictionary<object, int> cache = [];
+        private readonly HashSet<(Type, string)> staticFieldCache = [];
         private int currentKey = 0;
+
+        internal void SerializeAsStatic(Type type, Stream destinationStream)
+        {
+            ReflectionHelper rh = new(type);
+            var members = rh.GetMembers();
+            foreach (var member in members)
+            {
+                if (member.IsStatic)
+                {
+                    progressTracker?.OnField(type.Name + '.' + member.Name, 0, 0);
+                    HandleStaticMember(member, type, rh, destinationStream, progressTracker, true);
+                }
+            }
+        }
 
         internal void Serialize(object obj, Stream destinationStream, bool isRootCall, bool emitReturn = true)
         {
@@ -103,7 +123,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             string[] genericNames = new string[genericArgs.Length];
             for (int i = 0; i < genericArgs.Length; i++)
             {
-                genericNames[i] = GetTypeName(genericArgs[i]); // recursive call for nested generics
+                genericNames[i] = GetTypeName(genericArgs[i]); // recursively resolve nested generic types
             }
 
             return $"{mainTypeName}<{string.Join(", ", genericNames)}>";
@@ -124,33 +144,108 @@ namespace WinterRose.WinterForgeSerializing.Workers
             foreach (var member in members)
             {
                 if (member.IsStatic)
-                    continue;
-                if (!member.CanWrite)
-                    continue; // ignore unwritable members, can't restore them anyway
-                if (!member.IsPublic)
                 {
-                    if (!member.Attributes.Any(x => x is IncludeWithSerializationAttribute) && !hasIncludeAllPrivateFields)
-                        continue;
-                    if (member.Name.Contains('<') && hasIncludeAllPrivateFields)
-                        continue; // skip property backing fields anyway regardless of private field setting
-                }
-                if (member.Attributes.Any(x => x is ExcludeFromSerializationAttribute))
+                    progressTracker?.OnField(objType.Name + '.' + member.Name, 0, 0);
+                    HandleStaticMember(member, objType, rh, destinationStream, progressTracker, false);
                     continue;
-
-                if (member.MemberType == MemberTypes.Property)
-                {
-                    if (!member.Attributes.Any(x => x is IncludeWithSerializationAttribute) && !hasIncludeAllProperties)
-                        continue;
                 }
 
-                // Commit the value to the stream with proper formatting
-                if (member.CanWrite)
+                if (IsMemberSerializable(member, hasIncludeAllPrivateFields, hasIncludeAllProperties))
                 {
                     progressTracker?.OnField(member.Name, 0, 0);
                     CommitValue(obj, destinationStream, member);
                 }
             }
         }
+
+        private bool IsMemberSerializable(MemberData member, bool hasIncludeAllPrivateFields, bool hasIncludeAllProperties)
+        {
+            if (!member.CanWrite)
+                return false; // ignore unwritable members
+
+            bool hasIncludeAttr = member.Attributes.Any(x => x is IncludeWithSerializationAttribute);
+
+            if (!member.IsPublic)
+            {
+                if (!hasIncludeAttr && !hasIncludeAllPrivateFields)
+                    return false;
+
+                // Skip property backing fields regardless of private field setting unless explicitly included
+                if (member.Name.Contains('<') && !hasIncludeAttr)
+                    return false;
+            }
+
+            if (member.Attributes.Any(x => x is ExcludeFromSerializationAttribute))
+                return false;
+
+            if (member.MemberType == MemberTypes.Property)
+            {
+                if (!hasIncludeAttr && !hasIncludeAllProperties)
+                    return false;
+            }
+
+            return true;
+        }
+
+
+        private void HandleStaticMember(MemberData member, Type type, ReflectionHelper rh,
+            Stream destinationStream, WinterForgeProgressTracker? progressTracker, bool asStaticClass)
+        {
+            if (!asStaticClass)
+                if(member.IsPublic && member.GetAttribute<IncludeWithSerializationAttribute>() is null)
+                    return;
+            if (IsMemberSerializable(member, false, false))
+            {
+                CommitStaticValue(type, destinationStream, member);
+            }
+        }
+
+        private void CommitStaticValue(Type type, Stream destinationStream, MemberData member)
+        {
+            if (staticFieldCache.Contains((type, member.Name)))
+                return;
+            staticFieldCache.Add((type, member.Name));
+
+            object value = member.GetValue(null);
+
+            string serializedString = SerializeValue(value);
+            int linePos = serializedString.IndexOf('\n');
+            if (linePos != -1)
+            {
+                if (serializedString.StartsWith('"') && serializedString.EndsWith('"'))
+                {
+                    WriteToStream(destinationStream, $"{type.FullName}->{member.Name} = {serializedString}");
+                    WriteToStream(destinationStream, ";\n");
+                    return;
+                }
+                string line = serializedString[0..linePos];
+                linePos = line.IndexOf(':');
+                if (linePos != -1)
+                {
+                    ReadOnlySpan<char> indexStart = line.AsSpan()[linePos..];
+                    int len = indexStart.Length;
+
+                    // Trim from the end while chars are not numeric
+                    while (len > 0 && !char.IsDigit(indexStart[len - 1]))
+                        len--;
+
+                    indexStart = indexStart[1..len].Trim();
+                    int key = int.Parse(indexStart);
+
+                    WriteToStream(destinationStream, serializedString);
+                    WriteToStream(destinationStream, $"{type.FullName}->{member.Name} = _ref({key});\n");
+                    return;
+                }
+            }
+
+            if (isDecimalNumber(serializedString))
+                serializedString = serializedString.Replace(',', '.');
+
+            WriteToStream(destinationStream, $"{type.FullName}->{member.Name} = {serializedString}");
+            if (!serializedString.Contains('['))
+                WriteToStream(destinationStream, ";\n");
+        }
+
         private void CommitValue(object obj, Stream destinationStream, MemberData member)
         {
             object value = member.GetValue(obj);

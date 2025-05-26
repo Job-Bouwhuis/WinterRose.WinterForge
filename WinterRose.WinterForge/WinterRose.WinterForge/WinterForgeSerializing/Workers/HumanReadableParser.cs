@@ -645,6 +645,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private string ReadString(string start)
         {
+            if (start is "\"\"")
+                return start;
             StringBuilder content = new();
             bool inEscape = false;
             bool isMultiline = false;
@@ -672,6 +674,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 isMultiline = false;
             else if (quoteCount == 5)
                 isMultiline = true;
+            else if (quoteCount is 2)
+                return ""; // when there are only 2 quotes, it is an empty string
             else
                 throw new InvalidOperationException("Invalid number of quotes to start string. Use 1 or 5.");
 

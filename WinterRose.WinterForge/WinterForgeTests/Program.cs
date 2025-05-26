@@ -12,10 +12,13 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        Everything d = Everything.Random();
+        demo d = new demo() { test = "" };
+        demo.yeet = Everything.Random();
 
-        WinterForge.SerializeToFile(d, "opcodes.txt", TargetFormat.Optimized, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
+        WinterForge.SerializeStaticToFile(typeof(demo), "opcodes.txt", 
+            TargetFormat.Optimized, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
 
+        demo.yeet = null;
         Console.WriteLine("\n\n");
 
         //WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
@@ -30,6 +33,8 @@ internal class Program
 
 public class demo
 {
+    public static Everything yeet;
+
     [IncludeWithSerialization]
     public string test { get; set; }
 

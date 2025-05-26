@@ -93,6 +93,64 @@ namespace WinterRose.WinterForgeSerializing
             ObjectSerializer serializer = new(progressTracker);
             DoSerialization(serializer, obj, serialized, data, targetFormat);
         }
+        /// <summary>
+        /// Serializes the given static type to the file at the given <paramref name="path"/>
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="path"></param>
+        /// <param name="targetFormat"></param>
+        /// <param name="progressTracker"></param>
+        public static void SerializeStaticToFile(Type type, string path, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        {
+            List<string> paths = path.ToString().Split(['/', '\\']).ToList();
+            if (paths.Count > 1)
+            {
+                paths.RemoveAt(paths.Count - 1);
+                string directory = string.Join("/", paths);
+                if (!Directory.Exists(directory))
+                    Directory.CreateDirectory(directory);
+            }
+
+            using (Stream serialized = new MemoryStream())
+            using (Stream opcodes = File.Open(path, FileMode.Create, FileAccess.ReadWrite))
+            {
+                ObjectSerializer serializer = new(progressTracker);
+                DoStaticSerialization(serializer, type, serialized, opcodes, targetFormat);
+            }
+        }
+        /// <summary>
+        /// Serializes the given static type to a string
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="targetFormat"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static string SerializeStaticToString(Type type, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        {
+            using MemoryStream serialized = new();
+            using MemoryStream formatted = new();
+
+            ObjectSerializer serializer = new(progressTracker);
+            DoStaticSerialization(serializer, type, serialized, formatted, targetFormat);
+
+            byte[] bytes = formatted.ToArray();
+            return Encoding.UTF8.GetString(bytes);
+        }
+        /// <summary>
+        /// Serializes the given static type to the given stream <paramref name="data"/>
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="data"></param>
+        /// <param name="targetFormat"></param>
+        /// <param name="progressTracker"></param>
+        public static void SerializeStaticToStream(Type type, Stream data, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        {
+            using MemoryStream serialized = new();
+            ObjectSerializer serializer = new(progressTracker);
+            DoStaticSerialization(serializer, type, serialized, data, targetFormat);
+        }
+
+
 
         /// <summary>
         /// Deserializes from the given stream in which opcodes should exist
@@ -324,6 +382,18 @@ namespace WinterRose.WinterForgeSerializing
         }
 
 
+        private static void DoStaticSerialization(ObjectSerializer serializer, Type type, Stream serialized, Stream opcodes, TargetFormat target)
+        {
+            serializer.SerializeAsStatic(type, serialized);
+            serialized.Seek(0, SeekOrigin.Begin);
+
+            if (target is TargetFormat.HumanReadable)
+                serialized.CopyTo(opcodes);
+            else if (target is TargetFormat.FormattedHumanReadable)
+                new HumanReadableIndenter().Process(serialized, opcodes);
+            else
+                new HumanReadableParser().Parse(serialized, opcodes);
+        }
         private static void DoSerialization(ObjectSerializer serializer, object o, Stream serialized, Stream opcodes, TargetFormat target)
         {
             serializer.Serialize(o, serialized);

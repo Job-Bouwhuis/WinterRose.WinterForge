@@ -79,11 +79,8 @@ namespace WinterRose.WinterForgeSerializing.Logging
             if (verbosity == WinterForgeProgressVerbosity.Full)
             {
                 pathStack.Push(fieldName);
-                if (totalInstructions is not 0)
-                {
-                    float progress = (float)currentInstruction / totalInstructions;
-                    ReportCurrentPath(progress);
-                }
+                float progress = (float)currentInstruction / totalInstructions;
+                ReportCurrentPath(progress);
                 pathStack.Pop();
             }
         }
