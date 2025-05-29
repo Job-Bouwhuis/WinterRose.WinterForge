@@ -1,4 +1,5 @@
-﻿using WinterRose;
+﻿using System.Numerics;
+using WinterRose;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Logging;
 using WinterRose.WIP.TestClasses;
@@ -12,21 +13,27 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        demo d = new demo() { test = "" };
-        demo.yeet = Everything.Random();
+        object an = new
+        {
+            X = 5,
+            Y = 6,
+            Z = 7,
+            Name = "something",
+            loc = new Vector3(1, 2, 3),
+            demo = new
+            {
+                a = 'a'
+            }
+        };
 
-        WinterForge.SerializeStaticToFile(typeof(demo), "opcodes.txt", 
-            TargetFormat.Optimized, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
-
-        demo.yeet = null;
-        Console.WriteLine("\n\n");
-
-        //WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
+        WinterForge.SerializeToFile(an, "Human.txt", TargetFormat.FormattedHumanReadable, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
+        Console.WriteLine("\n\nSerializing ^^\nDeserializing vv\n\n");
+        WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
         object result = WinterForge.DeserializeFromFile("opcodes.txt", new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
 
-        //Console.WriteLine(File.ReadAllText("Human.txt"));
+        dynamic r = result;
+        Console.WriteLine(r.demo.a);
         Console.WriteLine("\n");
-        Console.WriteLine(data);
         Console.WriteLine(result.ToString());
     }
 }

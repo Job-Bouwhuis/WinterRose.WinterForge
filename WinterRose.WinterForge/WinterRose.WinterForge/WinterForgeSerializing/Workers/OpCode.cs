@@ -112,21 +112,38 @@
         /// </summary>
         END_STR = 15,
         /// <summary>
-        /// aliases a ref object under the given name
-        /// 
-        /// eg:
-        /// 16 0 player
-        /// 16 - ALIAS
-        /// 0 - the ref id
-        /// player - the alias to give it
+        /// aliases a ref object under the given name <br></br>
+        /// <br></br>
+        /// eg:<br></br>
+        /// 16 0 player<br></br>
+        /// 16 - ALIAS<br></br>
+        /// 0 - the ref id<br></br>
+        /// player - the alias to give it<br></br>
         /// </summary>
+        ALIAS = 16,
 
-        TEMPLATE_CREATE = 16,
-        TEMPLATE_END = 17,
 
-        DICT_START = 18,
-        DICT_ELEMENT = 19,
-        DICT_END = 20,
+        /// <summary>
+        /// lets the type and name of a field inside an anonymous object definition<br></br>
+        /// <br></br>
+        /// eg:<br></br>
+        /// <b>17 System.Int32 X 5</b><br></br>
+        /// 17 - ANONYMOUS_SET<br></br>
+        /// System.Int32 - the type of the field<br></br>
+        /// X - the name of the field<br></br>
+        /// 5 - the value of the field<br></br>
+        /// </summary>
+        /// <remarks>
+        /// This requres a value, to define a value with its default value for the given type, set the value to 'default'
+        /// </remarks>
+        ANONYMOUS_SET = 17,
+
+        TEMPLATE_CREATE,
+        TEMPLATE_END,
+
+        DICT_START,
+        DICT_ELEMENT,
+        DICT_END,
     }
 
 }

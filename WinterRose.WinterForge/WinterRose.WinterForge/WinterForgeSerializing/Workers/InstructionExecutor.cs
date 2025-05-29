@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Data;
 using System.Text;
+using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
 using WinterRose.WinterForgeSerializing.Logging;
 
@@ -76,20 +77,35 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.SET:
                             HandleSet(instruction.Args);
                             break;
-                        case OpCode.PUSH:
-                            string arg = instruction.Args[0];
-                            object val = GetArgumentValue(arg, typeof(string), delegate { });
-                            if (val is Dispatched)
-                                throw new Exception("Other opcodes rely on PUSH having pushed its value, cant differ reference till later");
-
-                            if (!val.GetType().IsClass && !val.GetType().IsPrimitive)
+                        case OpCode.ANONYMOUS_SET:
                             {
-                                object* ptr = &val;
-                                var v = new StructReference(ptr);
-                                context.ValueStack.Push(v);
+                                if (context.GetObject(instanceIDStack.Peek()) is not AnonymousTypeReader obj)
+                                    throw new InvalidOperationException("Anonymous type reader not found on stack for anonymous set operation");
+
+                                progressTracker?.OnField(instruction.Args[1], instructionIndex + 1, instructionTotal);
+
+                                Type fieldType = ResolveType(instruction.Args[0]);
+
+                                object val = GetArgumentValue(instruction.Args[2], fieldType, val => { });
+                                obj.SetMember(instruction.Args[1], ref val);
+                                break;
                             }
-                            else
-                                context.ValueStack.Push(val);
+                        case OpCode.PUSH:
+                            {
+                                string arg = instruction.Args[0];
+                                object val = GetArgumentValue(arg, typeof(string), delegate { });
+                                if (val is Dispatched)
+                                    throw new Exception("Other opcodes rely on PUSH having pushed its value, cant differ reference till later");
+
+                                if (!val.GetType().IsClass && !val.GetType().IsPrimitive)
+                                {
+                                    object* ptr = &val;
+                                    var v = new StructReference(ptr);
+                                    context.ValueStack.Push(v);
+                                }
+                                else
+                                    context.ValueStack.Push(val);
+                            }
                             break;
                         case OpCode.START_STR:
                             sb = new StringBuilder();
@@ -194,7 +210,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 rh = new(ref sr.Get());
                 actualTarget = sr.Get();
                 return rh;
-            }    
+            }
             else if (o is Type t)
             {
                 rh = new(t);
@@ -239,8 +255,22 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             var typeName = args[0];
             var id = int.Parse(args[1]);
-            var numArgs = int.Parse(args[2]);
-            var type = ResolveType(typeName);
+
+            if (typeName is "Anonymous" || typeName.StartsWith("Anonymous-as-"))
+            {
+                AnonymousTypeReader obj = new AnonymousTypeReader();
+                object o = obj;
+                if(typeName.StartsWith("Anonymous-as-"))
+                    obj.TypeName = typeName[13..];
+
+                context.AddObject(id, ref o);
+                instanceIDStack.Push(id);
+                string tn = obj.TypeName ?? "Anonymous";
+                progressTracker?.OnInstance("Creating " + tn, tn, true, instructionIndex + 1, instructionTotal);
+                return;
+            }
+            int numArgs = int.Parse(args[2]);
+            Type type = ResolveType(typeName);
 
             List<object> constrArgs = [];
             for (int i = numArgs - 1; i >= 0; i--)
@@ -255,7 +285,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (item.Any)
                 item.InvokeBeforeDeserialize(instance);
 
-            progressTracker?.OnInstance("Creating " + type.Name, type.Name, !type.IsClass, instructionIndex + 1, instructionTotal);
+            progressTracker?.OnInstance("Creating " + type.Name, type.Name, type.IsClass, instructionIndex + 1, instructionTotal);
         }
         private void HandleSet(string[] args)
         {
@@ -309,9 +339,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             object? val = DynamicMethodInvoker.InvokeMethodWithArguments(
                 targetType: target is Type t ? t : target.GetType(),
-                methodName, 
+                methodName,
                 target: target is Type ? null : target,
-                arguments: args); 
+                arguments: args);
 
             if (!val.GetType().IsClass && !val.GetType().IsPrimitive)
             {
@@ -365,7 +395,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     value = ParseStringFunc(s);
                     break;
                 case string s when CustomValueProviderCache.Get(desiredType, out var provider):
-                    if(s is "null")
+                    if (s is "null")
                         value = provider.OnNull();
                     else
                         value = provider._CreateObject(s, this);
@@ -404,21 +434,34 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             int currentID = instanceIDStack.Peek();
             object? currentObj = context.GetObject(currentID);
-            for (int i = 0; i < dispatchedReferences.Count; i++)
+
+            if(currentObj is AnonymousTypeReader reader)
             {
-                DispatchedReference r = dispatchedReferences[i];
-                if (r.RefID == currentID)
-                {
-                    r.method(currentObj);
-                    dispatchedReferences.Remove(r);
-                }
+                string msg = "Compiling anonymous type";
+                if (reader.TypeName != null)
+                    msg += ": " + reader.TypeName;
+                progressTracker?.Report(msg);
+                object compiledAnonymous = reader.Compile();
+                context.ObjectTable[currentID] = compiledAnonymous;
             }
+            else
+            {
+                for (int i = 0; i < dispatchedReferences.Count; i++)
+                {
+                    DispatchedReference r = dispatchedReferences[i];
+                    if (r.RefID == currentID)
+                    {
+                        r.method(currentObj);
+                        dispatchedReferences.Remove(r);
+                    }
+                }
+
+                FlowHookItem item = FlowHookCache.Get(currentObj.GetType());
+                if (item.Any)
+                    item.InvokeAfterDeserialize(currentObj);
+            }  
 
             instanceIDStack.Pop();
-
-            FlowHookItem item = FlowHookCache.Get(currentObj.GetType());
-            if (item.Any)
-                item.InvokeAfterDeserialize(currentObj);
         }
         private static object? ParseLiteral(string raw, Type target)
         {
@@ -442,13 +485,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private static Type ResolveType(string typeName)
         {
             ValidateKeywordType(ref typeName);
-            
+
             if (typeCache.TryGetValue(typeName, out Type cachedType))
                 return cachedType;
 
             Type resolvedType;
 
-            
+
             if (typeName.Contains('<') && typeName.Contains('>'))
             {
                 int startIndex = typeName.IndexOf('<');

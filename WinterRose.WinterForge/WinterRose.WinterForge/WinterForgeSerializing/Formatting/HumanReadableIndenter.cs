@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 
 namespace WinterRose.WinterForgeSerializing.Formatting
 {
+    /// <summary>
+    /// Indents the human readable format created by <see cref="WinterForge"/>
+    /// </summary>
     public class HumanReadableIndenter
     {
         private StreamReader _inputStreamReader;
@@ -22,32 +25,31 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             string? line;
             while ((line = _inputStreamReader.ReadLine()) != null)
             {
-                // Apply the current indentation level to the line
+                bool alreadyTrimmed = false;
+                if(line.Trim() == "}")
+                {
+                    UpdateIndentation(line);
+                    alreadyTrimmed = true;
+                }
+
                 string indentedLine = GetIndentedLine(line);
                 if(!string.IsNullOrWhiteSpace(indentedLine))
                     _outputStreamWriter.WriteLine(indentedLine);
 
-                // Update the indentation level based on braces and brackets
-                UpdateIndentation(line);
+                if(!alreadyTrimmed)
+                    UpdateIndentation(line);
             }
 
-            // Ensure all output is written to the stream
             _outputStreamWriter.Flush();
         }
 
-        private string GetIndentedLine(string line)
-        {
-            // Add the correct indentation before the line
-            return new string(INDENT_CHAR, _currentIndentLevel) + line;
-        }
+        private string GetIndentedLine(string line) => new string(INDENT_CHAR, _currentIndentLevel) + line;
 
         private void UpdateIndentation(string line)
         {
-            // Increase indent when encountering '{' or '['
             if (line.Contains('{') || line.Contains('['))
                 _currentIndentLevel++;
 
-            // Decrease indent when encountering '}' or ']'
             if (line.Contains('}') || line.Contains(']'))
                 _currentIndentLevel = Math.Max(0, _currentIndentLevel - 1);
         }

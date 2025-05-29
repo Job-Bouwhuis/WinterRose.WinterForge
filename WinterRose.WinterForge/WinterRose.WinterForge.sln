@@ -1,11 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.13.35818.85 d17.13
+VisualStudioVersion = 17.13.35818.85
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinterRose.WinterForge", "WinterRose.WinterForge\WinterRose.WinterForge.csproj", "{C1E607D4-558C-44C7-A0E0-DC8777969840}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinterForgeTests", "WinterForgeTests\WinterForgeTests.csproj", "{84D1102D-29B6-4810-8E62-83C0AF53185A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinterRose.Reflection", "WinterRose.Reflection\WinterRose.Reflection.csproj", "{2668DF37-1339-57AB-DA18-1D6CC48B5A09}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{84D1102D-29B6-4810-8E62-83C0AF53185A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{84D1102D-29B6-4810-8E62-83C0AF53185A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{84D1102D-29B6-4810-8E62-83C0AF53185A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2668DF37-1339-57AB-DA18-1D6CC48B5A09}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2668DF37-1339-57AB-DA18-1D6CC48B5A09}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2668DF37-1339-57AB-DA18-1D6CC48B5A09}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2668DF37-1339-57AB-DA18-1D6CC48B5A09}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

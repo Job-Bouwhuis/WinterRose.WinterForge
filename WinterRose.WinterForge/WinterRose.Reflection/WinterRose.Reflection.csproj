@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <Version>25.2.0</Version>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>WinterRose.Reflection</Title>
+    <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>
+    <Configurations>Debug;Release;debug FileServer</Configurations>
+  </PropertyGroup>
+
+</Project>

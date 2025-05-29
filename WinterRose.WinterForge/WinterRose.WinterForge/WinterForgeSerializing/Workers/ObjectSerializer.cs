@@ -10,6 +10,8 @@ using System.Collections;
 using System.Reflection.Metadata;
 using WinterRose.WinterForgeSerializing.Logging;
 using System.Data;
+using WinterRose.AnonymousTypes;
+using WinterRose;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
@@ -37,7 +39,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
         }
 
-        internal void Serialize(object obj, Stream destinationStream, bool isRootCall, bool emitReturn = true)
+        internal void Serialize(ref object obj, Stream destinationStream, bool isRootCall, bool emitReturn = true)
         {
             if (isRootCall)
             {
@@ -59,11 +61,22 @@ namespace WinterRose.WinterForgeSerializing.Workers
             else
                 key = currentKey++;
 
+            if (obj is Anonymous or AnonymousTypeReader || obj.GetType().IsAnonymousType())
+            {
+                SerializeAnonymous(ref obj, key, destinationStream);
+                if (isRootCall)
+                {
+                    WriteToStream(destinationStream, "\n\nreturn " + key);
+                    destinationStream.Flush();
+                }
+                return;
+            }
+
             Type objType = obj.GetType();
 
             if (WinterForge.SupportedPrimitives.Contains(objType))
             {
-                WriteToStream(destinationStream, obj.ToString());
+                WriteToStream(destinationStream, obj?.ToString() ?? "null");
                 return;
             }
 
@@ -103,12 +116,51 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (item.Any)
                 item.InvokeBeforeSerialize(obj);
 
-            SerializePropertiesAndFields(obj, helper, destinationStream, progressTracker);
+            SerializePropertiesAndFields(ref obj, helper, destinationStream, progressTracker);
             WriteToStream(destinationStream, "}\n");
 
             if (isRootCall)
                 WriteToStream(destinationStream, "\n\nreturn " + key);
             destinationStream.Flush();
+        }
+
+        private void SerializeAnonymous(ref object obj, int id, Stream destinationStream)
+        {
+            if (obj is AnonymousTypeReader reader)
+            {
+                string typeName = reader.TypeName is not null ? " as " + reader.TypeName : "";
+                string progressTypeName = typeName is "" ? "Anonymous" : typeName;
+                progressTracker?.OnInstance("Serializing Anonymous Type", progressTypeName, true, 0, 0);
+                WriteToStream(destinationStream, $"{"Anonymous"}{typeName} : {id} {{\n");
+                foreach (var kvp in reader.EnumerateProperties())
+                {
+                    progressTracker?.OnField(kvp.Key, 0, 0);
+                    object v = kvp.Value;
+                    CommitValue(ref obj, destinationStream, ParseTypeName(kvp.Value.GetType()), kvp.Key, ref v);
+                }
+                    
+                WriteToStream(destinationStream, "}\n");
+                progressTracker?.OnExitInstance();
+                return;
+            }
+
+            progressTracker?.OnInstance("Serializing Anonymous Type", "Anonymous", true, 0, 0);
+
+            WriteToStream(destinationStream, $"{"Anonymous"} : {id} {{\n");
+            ReflectionHelper rh = new(ref obj);
+            var members = rh.GetMembers();
+            foreach (var member in members)
+            {
+                if (member.MemberType == MemberTypes.Field)
+                    continue;
+                if (member.IsStatic)
+                    continue; // skip static members in anonymous types
+
+                progressTracker?.OnField(member.Name, 0, 0);
+                CommitValue(ref obj, destinationStream, member, true);
+            }
+            WriteToStream(destinationStream, "}\n");
+            progressTracker?.OnExitInstance();
         }
 
         private string GetTypeName(Type t)
@@ -130,7 +182,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         }
 
 
-        private void SerializePropertiesAndFields(object obj, ReflectionHelper rh, Stream destinationStream, WinterForgeProgressTracker? progressTracker)
+        private void SerializePropertiesAndFields(ref object obj, ReflectionHelper rh, Stream destinationStream, WinterForgeProgressTracker? progressTracker)
         {
             Type objType = obj.GetType();
 
@@ -145,7 +197,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 if (member.IsStatic)
                 {
-                    progressTracker?.OnField(objType.Name + '.' + member.Name, 0, 0);
                     HandleStaticMember(member, objType, rh, destinationStream, progressTracker, false);
                     continue;
                 }
@@ -153,7 +204,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 if (IsMemberSerializable(member, hasIncludeAllPrivateFields, hasIncludeAllProperties))
                 {
                     progressTracker?.OnField(member.Name, 0, 0);
-                    CommitValue(obj, destinationStream, member);
+                    CommitValue(ref obj, destinationStream, member);
                 }
             }
         }
@@ -192,8 +243,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
             Stream destinationStream, WinterForgeProgressTracker? progressTracker, bool asStaticClass)
         {
             if (!asStaticClass)
-                if(member.IsPublic && member.GetAttribute<IncludeWithSerializationAttribute>() is null)
+                if (member.IsPublic && member.GetAttribute<IncludeWithSerializationAttribute>() is null)
                     return;
+            progressTracker?.OnField(type.Name + '.' + member.Name, 0, 0);
             if (IsMemberSerializable(member, false, false))
             {
                 CommitStaticValue(type, destinationStream, member);
@@ -206,7 +258,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return;
             staticFieldCache.Add((type, member.Name));
 
-            object value = member.GetValue(null);
+            object? value = member.GetValue();
 
             string serializedString = SerializeValue(value);
             int linePos = serializedString.IndexOf('\n');
@@ -246,9 +298,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 WriteToStream(destinationStream, ";\n");
         }
 
-        private void CommitValue(object obj, Stream destinationStream, MemberData member)
+        private void CommitValue(ref object obj, Stream destinationStream, MemberData member, bool includeType = false)
         {
-            object value = member.GetValue(obj);
+            object value = member.GetValue(ref obj);
 
             string serializedString = SerializeValue(value);
             int linePos = serializedString.IndexOf('\n');
@@ -256,7 +308,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 if (serializedString.StartsWith('"') && serializedString.EndsWith('"'))
                 {
-                    WriteToStream(destinationStream, $"{member.Name} = {serializedString}");
+                    if(includeType)
+                        WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = {serializedString}");
+                    else
+                        WriteToStream(destinationStream, $"{member.Name} = {serializedString}");
                     WriteToStream(destinationStream, ";\n");
                     return;
                 }
@@ -275,7 +330,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     int key = int.Parse(indexStart);
 
                     WriteToStream(destinationStream, serializedString);
-                    WriteToStream(destinationStream, $"{member.Name} = _ref({key});\n");
+                    if(includeType)
+                        WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = _ref({key});\n");
+                    else
+                        WriteToStream(destinationStream, $"{member.Name} = _ref({key});\n");
                     return;
                 }
             }
@@ -283,7 +341,58 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (isDecimalNumber(serializedString))
                 serializedString = serializedString.Replace(',', '.');
 
-            WriteToStream(destinationStream, $"{member.Name} = {serializedString}");
+            if(includeType)
+                WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = {serializedString}");
+            else
+                WriteToStream(destinationStream, $"{member.Name} = {serializedString}");
+            if (!serializedString.Contains('['))
+                WriteToStream(destinationStream, ";\n");
+        }
+        private void CommitValue(ref object obj, Stream destinationStream, string typeName, string memberName, ref object value, bool includeType = false)
+        {
+            string serializedString = SerializeValue(value);
+            int linePos = serializedString.IndexOf('\n');
+            if (linePos != -1)
+            {
+                if (serializedString.StartsWith('"') && serializedString.EndsWith('"'))
+                {
+                    if (includeType)
+                        WriteToStream(destinationStream, $"{typeName}:{memberName} = {serializedString}");
+                    else
+                        WriteToStream(destinationStream, $"{memberName} = {serializedString}");
+                    WriteToStream(destinationStream, ";\n");
+                    return;
+                }
+                string line = serializedString[0..linePos];
+                linePos = line.IndexOf(':');
+                if (linePos != -1)
+                {
+                    ReadOnlySpan<char> indexStart = line.AsSpan()[linePos..];
+                    int len = indexStart.Length;
+
+                    // Trim from the end while chars are not numeric
+                    while (len > 0 && !char.IsDigit(indexStart[len - 1]))
+                        len--;
+
+                    indexStart = indexStart[1..len].Trim();
+                    int key = int.Parse(indexStart);
+
+                    WriteToStream(destinationStream, serializedString);
+                    if (includeType)
+                        WriteToStream(destinationStream, $"{typeName}:{memberName} = _ref({key});\n");
+                    else
+                        WriteToStream(destinationStream, $"{memberName} = _ref({key});\n");
+                    return;
+                }
+            }
+
+            if (isDecimalNumber(serializedString))
+                serializedString = serializedString.Replace(',', '.');
+
+            if (includeType)
+                WriteToStream(destinationStream, $"{typeName}:{memberName} = {serializedString}");
+            else
+                WriteToStream(destinationStream, $"{memberName} = {serializedString}");
             if (!serializedString.Contains('['))
                 WriteToStream(destinationStream, ";\n");
         }
@@ -392,6 +501,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private string ParseTypeName(Type elementType)
         {
+            if (elementType == typeof(Anonymous)
+                || elementType == typeof(AnonymousTypeBuilder)
+                || elementType.IsAnonymousType())
+                return "Anonymous";
+
             if (!elementType.IsGenericType)
                 return elementType.FullName;
 
@@ -411,7 +525,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             using (MemoryStream ms = new MemoryStream())
             {
-                Serialize(obj, ms, false);
+                Serialize(ref obj, ms, false);
                 return Encoding.UTF8.GetString(ms.ToArray());
             }
         }
@@ -425,7 +539,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             using (MemoryStream ms = new MemoryStream())
             {
-                Serialize(obj, ms, true);
+                Serialize(ref obj, ms, true);
                 return Encoding.UTF8.GetString(ms.ToArray());
             }
         }
@@ -438,7 +552,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             using (FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
             {
-                Serialize(obj, fs, true);
+                Serialize(ref obj, fs, true);
             }
         }
         /// <summary>
@@ -446,6 +560,38 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// </summary>
         /// <param name="obj"></param>
         /// <param name="destination"></param>
-        public void Serialize(object obj, Stream destination) => Serialize(obj, destination, true);
+        public void Serialize(object obj, Stream destination) => Serialize(ref obj, destination, true);
+
+        /// <summary>
+        /// Serializes the given object to a string using the <see cref="WinterForge"/> serialization system
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <returns></returns>
+        public string SerializeToString(ref object obj)
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                Serialize(ref obj, ms, true);
+                return Encoding.UTF8.GetString(ms.ToArray());
+            }
+        }
+        /// <summary>
+        /// Serializes the given object directly to a file
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="filePath"></param>
+        public void SerializeToFile(ref object obj, string filePath)
+        {
+            using (FileStream fs = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+            {
+                Serialize(ref obj, fs, true);
+            }
+        }
+        /// <summary>
+        /// Serializes the given object to the given stream
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="destination"></param>
+        public void Serialize(ref object obj, Stream destination) => Serialize(ref obj, destination, true);
     }
 }

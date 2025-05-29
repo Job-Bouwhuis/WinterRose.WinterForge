@@ -38,7 +38,7 @@ HOTFIX: empty strings still werent correctly inserted into the instruction. this
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="WinterRose.Reflection" Version="25.2.0" />
+    <ProjectReference Include="..\WinterRose.Reflection\WinterRose.Reflection.csproj" />
   </ItemGroup>
 
   <ItemGroup>

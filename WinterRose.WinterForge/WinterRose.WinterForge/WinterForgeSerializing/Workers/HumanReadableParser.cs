@@ -102,6 +102,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 int colonIndex = line.IndexOf(':');
 
                 string type = line[..openParenIndex].Trim();
+                if (type.Contains("Anonymous as"))
+                    type = type.Replace(' ', '-');
                 string arguments = line.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
                 string id = line.Substring(colonIndex + 1, line.Length - colonIndex - 2).Trim();
 
@@ -121,7 +123,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 int colonIndex = line.IndexOf(':');
                 int braceIndex = line.IndexOf('{');
 
-                string type = line[..colonIndex].Trim();
+                string type = line[..colonIndex].Trim(); 
+                if (type.Contains("Anonymous as"))
+                    type = type.Replace(' ', '-');
                 string id = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
                 if (id is "nextid")
@@ -139,6 +143,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 var parts = line[..^1].Split(':');
                 type = parts[0].Trim();
+                if (type.Contains("Anonymous as"))
+                    type = type.Replace(' ', '-');
                 id = parts[1].Trim();
 
                 if (id is "nextid")
@@ -155,6 +161,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 var parts = line.Split(':');
                 type = parts[0].Trim();
+                if (type.Contains("Anonymous as"))
+                    type = type.Replace(' ', '-');
                 id = parts[1].Trim();
 
                 if (id is "nextid")
@@ -203,7 +211,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 string[] parts = line.Split(' ');
                 int id = int.Parse(parts[1]);
-
+                if (parts[2] is "as" && parts.Length > 2)
+                    parts[2] = parts[3];
                 string alias = parts[2].EndsWith(';') ? parts[2][..^1] : parts[2];
                 aliasMap.Add(alias, id);
             }
@@ -256,6 +265,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
                 if (line.Contains("->"))
                     HandleAccessing(id);
+                else if (line.Contains(':') && line.Contains('='))
+                    ParseAnonymousAssignment(line);
                 else if (line.Contains('=') && line.EndsWith(';'))
                     ParseAssignment(line);
                 else if (line.Contains('=') && line.Contains('\"'))
@@ -309,6 +320,27 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     throw new Exception($"unexpected block content: {line}");
                 }
             }
+        }
+
+        private void ParseAnonymousAssignment(string line)
+        {
+            // Example: "type:name = value"
+            int colonIndex = line.IndexOf('=');
+            if (colonIndex == -1)
+                throw new Exception("Invalid anonymous assignment format, missing ':'");
+            string typeAndName = line[..colonIndex].Trim();
+            string value = line[(colonIndex + 1)..].Trim();
+            if (value.EndsWith(';'))
+                value = value[..^1].Trim();
+            if (string.IsNullOrWhiteSpace(typeAndName) || string.IsNullOrWhiteSpace(value))
+                throw new Exception("Invalid anonymous assignment format, type or name is empty");
+            string[] typeAndNameParts = typeAndName.Split(':', 2, StringSplitOptions.TrimEntries);
+            if (typeAndNameParts.Length != 2)
+                throw new Exception("Invalid anonymous assignment format, expected 'type:name'");
+            string type = typeAndNameParts[0];
+            string name = typeAndNameParts[1];
+
+            WriteLine($"{opcodeMap["ANONYMOUS_SET"]} {type} {name} {value}");
         }
 
         private void HandleAccessing(string? id)
