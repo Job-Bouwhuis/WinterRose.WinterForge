@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.9</Version>
+    <Version>25.2.10</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -17,12 +17,9 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <PackageReleaseNotes>changed progress tracking, and added flow hooks for instances using the method attributes [BeforeSerialize] [BeforeDeserialize] and [AfterDeserialize]
-
-HOTFIX: empty strings were classified as malformed multiline strings. they now function correctly
-HOTFIX: string value with no quotes were flagged as invalid
-HOTFIX: empty strings did not get correctly inserted as instruction
-HOTFIX: empty strings still werent correctly inserted into the instruction. this is now actually fixed</PackageReleaseNotes>
+    <PackageReleaseNotes>* Anonymous types are now fully supported in serialization/deserialization
+* Creates and compiles a new class into the appdomain.
+  - Can be indexed using this[string] or the Get/Set generic methods</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
   </PropertyGroup>
 

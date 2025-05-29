@@ -6,11 +6,12 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>25.2.0</Version>
+    <Version>25.2.1</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>WinterRose.Reflection</Title>
     <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>
     <Configurations>Debug;Release;debug FileServer</Configurations>
+    <PackageReleaseNotes>Moved Anonymous type stuff from WinterRose base lib to this one</PackageReleaseNotes>
   </PropertyGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using WinterRose;
+using WinterRose.AnonymousTypes;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Logging;
 using WinterRose.WIP.TestClasses;
@@ -13,28 +14,30 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
+        //"Human.txt"
+        //WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
+
         object an = new
         {
             X = 5,
-            Y = 6,
-            Z = 7,
-            Name = "something",
-            loc = new Vector3(1, 2, 3),
-            demo = new
+            Y = 2,
+            nest = new
             {
-                a = 'a'
-            }
+                ed = 4
+            },
+            v = new Vector3(1, 2, 3)
         };
 
-        WinterForge.SerializeToFile(an, "Human.txt", TargetFormat.FormattedHumanReadable, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
+        WinterForge.SerializeToFile(an, "opcodes.txt", TargetFormat.Optimized, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.ClassOnly));
         Console.WriteLine("\n\nSerializing ^^\nDeserializing vv\n\n");
-        WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
-        object result = WinterForge.DeserializeFromFile("opcodes.txt", new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.Full, true));
-
-        dynamic r = result;
-        Console.WriteLine(r.demo.a);
+        Anonymous result = WinterForge.DeserializeFromFile<Anonymous>("opcodes.txt", 
+            new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.ClassOnly));
+        int x = (int)result.Get<Anonymous>("nest")["ed"];
         Console.WriteLine("\n");
         Console.WriteLine(result.ToString());
+
+        Type? t = TypeWorker.FindType(result.ToString());
+        Console.WriteLine($"browsing findable: {t is not null}");
     }
 }
 
