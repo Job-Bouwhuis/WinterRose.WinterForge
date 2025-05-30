@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using WinterRose.AnonymousTypes;
 
 namespace WinterRose.Reflection
 {
@@ -10,7 +12,9 @@ namespace WinterRose.Reflection
     {
         public static bool IsAnonymousType(this Type type)
         {
-            return type.Name.Contains("<>f__AnonymousType");
+            if (type.Name.Contains("<>f__AnonymousType"))
+                return true;
+            return type.GetCustomAttribute<AnonymousAttribute>() is not null;
         }
     }
 }

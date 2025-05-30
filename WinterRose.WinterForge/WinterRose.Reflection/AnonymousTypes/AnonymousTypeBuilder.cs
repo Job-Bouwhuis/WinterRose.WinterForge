@@ -15,40 +15,41 @@ public static class AnonymousTypeBuilder
     /// Creates a new anonymous type from the specified properties.
     /// </summary>
     /// <param name="properties"></param>
+    /// <param name="baseType">When not null, the generated type has this type as a base. thereby the accessing of members using 'this[string]' is not possible.
+    /// However this can be quite useful when creating things like mods or other kinds of extensible features.</param>
     /// <returns></returns>
-    public static Type CreateNewAnonymousType(Dictionary<string, object> properties, string? typeName = null)
+    public static Type CreateNewAnonymousType(Dictionary<string, object> properties, string? typeName = null, Type? baseType = null)
     {
-        var hash = new AnonymousTypeHash(properties);
+        var hash = AnonymousTypeHash.GetHashCode(properties, typeName, baseType);
 
         if (existingTypes.TryGetValue(hash.GetHashCode(), out Type? existing))
             return existing;
 
-        typeName ??= $"AnonymousType_{Guid.NewGuid()}";
-        var typeBuilder = AnonymousTypeBuilderHelper.CreateTypeBuilder(typeName);
+        var typeBuilder = AnonymousTypeBuilderHelper.CreateTypeBuilder(typeName, baseType);
 
         var fieldMap = new Dictionary<string, FieldBuilder>();
         foreach (var property in properties)
             fieldMap.Add(property.Key, AnonymousTypeBuilderHelper.CreateProperty(typeBuilder, property.Key, property.Value.GetType()));
 
-        AnonymousTypeBuilderHelper.CreateIndexer(typeBuilder, fieldMap);
+        if(baseType == typeof(Anonymous))
+            AnonymousTypeBuilderHelper.CreateIndexer(typeBuilder, fieldMap);
 
         Type t = typeBuilder.CreateTypeInfo().UnderlyingSystemType;
         existingTypes.Add(hash.GetHashCode(), t);
         return t;
     }
 
-    private class AnonymousTypeHash
+    private static class AnonymousTypeHash
     {
-        private readonly List<KeyValuePair<string, object>> properties;
-
-        public AnonymousTypeHash(Dictionary<string, object> properties) 
-        { 
-            this.properties = properties.ToList();
-        }
-
-        public override int GetHashCode()
+        public static int GetHashCode(Dictionary<string, object> properties, string? typeName, Type? baseType)
         {
             HashCode hash = new HashCode();
+
+            if (typeName is not null)
+                hash.Add(typeName);
+
+            if (baseType is not null)
+                hash.Add(baseType);
 
             foreach (var prop in properties)
             {
@@ -57,21 +58,6 @@ public static class AnonymousTypeBuilder
             }
 
             return hash.ToHashCode();
-        }
-
-        public override bool Equals(object? obj)
-        {
-            if (obj is not AnonymousTypeHash other)
-                return false;
-
-            for (int i = 0; i < properties.Count; i++)
-            {
-                if (properties[i].Key != other.properties[i].Key ||
-                    properties[i].Value != other.properties[i].Value)
-                    return false;
-            }
-
-            return true;
         }
     }
 }

@@ -15,9 +15,14 @@ public class AnonymousTypeReader : DynamicObject
     public Dictionary<string, object> DataMembers => propertyMap;
 
     /// <summary>
-    /// The name of the class that is created from this reader when <see cref="Compile"/> is called.
+    /// The name of the class that is created from this reader when <see cref="Compile()"/> is called.
     /// </summary>
     public string? TypeName { get; set; } = null;
+    /// <summary> 
+    /// The base type of the generated type when <see cref="Compile()"/> is caled. <br></br>
+    /// if <see langword="null"/>, its <see cref="Anonymous"/>
+    /// </summary>
+    public Type? BaseType { get; set; } = null;
 
     /// <summary>
     /// Gets the dynamic member names.
@@ -188,7 +193,7 @@ public class AnonymousTypeReader : DynamicObject
     /// <returns></returns>
     public object Compile()
     {
-        var typeBuilder = AnonymousTypeBuilder.CreateNewAnonymousType(propertyMap, TypeName);
+        var typeBuilder = AnonymousTypeBuilder.CreateNewAnonymousType(propertyMap, TypeName, BaseType);
         var obj = Activator.CreateInstance(typeBuilder);
 
         // Set property values

@@ -22,6 +22,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private readonly Stack<KeyValuePair<Type, IList>> listStack = new();
         private readonly List<DispatchedReference> dispatchedReferences = [];
         private StringBuilder? sb;
+        private Instruction current;
 
         private int instructionIndex = 0;
         private int instructionTotal;
@@ -68,7 +69,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 for (instructionIndex = 0; instructionIndex < instructions.Count; instructionIndex++)
                 {
-                    Instruction instruction = instructions[instructionIndex];
+                    Instruction instruction = current = instructions[instructionIndex];
                     switch (instruction.OpCode)
                     {
                         case OpCode.DEFINE:
@@ -86,14 +87,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                                 Type fieldType = ResolveType(instruction.Args[0]);
 
-                                object val = GetArgumentValue(instruction.Args[2], fieldType, val => { });
+                                object val = GetArgumentValue(instruction.Args[2], 2, fieldType, val => { });
                                 obj.SetMember(instruction.Args[1], ref val);
                                 break;
                             }
                         case OpCode.PUSH:
                             {
                                 string arg = instruction.Args[0];
-                                object val = GetArgumentValue(arg, typeof(string), delegate { });
+                                object val = GetArgumentValue(arg, 0, typeof(string), delegate { });
                                 if (val is Dispatched)
                                     throw new Exception("Other opcodes rely on PUSH having pushed its value, cant differ reference till later");
 
@@ -162,7 +163,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                                 MemberData member = helper.GetMember(field);
 
-                                object? value = GetArgumentValue(rawValue, member.Type, val =>
+                                object? value = GetArgumentValue(rawValue, 1, member.Type, val =>
                                 {
                                     if (member.Type.IsArray)
                                     {
@@ -230,7 +231,23 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 StringBuilder sb = new("\nOn lines:\n");
                 foreach (DispatchedReference d in dispatchedReferences)
-                    sb.AppendLine(d.lineNum.ToString());
+                {
+                    try
+                    {
+                        object? obj = context.GetObject(d.RefID);
+                        if (obj is null)
+                        {
+                            sb.AppendLine(d.lineNum.ToString());
+                            continue;
+                        }
+
+                        d.method(obj);
+                    }
+                    catch
+                    {
+                        sb.AppendLine(d.lineNum.ToString());
+                    }
+                }
 
                 throw new Exception("There were objects referenced in the deserialization that were never defined." + sb.ToString());
             }
@@ -260,8 +277,18 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 AnonymousTypeReader obj = new AnonymousTypeReader();
                 object o = obj;
-                if(typeName.StartsWith("Anonymous-as-"))
+                if (typeName.StartsWith("Anonymous-as-"))
+                {
                     obj.TypeName = typeName[13..];
+
+                    string[] parts = obj.TypeName.Split('-', StringSplitOptions.RemoveEmptyEntries);
+                    // if base type was included, its on index 3
+                    if (parts.Length == 3)
+                    {
+                        obj.BaseType = ResolveType(parts[2]);
+                        obj.TypeName = parts[0];
+                    }
+                }
 
                 context.AddObject(id, ref o);
                 instanceIDStack.Push(id);
@@ -296,18 +323,36 @@ namespace WinterRose.WinterForgeSerializing.Workers
             var target = context.GetObject(instanceID)!;
 
             ReflectionHelper helper = CreateReflectionHelper(ref target, out object actualTarget);
+
+            if (actualTarget is AnonymousTypeReader a)
+            {
+                // on an anonymous object, the field doesnt exist yet, so we dispatch it
+                Dispatch(instanceID, obj =>
+                {
+                    ReflectionHelper rh = CreateReflectionHelper(ref obj, out object? acttar);
+                    MemberData member = rh.GetMember(field);
+                    SetValue(rawValue, ref acttar, member);
+                });
+                return;
+            }
+
             MemberData member = helper.GetMember(field);
             progressTracker?.OnField(field, instructionIndex + 1, instructionTotal);
+            SetValue(rawValue, ref actualTarget, member);
+        }
 
-            object? value = GetArgumentValue(rawValue, member.Type, val =>
+        private void SetValue(string rawValue, ref object actualTarget, MemberData member)
+        {
+            object o = actualTarget;
+            object? value = GetArgumentValue(rawValue, 1, member.Type, val =>
             {
                 if (member.Type.IsArray)
                 {
                     if (member.Type.IsArray)
                         val = ((IList)val).GetInternalArray();
                 }
-
-                member.SetValue(ref actualTarget, val);
+                
+                member.SetValue(ref o, val);
             });
             if (value is Dispatched)
                 return; // value has been dispatched to be set later
@@ -315,8 +360,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (member.Type.IsArray)
                 value = ((IList)value).GetInternalArray();
 
+
             member.SetValue(ref actualTarget, value);
         }
+
         private void Dispatch(int refID, Action<object?> method)
         {
             dispatchedReferences.Add(new(refID, instructionIndex, method));
@@ -357,7 +404,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             var kv = listStack.Peek();
 
-            object instance = GetArgumentValue(args[0], kv.Key!, obj =>
+            object instance = GetArgumentValue(args[0], 0, kv.Key!, obj =>
                 {
                     kv.Value.Add(obj);
                 });
@@ -365,7 +412,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return; // value has been dispatched to be set later
             kv.Value.Add(instance);
         }
-        private object GetArgumentValue(string arg, Type desiredType, Action<object> onDispatch)
+        private object GetArgumentValue(string arg, int argIndex, Type desiredType, Action<object> onDispatch)
         {
             object? value;
             switch (arg)
@@ -398,7 +445,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     if (s is "null")
                         value = provider.OnNull();
                     else
+                    {
+                        if (current.Args.Length > argIndex)
+                            s = string.Join(' ', current.Args.Skip(argIndex));
                         value = provider._CreateObject(s, this);
+                    }
                     break;
                 default:
                     value = ParseLiteral(arg, desiredType);
@@ -429,13 +480,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
             return Encoding.UTF8.GetString(bytes);
         }
 
-
         private void HandleEnd()
         {
             int currentID = instanceIDStack.Peek();
             object? currentObj = context.GetObject(currentID);
 
-            if(currentObj is AnonymousTypeReader reader)
+            if (currentObj is AnonymousTypeReader reader)
             {
                 string msg = "Compiling anonymous type";
                 if (reader.TypeName != null)
@@ -443,23 +493,24 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 progressTracker?.Report(msg);
                 object compiledAnonymous = reader.Compile();
                 context.ObjectTable[currentID] = compiledAnonymous;
+                currentObj = compiledAnonymous;
             }
             else
             {
-                for (int i = 0; i < dispatchedReferences.Count; i++)
-                {
-                    DispatchedReference r = dispatchedReferences[i];
-                    if (r.RefID == currentID)
-                    {
-                        r.method(currentObj);
-                        dispatchedReferences.Remove(r);
-                    }
-                }
-
                 FlowHookItem item = FlowHookCache.Get(currentObj.GetType());
                 if (item.Any)
                     item.InvokeAfterDeserialize(currentObj);
-            }  
+            }
+
+            for (int i = 0; i < dispatchedReferences.Count;)
+            {
+                DispatchedReference r = dispatchedReferences[i];
+                if (r.RefID == currentID)
+                {
+                    r.method(currentObj);
+                    dispatchedReferences.Remove(r);
+                }
+            }
 
             instanceIDStack.Pop();
         }

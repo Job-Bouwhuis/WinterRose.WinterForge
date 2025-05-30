@@ -13,14 +13,19 @@ public static class AnonymousTypeBuilderHelper
     /// Creates a new type builder.
     /// </summary>
     /// <returns></returns>
-    public static TypeBuilder CreateTypeBuilder(string typeName)
+    public static TypeBuilder CreateTypeBuilder(string? typeName = null, Type? baseType = null)
     {
-        var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("DynamicAssembly"), AssemblyBuilderAccess.Run);
-        var moduleBuilder = assemblyBuilder.DefineDynamicModule("DynamicModule");
+        typeName ??= $"AnonymousType_{Guid.NewGuid()}";
+        baseType ??= typeof(Anonymous);
+
+        var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("WinterRose.Reflection.GeneratedTypes"), AssemblyBuilderAccess.Run);
+        var moduleBuilder = assemblyBuilder.DefineDynamicModule("GeneratedTypes");
         var typeBuilder = moduleBuilder.DefineType(typeName, TypeAttributes.Public);
+        typeBuilder.SetParent(baseType);
 
-        typeBuilder.SetParent(typeof(Anonymous));
-
+        Type attr = typeof(AnonymousAttribute);
+        CustomAttributeBuilder attrBuilder = new(attr.GetConstructors().First(), []);
+        typeBuilder.SetCustomAttribute(attrBuilder);
         return typeBuilder;
     }
 

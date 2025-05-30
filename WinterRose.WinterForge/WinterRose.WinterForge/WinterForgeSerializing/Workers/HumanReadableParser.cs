@@ -102,7 +102,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 int colonIndex = line.IndexOf(':');
 
                 string type = line[..openParenIndex].Trim();
-                if (type.Contains("Anonymous as"))
+                if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
                 string arguments = line.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
                 string id = line.Substring(colonIndex + 1, line.Length - colonIndex - 2).Trim();
@@ -124,7 +124,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 int braceIndex = line.IndexOf('{');
 
                 string type = line[..colonIndex].Trim(); 
-                if (type.Contains("Anonymous as"))
+                if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
                 string id = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
@@ -143,7 +143,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 var parts = line[..^1].Split(':');
                 type = parts[0].Trim();
-                if (type.Contains("Anonymous as"))
+                if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
                 id = parts[1].Trim();
 
@@ -161,7 +161,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 var parts = line.Split(':');
                 type = parts[0].Trim();
-                if (type.Contains("Anonymous as"))
+                if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
                 id = parts[1].Trim();
 
@@ -265,7 +265,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
                 if (line.Contains("->"))
                     HandleAccessing(id);
-                else if (line.Contains(':') && line.Contains('='))
+                else if (line.IndexOf(':') is int colinx && line.IndexOf('=') is int eqinx
+                    && colinx is not -1 && eqinx is not -1
+                    && colinx < eqinx)
                     ParseAnonymousAssignment(line);
                 else if (line.Contains('=') && line.EndsWith(';'))
                     ParseAssignment(line);

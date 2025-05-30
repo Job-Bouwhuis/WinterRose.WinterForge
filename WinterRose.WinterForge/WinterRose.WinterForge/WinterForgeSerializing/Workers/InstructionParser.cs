@@ -12,6 +12,17 @@ namespace WinterRose.WinterForgeSerializing
 {
     public static class InstructionParser
     {
+        private static int Find(this List<string> strings, string element)
+        {
+            for (int i = 0; i < strings.Count; i++)
+            {
+                string s = strings[i];
+                if (s == element)
+                    return i;
+            }
+            return -1;
+        }
+
         /// <summary>
         /// Parses opcodes into instructions. inserting a progress mark every <paramref name="progressInterval"/>. <br></br>
         /// eg: if <paramref name="progressInterval"/> is 20, 3 will be inserted
@@ -33,30 +44,19 @@ namespace WinterRose.WinterForgeSerializing
                 if (line == "WF_ENDOFDATA")
                     break; // network stream end of data mark
 
-                // Skip comments and empty lines
                 if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//"))
                     continue;
 
-                // Remove inline comments
                 var commentIndex = line.IndexOf("//");
                 if (commentIndex >= 0)
                     line = line[..commentIndex].Trim();
 
-                // Tokenize line: opcode and arguments
                 var parts = TokenizeLine(line);
-                if (parts.Length == 0)
+                if (parts.Count == 0)
                     continue;
-
-                // Parse OpCode
-                // enum tryparse is slow. opt for numerical opcodes in the future
-                // when a parser exists to convert the human readable format into computer format
 
                 OpCode opcode = (OpCode)int.Parse(parts[0]);
 
-                //if (!Enum.TryParse(parts[0], ignoreCase: true, out OpCode opcode))
-                //throw new Exception($"Invalid opcode: {parts[0]}");
-
-                // Add instruction
                 instructions.Add(new Instruction(opcode, parts.Skip(1).ToArray()));
             }
 
@@ -89,7 +89,7 @@ namespace WinterRose.WinterForgeSerializing
             return instructions;
         }
 
-        private static string[] TokenizeLine(string line)
+        private static List<string> TokenizeLine(string line)
         {
             var tokens = new List<string>();
             var sb = new StringBuilder();
@@ -123,7 +123,7 @@ namespace WinterRose.WinterForgeSerializing
             if (sb.Length > 0)
                 tokens.Add(sb.ToString());
 
-            return tokens.ToArray();
+            return tokens;
         }
     }
 

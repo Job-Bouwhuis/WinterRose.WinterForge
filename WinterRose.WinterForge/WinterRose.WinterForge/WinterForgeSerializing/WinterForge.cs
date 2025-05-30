@@ -17,7 +17,9 @@ using WinterRose.WinterForgeSerializing.Workers;
 namespace WinterRose.WinterForgeSerializing
 {
     /// <summary>
-    /// The main delegation class for the WinterForge serialization system
+    /// The main delegation class for the WinterForge serialization system. <br></br><br></br>
+    /// 
+    /// Do you have feedback, or are you hitting a wall? Feel free to reach out on Discord: '<b>thesnowowl</b>'
     /// </summary>
     public static class WinterForge
     {
@@ -54,7 +56,6 @@ namespace WinterRose.WinterForgeSerializing
                 string directory = string.Join("/", paths);
                 if (!Directory.Exists(directory))
                     Directory.CreateDirectory(directory);
-
             }
 
             using (Stream serialized = new MemoryStream())
