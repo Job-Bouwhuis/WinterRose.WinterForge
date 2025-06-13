@@ -293,7 +293,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
                 else if (TryParseList(line, out _))
                 {
-                    return;
+                    continue;
                 }
                 else
                 {

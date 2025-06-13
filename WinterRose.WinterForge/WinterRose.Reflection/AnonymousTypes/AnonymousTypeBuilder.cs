@@ -20,6 +20,12 @@ public static class AnonymousTypeBuilder
     /// <returns></returns>
     public static Type CreateNewAnonymousType(Dictionary<string, object> properties, string? typeName = null, Type? baseType = null)
     {
+        if((properties is null || properties.Count == 0) && typeName is null && baseType == null)
+        {
+            return typeof(Anonymous); // Return base anonymous type if no customization is needed.
+            // Dont waste resources creating a new type that would be identical to the base type.
+        }
+
         baseType ??= typeof(Anonymous);
         var hash = AnonymousTypeHash.GetHashCode(properties, typeName, baseType);
 

@@ -156,7 +156,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 Type objType = obj.GetType();
 
-                if (regex.IsMatch(typeName))
+                if (regex.IsMatch(typeName) || objType == typeof(Anonymous))
                 {
                     WriteToStream(destinationStream, $"Anonymous : {id} {{\n");
                 }

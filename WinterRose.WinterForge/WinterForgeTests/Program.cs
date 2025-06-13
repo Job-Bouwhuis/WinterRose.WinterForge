@@ -6,6 +6,8 @@ using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Logging;
 using WinterRose.WIP.TestClasses;
 
+namespace WinterForgeTests;
+
 internal class Program
 {
     public static int data = 15;
@@ -15,23 +17,10 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        Type t = AnonymousTypeBuilder.CreateNewAnonymousType(new Dictionary<string, object>
-        {
-            { "test", 1 },
-            { "test2", "test" },
-            { "test3", new Vector2(1, 2) },
-            { "list", new List<int> { 1, 2, 3, 4, 5 } }
-        }, "TestAnonymous");
-        Anonymous an = (Anonymous)Activator.CreateInstance(t);
+        AssetHeader header = new("test", "test.h");
 
-        an["test"] = 1;
-        an["test2"] = "test";
-        an["test3"] = new Vector2(1, 2);
-        an["other"] = "another value";
-        an["list"] = new List<int>() { 1, 2, 3, 4, 5 };
-
-        string serialized = WinterForge.SerializeToString(an, TargetFormat.FormattedHumanReadable);
-        Anonymous an2 = WinterForge.DeserializeFromHumanReadableString<Anonymous>(serialized);
+        string serialized = WinterForge.SerializeToString(header, TargetFormat.FormattedHumanReadable);
+        AssetHeader an2 = WinterForge.DeserializeFromHumanReadableString<AssetHeader>(serialized);
         //"Human.txt"
         //WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
 
