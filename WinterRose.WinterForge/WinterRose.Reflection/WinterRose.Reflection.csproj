@@ -15,6 +15,7 @@
 
 on top of that, the runtime variables are able to be used interchangably with generated members.
 ReflectionHelper will also get the runtime variables as valid members</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
   </PropertyGroup>
 
 </Project>

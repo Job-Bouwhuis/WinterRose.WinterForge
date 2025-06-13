@@ -17,6 +17,7 @@ for maximum performance.
 
 - **Comprehensive Type Support:**  
   - Primitive types (`int`, `float`, `bool`, `string`, etc.) with full typename transcription.  
+  - **Anonymous types:** Supports serialization and deserialization of inline, unnamed objects, including nested anonymous types.  
   - Nested objects, enums, lists, arrays, and nullable types.  
   - Static classes, fields, and properties.
 
@@ -58,9 +59,11 @@ for maximum performance.
 
 - Dictionaries not yet supported.  
 - Upcoming features:  
-  - Anonymous type serialization and deserialization.  
   - Support for math and boolean expressions within serialized data.  
-  - Importing and including other WinterForge files/modules.
+  - Importing and including other WinterForge files/modules.  
+  - Templates and repeatable code blocks.  
+  - Conditional serialization and expression support.  
+  - Optional async lifecycle hook awaiting.
 
 ## License
 
