@@ -1,37 +1,67 @@
-# WinterForge
+# Stream-Based Object Serialization and Deserialization — WinterForge
 
-WinterForge is a high-performance, human-readable object serialization framework built for environments where speed and developer clarity matter.
-Using the two sided format. one for humans, one for the computer, WinterForge achieves high performant serialization cycles while remaining to be readable for a developer.
-The system can also immediately go from the intermediate representation for that little extra speed.
+WinterForge is a high-performance, human-readable object serialization 
+framework designed to adapt fluidly to project needs rather than forcing projects 
+to conform to its rules. It blends speed with developer clarity by offering a dual 
+format system that supports both human-readable text and opcode-based intermediate representation 
+for maximum performance.
 
-## Features
+## Core Features
 
-### High Performance Serialization and Deserialization
-- Optimized to handle thousands of types and objects in milliseconds.
+- **Stream-based I/O:**  
+  Utilizes `IO.Stream` for serialization and deserialization, enabling flexible storage and transfer.
 
-### Dual-Sided Format
-- Human-readable format for debugging, and version control.
-- Opcode-based intermediate representation encodes object data using structured, sequential opcodes.
-- Supports direct serialization from and deserialization to the opcode format for maximum performance.
-- Unlike binary blobs, the opcode format remains readable and traceable, enabling debugging, diffing, and manual editing.
+- **Dual Format System:**  
+  - **Human-readable text:** Easy for developers to read, debug, diff, and edit manually.  
+  - **Opcode intermediate representation:** Structured sequential opcodes for fast, optimized serialization cycles.
 
-### Smart Type Discovery
-- Value Provider system allows for providing a custom value for a given field/property type.
- - uses CustomValueProvider\<T> and no manual registering of a value provider is required.
-- Supports both structs and classes.
+- **Comprehensive Type Support:**  
+  - Primitive types (`int`, `float`, `bool`, `string`, etc.) with full typename transcription.  
+  - Nested objects, enums, lists, arrays, and nullable types.  
+  - Static classes, fields, and properties.
 
-### Precision Field and Member Control
-- Per-field customization including:
-  - Inclusion/exclusion based on attribute on the given field/property.
-- Static and instance member support:
-  - ability to read/write fields and properties, and call methods during deserialization.
+- **Attribute-Driven Control:**  
+  - Inclusion/exclusion of fields and properties using attributes.  
+  - Hooks on instance methods for lifecycle events:  
+    - `BeforeSerialize`  
+    - `BeforeDeserialize`  
+    - `AfterDeserialize`  
+  - Hooks can be asynchronous (`async Task`), currently not awaited but planned as optional.
 
-## Design
-- Focused on speed and clarity.
-- Structure-first: data is always read in the order it's written.
+- **Advanced Object Handling:**  
+  - Object reference ID system with aliasing and stack-based referencing for reuse.  
+  - Ability to call methods during deserialization, using return values dynamically.  
+  - Custom value providers via `CustomValueProvider<T>` for type-specific value control, without manual registration.  
+  - Supports both structs and classes.
 
-## WIP Limitations
-- Dictionaries are at this point in time not yet supported by WinterForge.
+- **Progress and Formatting:**  
+  - Abstract progress tracking system (useful for loading bars, UI feedback).  
+  - Formatting modes controlled by `TargetFormat` enum:  
+    - `HumanReadable`  
+    - `IndentedHumanReadable`  
+    - `Opcodes`  
+  - Automatic conversion between human-readable and opcode formats.
+
+- **Smart Type Discovery and Reflection:**  
+  - Dynamically discovers types and members.  
+  - Supports runtime variables and integration with reflection helpers.
+
+## Design Philosophy
+
+- **Performance + Developer Clarity:**  
+  Optimized to serialize thousands of objects in milliseconds while maintaining human readability for easier debugging and version control.
+
+- **Structure-First Approach:**  
+  Data is always read in the order it is written, ensuring deterministic and reliable serialization.
+
+## Current Limitations & Future Plans
+
+- Dictionaries not yet supported.  
+- Upcoming features:  
+  - Anonymous type serialization and deserialization.  
+  - Support for math and boolean expressions within serialized data.  
+  - Importing and including other WinterForge files/modules.
 
 ## License
-[You can find it here](LICENSE.md)
+
+You can find the license details [here](LICENSE.md).

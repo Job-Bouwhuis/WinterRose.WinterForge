@@ -20,6 +20,7 @@ public static class AnonymousTypeBuilder
     /// <returns></returns>
     public static Type CreateNewAnonymousType(Dictionary<string, object> properties, string? typeName = null, Type? baseType = null)
     {
+        baseType ??= typeof(Anonymous);
         var hash = AnonymousTypeHash.GetHashCode(properties, typeName, baseType);
 
         if (existingTypes.TryGetValue(hash.GetHashCode(), out Type? existing))
@@ -29,7 +30,7 @@ public static class AnonymousTypeBuilder
 
         var fieldMap = new Dictionary<string, FieldBuilder>();
         foreach (var property in properties)
-            fieldMap.Add(property.Key, AnonymousTypeBuilderHelper.CreateProperty(typeBuilder, property.Key, property.Value.GetType()));
+            fieldMap.Add(property.Key, AnonymousTypeBuilderHelper.CreateProperty(typeBuilder, property.Key, property.Value?.GetType() ?? typeof(object)));
 
         if(baseType == typeof(Anonymous))
             AnonymousTypeBuilderHelper.CreateIndexer(typeBuilder, fieldMap);

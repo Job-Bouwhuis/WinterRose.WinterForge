@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace WinterRose.Reflection
 {
     [DebuggerDisplay("{ToDebuggerString()}")]
-    public sealed class MemberData
+    public class MemberData
     {
         private static readonly Dictionary<MemberInfo, MemberData> CACHE = new();
 
@@ -48,7 +48,7 @@ namespace WinterRose.Reflection
             return data;
         }
 
-        private MemberData() { }
+        protected MemberData() { }
 
         public static implicit operator MemberData(FieldInfo field) => FromField(field);
         public static implicit operator MemberData(PropertyInfo property) => FromProperty(property);
@@ -56,15 +56,15 @@ namespace WinterRose.Reflection
         /// <summary>
         /// The identifier of the field or property.
         /// </summary>
-        public string Name => fieldsource?.Name ?? propertysource?.Name ?? throw new InvalidOperationException("No field or property found.");
+        public virtual string Name => fieldsource?.Name ?? propertysource?.Name ?? throw new InvalidOperationException("No field or property found.");
         /// <summary>
         /// The kind of member this is.
         /// </summary>
-        public MemberTypes MemberType => fieldsource is not null ? MemberTypes.Field : MemberTypes.Property;
+        public virtual MemberTypes MemberType => fieldsource is not null ? MemberTypes.Field : MemberTypes.Property;
         /// <summary>
         /// The type of the field or property.
         /// </summary>
-        public Type Type => fieldsource?.FieldType ?? propertysource?.PropertyType ?? throw new InvalidOperationException("No field or property found.");
+        public virtual Type Type => fieldsource?.FieldType ?? propertysource?.PropertyType ?? throw new InvalidOperationException("No field or property found.");
         /// <summary>
         /// The custom attributes on the field or property.
         /// </summary>
@@ -72,15 +72,15 @@ namespace WinterRose.Reflection
         /// <summary>
         /// Field attributes, if this is a field. Otherwise, throws an <see cref="InvalidOperationException"/>.
         /// </summary>
-        public FieldAttributes FieldAttributes => fieldsource?.Attributes ?? throw new InvalidOperationException("No field or property found.");
+        public virtual FieldAttributes FieldAttributes => fieldsource?.Attributes ?? throw new InvalidOperationException("No field or property found.");
         /// <summary>
         /// Property attributes, if this is a property. Otherwise, throws an <see cref="InvalidOperationException"/>.
         /// </summary>
-        public PropertyAttributes PropertyAttributes => propertysource?.Attributes ?? throw new InvalidOperationException("No field or property found.");
+        public virtual PropertyAttributes PropertyAttributes => propertysource?.Attributes ?? throw new InvalidOperationException("No field or property found.");
         /// <summary>
         /// Indicates if the field or property is public.
         /// </summary>
-        public bool IsPublic
+        public virtual bool IsPublic
         {
             get
             {
@@ -100,11 +100,11 @@ namespace WinterRose.Reflection
         /// <summary>
         /// Indicates if the property has a setter.
         /// </summary>
-        public bool PropertyHasSetter => propertysource?.GetSetMethod(true) != null;
+        public virtual bool PropertyHasSetter => propertysource?.GetSetMethod(true) != null;
         /// <summary>
         /// Indicates if the field or property is static.
         /// </summary>
-        public bool IsStatic
+        public virtual bool IsStatic
         {
             get
             {
@@ -132,15 +132,15 @@ namespace WinterRose.Reflection
         /// <summary>
         /// Indicates if the field is readonly. eg const or readonly
         /// </summary>
-        public bool IsInitOnly => fieldsource?.IsInitOnly ?? throw new InvalidOperationException("No field or property found.");
+        public virtual bool IsInitOnly => fieldsource?.IsInitOnly ?? throw new InvalidOperationException("No field or property found.");
         /// <summary>
         /// Indicates if the field is a literal. eg const or static readonly
         /// </summary>
-        public bool IsLiteral => fieldsource?.IsLiteral ?? throw new InvalidOperationException("No field or property found.");
+        public virtual bool IsLiteral => fieldsource?.IsLiteral ?? throw new InvalidOperationException("No field or property found.");
         /// <summary>
         /// Indicates if the field or property can be written to.
         /// </summary>
-        public bool CanWrite
+        public virtual bool CanWrite
         {
             get
             {
@@ -161,7 +161,7 @@ namespace WinterRose.Reflection
         /// <summary>
         /// Whether or not the type is a reference type
         /// </summary>
-        public bool ByRef
+        public virtual bool ByRef
         {
             get
             {
@@ -186,14 +186,38 @@ namespace WinterRose.Reflection
         /// <summary>
         /// Whether or not there actually is a field or property to read/write to.
         /// </summary>
-        public bool IsValid => fieldsource != null || propertysource != null;
+        public virtual bool IsValid
+        {
+            get
+            {
+                if (fieldsource is not null)
+                    return true;
+                if (propertysource is null)
+                    return false;
+
+                if (propertysource.GetIndexParameters().Length != 0)
+                    return false;
+                return true;
+            }
+        }
 
         /// <summary>
         /// Gets the value stored at this field or property
         /// </summary>
         /// <returns>The object stored in the field or property</returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public unsafe object? GetValue(ref object? obj)
+        public object? GetValue(object? obj)
+        {
+            object? o = obj;
+            return GetValue(ref o);
+        }
+
+        /// <summary>
+        /// Gets the value stored at this field or property
+        /// </summary>
+        /// <returns>The object stored in the field or property</returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        public virtual unsafe object? GetValue(ref object? obj)
         {
             if (propertysource is null && fieldsource is null)
                 throw new InvalidOperationException("No property or field found.");
@@ -229,8 +253,10 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <param name="value"></param>
         /// <exception cref="InvalidOperationException"></exception>
-        public void SetValue(ref object? obj, object? value)
+        public virtual void SetValue(ref object? obj, object? value)
         {
+            if (obj is null)
+                throw new ArgumentNullException(nameof(obj), "Object cannot be null when setting a value.");
             if (fieldsource is not null)
                 SetFieldValue(ref obj, value);
             else if (propertysource is not null)
@@ -239,7 +265,16 @@ namespace WinterRose.Reflection
                 throw new Exception("Field or property does not exist with name: " + Name);
         }
 
-        public void SetPropertyValue<T>(ref object? obj, T value)
+        /// <summary>
+        /// Writes the value to the field or property. If the field or property is readonly, an <see cref="InvalidOperationException"/> is thrown.
+        /// </summary>
+        /// <param name="value"></param>
+        /// <exception cref="InvalidOperationException"></exception>
+        public void SetValue(object? obj, object? value)
+        {
+            SetValue(ref obj, value);
+        }
+        public virtual void SetPropertyValue<T>(ref object? obj, T value)
         {
             object actualValue = value;
             if (value != null)
@@ -258,7 +293,7 @@ namespace WinterRose.Reflection
             propertysource.SetValue(obj, actualValue);
         }
 
-        public void SetFieldValue<T>(ref object obj, T value)
+        public virtual void SetFieldValue<T>(ref object? obj, T value)
         {
             object actualValue = value;
             if (value != null)
@@ -285,7 +320,7 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns>True if the field or property has at least 1 attribute of the given type <typeparamref name="T"/></returns>
-        public bool HasAttribute<T>()
+        public virtual bool HasAttribute<T>()
         {
             foreach (var attr in Attributes)
             {
@@ -300,7 +335,7 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns>The first found attribute of type <typeparamref name="T"/>. if there is no such attribute, <c>null</c> is returned</returns>
-        public T? GetAttribute<T>() where T : Attribute
+        public virtual T? GetAttribute<T>() where T : Attribute
         {
             foreach (var attr in Attributes)
             {
@@ -310,12 +345,12 @@ namespace WinterRose.Reflection
             return null;
         }
 
-        private string ToDebuggerString()
+        protected virtual string ToDebuggerString()
         {
             string publicOrPrivate = IsPublic ? "Public" : "Private";
             string writable = CanWrite ? "Writable" : "Readonly";
             string propOrField = MemberType == MemberTypes.Field ? "Field" : "Property";
-            return $"{publicOrPrivate} {propOrField} <{{{Name}}} = {writable}";
+            return $"{publicOrPrivate} {propOrField} <{{{Name}}} = {writable}>";
         }
 
         public static implicit operator FieldInfo(MemberData d) => d.fieldsource ?? throw new InvalidCastException("Member was not a field");

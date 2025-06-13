@@ -18,7 +18,7 @@ public static class AnonymousTypeBuilderHelper
         typeName ??= $"AnonymousType_{Guid.NewGuid()}";
         baseType ??= typeof(Anonymous);
 
-        var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("WinterRose.Reflection.GeneratedTypes"), AssemblyBuilderAccess.Run);
+        var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("WinterRose.Reflection.GeneratedTypes"), AssemblyBuilderAccess.RunAndCollect);
         var moduleBuilder = assemblyBuilder.DefineDynamicModule("GeneratedTypes");
         var typeBuilder = moduleBuilder.DefineType(typeName, TypeAttributes.Public);
         typeBuilder.SetParent(baseType);
@@ -96,9 +96,10 @@ public static class AnonymousTypeBuilderHelper
             getIL.MarkLabel(next);
         }
 
-        getIL.Emit(OpCodes.Ldstr, "Property not found");
-        getIL.Emit(OpCodes.Newobj, typeof(Exception).GetConstructor(new[] { typeof(string) }));
-        getIL.Emit(OpCodes.Throw);
+        getIL.Emit(OpCodes.Ldarg_0); // this
+        getIL.Emit(OpCodes.Ldarg_1); // string key
+        getIL.Emit(OpCodes.Call, baseGet); // base.get_Item(key)
+        getIL.Emit(OpCodes.Ret);
 
         // Define setter method
         var setMethod = typeBuilder.DefineMethod("set_Item",
@@ -115,24 +116,61 @@ public static class AnonymousTypeBuilderHelper
             setIL.Emit(OpCodes.Call, typeof(string).GetMethod("Equals", new[] { typeof(string), typeof(string) }));
             setIL.Emit(OpCodes.Brfalse_S, next);
 
-            setIL.Emit(OpCodes.Ldarg_0);
-            setIL.Emit(OpCodes.Ldarg_2);
-            if (pair.Value.FieldType.IsValueType)
-                setIL.Emit(OpCodes.Unbox_Any, pair.Value.FieldType);
+            setIL.Emit(OpCodes.Ldarg_0); // Load 'this'
+
+            var fieldType = pair.Value.FieldType;
+            var underlying = Nullable.GetUnderlyingType(fieldType);
+
+            if (fieldType.IsValueType && underlying != null)
+            {
+                // It's a Nullable<T>
+                var afterNullable = setIL.DefineLabel();
+
+                setIL.Emit(OpCodes.Ldarg_2);                  // load value
+                setIL.Emit(OpCodes.Dup);                      // duplicate to check for null
+                setIL.Emit(OpCodes.Brtrue_S, afterNullable);  // if not null, go ahead
+
+                // value is null
+                setIL.Emit(OpCodes.Pop);                      // remove duplicate null
+                setIL.Emit(OpCodes.Initobj, fieldType);       // initialize nullable to default (null)
+                setIL.Emit(OpCodes.Ldloca_S, (byte)0);        // push address of local slot 0 (safe default)
+                setIL.Emit(OpCodes.Ldobj, fieldType);         // read defaulted struct
+                setIL.MarkLabel(afterNullable);
+
+                if (!setIL.ILOffset.Equals(0))
+                {
+                    // non-zero offset => store result in field
+                    setIL.Emit(OpCodes.Unbox_Any, underlying);
+                    var ctor = fieldType.GetConstructor(new[] { underlying });
+                    setIL.Emit(OpCodes.Newobj, ctor);
+                }
+            }
+            else if (fieldType.IsValueType)
+            {
+                setIL.Emit(OpCodes.Ldarg_2);
+                setIL.Emit(OpCodes.Unbox_Any, fieldType);
+            }
             else
-                setIL.Emit(OpCodes.Castclass, pair.Value.FieldType);
+            {
+                setIL.Emit(OpCodes.Ldarg_2);
+                setIL.Emit(OpCodes.Castclass, fieldType);
+            }
+
             setIL.Emit(OpCodes.Stfld, pair.Value);
             setIL.Emit(OpCodes.Ret);
             setIL.MarkLabel(next);
         }
 
-        setIL.Emit(OpCodes.Ldstr, "Property not found");
-        setIL.Emit(OpCodes.Newobj, typeof(Exception).GetConstructor(new[] { typeof(string) }));
-        setIL.Emit(OpCodes.Throw);
+        // Fallback to base.set_Item(key, value)
+        setIL.Emit(OpCodes.Ldarg_0); // this
+        setIL.Emit(OpCodes.Ldarg_1); // key
+        setIL.Emit(OpCodes.Ldarg_2); // value
+        setIL.Emit(OpCodes.Call, baseSet);
+        setIL.Emit(OpCodes.Ret);
 
         // Hook into base
         typeBuilder.DefineMethodOverride(getMethod, baseGet);
-        typeBuilder.DefineMethodOverride(setMethod, baseSet);
+        typeBuilder.DefineMethodOverride(setMethod, baseSet);  
     }
 
 

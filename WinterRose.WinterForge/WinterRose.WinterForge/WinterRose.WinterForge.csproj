@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.14</Version>
+    <Version>25.2.15</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -17,13 +17,9 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <PackageReleaseNotes>Reflected the update of WinterRose.Reflection, and allows base type specification in the WinterForge syntax.
-allows both new properties to be defined, and base type members to be set
-
-HOTFIX:
-more than 1 differed operations on a given object instance would not be executed and cause an exception
-HOTFIX: Anonymous types marked with the AnonymousAttribute werent seen as anonymous types</PackageReleaseNotes>
+    <PackageReleaseNotes>Anonymous types can now support collection definitions</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
+    <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>

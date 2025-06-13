@@ -6,14 +6,15 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>25.2.3</Version>
+    <Version>25.2.4</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>WinterRose.Reflection</Title>
     <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>
     <Configurations>Debug;Release;debug FileServer</Configurations>
-    <PackageReleaseNotes>Anonymous types can now get a custom base type, and are applied an AnonymousAttribute attribute. this[string] indexer is only generated when no base type is specified. as the default base type is "Anonymous"
+    <PackageReleaseNotes>Anonymous now holds a collection of runtime variables, and inherits from DynamicObject to allow getting the fields through dynamic context too, even though the Anonymous type does its best to allow usage without dynamic context.
 
-HOTFIX: types marked with the AnonymousAttribute werent seen as anonymous types</PackageReleaseNotes>
+on top of that, the runtime variables are able to be used interchangably with generated members.
+ReflectionHelper will also get the runtime variables as valid members</PackageReleaseNotes>
   </PropertyGroup>
 
 </Project>

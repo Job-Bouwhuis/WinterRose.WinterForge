@@ -12,6 +12,9 @@ using WinterRose.WinterForgeSerializing.Logging;
 using System.Data;
 using WinterRose.AnonymousTypes;
 using WinterRose;
+using System.Text.RegularExpressions;
+using System.Runtime.Serialization.DataContracts;
+using System.Runtime.Serialization;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
@@ -138,7 +141,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     object v = kvp.Value;
                     CommitValue(ref obj, destinationStream, ParseTypeName(kvp.Value.GetType()), kvp.Key, ref v);
                 }
-                    
+
                 WriteToStream(destinationStream, "}\n");
                 progressTracker?.OnExitInstance();
                 return;
@@ -146,7 +149,26 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             progressTracker?.OnInstance("Serializing Anonymous Type", "Anonymous", true, 0, 0);
 
-            WriteToStream(destinationStream, $"{"Anonymous"} : {id} {{\n");
+            {
+                var typeName = obj.GetType().Name ?? "";
+                var pattern = @"Anonymous_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+                var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+
+                Type objType = obj.GetType();
+
+                if (regex.IsMatch(typeName))
+                {
+                    WriteToStream(destinationStream, $"Anonymous : {id} {{\n");
+                }
+                else
+                {
+                    if (objType.BaseType == typeof(Anonymous))
+                        WriteToStream(destinationStream, $"Anonymous as {objType.Name} : {id} {{\n");
+                    else
+                        WriteToStream(destinationStream, $"Anonymous as {objType.Name} inherits {objType.BaseType.FullName}: {id} {{\n");
+
+                }
+            }
             ReflectionHelper rh = new(ref obj);
             var members = rh.GetMembers();
             foreach (var member in members)
@@ -214,7 +236,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (!member.CanWrite)
                 return false; // ignore unwritable members
 
-            bool hasIncludeAttr = member.Attributes.Any(x => x is IncludeWithSerializationAttribute);
+            bool hasIncludeAttr = member.Attributes.Any(x => x is IncludeWithSerializationAttribute or DataMemberAttribute);
 
             if (!member.IsPublic)
             {
@@ -226,7 +248,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     return false;
             }
 
-            if (member.Attributes.Any(x => x is ExcludeFromSerializationAttribute))
+            if (member.Attributes.Any(x => x is ExcludeFromSerializationAttribute or NonSerializedAttribute or IgnoreDataMemberAttribute))
                 return false;
 
             if (member.MemberType == MemberTypes.Property)
@@ -308,7 +330,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 if (serializedString.StartsWith('"') && serializedString.EndsWith('"'))
                 {
-                    if(includeType)
+                    if (includeType)
                         WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = {serializedString}");
                     else
                         WriteToStream(destinationStream, $"{member.Name} = {serializedString}");
@@ -330,7 +352,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     int key = int.Parse(indexStart);
 
                     WriteToStream(destinationStream, serializedString);
-                    if(includeType)
+                    if (includeType)
                         WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = _ref({key});\n");
                     else
                         WriteToStream(destinationStream, $"{member.Name} = _ref({key});\n");
@@ -341,7 +363,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (isDecimalNumber(serializedString))
                 serializedString = serializedString.Replace(',', '.');
 
-            if(includeType)
+            if (includeType)
                 WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = {serializedString}");
             else
                 WriteToStream(destinationStream, $"{member.Name} = {serializedString}");

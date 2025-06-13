@@ -291,31 +291,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     int aliasid = int.Parse(parts[0]);
                     WriteLine($"{opcodeMap["ALIAS"]} {aliasid} {parts[1]}");
                 }
-                else if (line.Contains('['))
+                else if (TryParseList(line, out _))
                 {
-                    currentLine = line;
-
-                    bool result = ParseList();
-
-                    int equalsIndex = line.IndexOf('=');
-                    if (equalsIndex != -1)
-                    {
-                        string name = line[..equalsIndex].Trim();
-                        if (!string.IsNullOrEmpty(name))
-                            WriteLine($"{opcodeMap["SET"]} {name} _stack()");
-                    }
-
-                    if (lineBuffers.Count > 0)
-                    {
-                        if (lineBuffers.Peek().Count >= 1)
-                        {
-                            string last = lineBuffers.Peek().PeekLast();
-                            if (last.Trim() == "}")
-                                continue;
-                        }
-
-                        return;
-                    }
+                    return;
                 }
                 else
                 {
@@ -323,6 +301,42 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
             }
         }
+
+        private bool TryParseList(string line, out string name)
+        {
+            if (!line.Contains('['))
+            {
+                name = line; 
+                return false;
+            }
+            name = "_stack()";
+
+            currentLine = line;
+            bool result = ParseList();
+
+            int equalsIndex = line.IndexOf('=');
+            if (equalsIndex != -1)
+            {
+                name = line[..equalsIndex].Trim();
+                if (!string.IsNullOrEmpty(name))
+                    WriteLine($"{opcodeMap["SET"]} {name} _stack()");
+            }
+
+            if (lineBuffers.Count > 0)
+            {
+                if (lineBuffers.Peek().Count >= 1)
+                {
+                    string last = lineBuffers.Peek().PeekLast();
+                    if (last.Trim() == "}")
+                        return true; // Successfully parsed list and reached closing block
+                }
+
+                return false; // Incomplete parse or something else to handle
+            }
+
+            return result;
+        }
+
 
         private void ParseAnonymousAssignment(string line)
         {
@@ -332,6 +346,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 throw new Exception("Invalid anonymous assignment format, missing ':'");
             string typeAndName = line[..colonIndex].Trim();
             string value = line[(colonIndex + 1)..].Trim();
+
+            TryParseList(value, out value);
+
             if (value.EndsWith(';'))
                 value = value[..^1].Trim();
             if (string.IsNullOrWhiteSpace(typeAndName) || string.IsNullOrWhiteSpace(value))

@@ -5,6 +5,8 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
+using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
 
 namespace WinterRose.Reflection
@@ -44,6 +46,13 @@ namespace WinterRose.Reflection
             this.obj = obj;
             ObjectType = obj.GetType();
         }
+
+        public ReflectionHelper(object obj)
+        {
+            this.obj = obj;
+            ObjectType = obj.GetType();
+        }
+
         public ReflectionHelper(Type objType)
         {
             this.ObjectType = objType;
@@ -53,7 +62,21 @@ namespace WinterRose.Reflection
         {
             int res = GetFieldOrProperty(name, out var field, out var property);
             if (res is -1)
-                throw new FieldNotFoundException($"field or property with name '{name}' does not exist");
+            {
+                if (ObjectType == typeof(Anonymous))
+                {
+                    // anonymous types are special, they may not have the field or property if they are not compiled using AnonymousTypeBuilder
+                    // look through their runtime variables for the name
+                    Anonymous anon = (Anonymous)obj;
+                    if (anon.runtimeVariables.TryGetValue(name, out object? value))
+                    { // found in runtime variables
+                        return new AnonymousMember(name, anon);
+                    }
+                }
+                else
+                    throw new FieldNotFoundException($"field or property with name '{name}' does not exist");
+            }
+                
             if (res is 0)
                 return field;
             if (res is 1)
@@ -62,7 +85,14 @@ namespace WinterRose.Reflection
         }
         public List<MemberData> GetMembers()
         {
-            List<MemberData> members = [.. ObjectType.GetFields(flags), .. ObjectType.GetProperties(flags)];
+            List<MemberData> members = 
+                [.. ObjectType.GetFields(flags), .. 
+                ObjectType.GetProperties(flags)];
+            if (obj is Anonymous anon)
+            {
+                foreach (string var in anon.runtimeVariables.Keys)
+                    members.Add(new AnonymousMember(var, anon));
+            }
             return [.. members.Where(x => x.IsValid)];
 
         }
