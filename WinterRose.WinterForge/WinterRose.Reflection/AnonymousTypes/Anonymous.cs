@@ -1,4 +1,5 @@
-﻿using System.Dynamic;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Dynamic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using WinterRose.Reflection;
@@ -44,6 +45,28 @@ public class Anonymous() : DynamicObject
         set
         {
             runtimeVariables[identifier] = value;
+        }
+    }
+
+    public bool TryGet<T>(string identifier, out T? val)
+    {
+        val = default;
+        try
+        {
+            object? o = this[identifier];
+            if(o is null)
+            {
+                val = (T?)o;
+                return true;
+            }
+            if (!o.GetType().IsAssignableTo(typeof(T)))
+                return false;
+            val = (T)o;
+            return true;
+        }
+        catch (AnonymousFieldDoesntExistException)
+        {
+            return false;
         }
     }
 

@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>25.2.5</Version>
+    <Version>25.2.6</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>WinterRose.Reflection</Title>
     <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>
@@ -16,7 +16,8 @@
 on top of that, the runtime variables are able to be used interchangably with generated members.
 ReflectionHelper will also get the runtime variables as valid members
 
-HOTFIX 1: Anonymous type creation that wishes for no customization simply returns 'typeof(Anonymous)'</PackageReleaseNotes>
+HOTFIX 1: Anonymous type creation that wishes for no customization simply returns 'typeof(Anonymous)'
+HOTFIX 2: Anonymous type now has a TryGet method</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
   </PropertyGroup>
 

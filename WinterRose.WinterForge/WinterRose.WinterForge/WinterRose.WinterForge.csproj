@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.16</Version>
+    <Version>25.2.17</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -20,7 +20,8 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <PackageReleaseNotes>Anonymous types can now support collection definitions
 
 HOTFIX 1: mis placement of RETURN that shouldve been CONTINUE caused invalid deserialization
-HOTFIX 2: Anonymous type serialization for a variable of the Anonymous class did not work as expected</PackageReleaseNotes>
+HOTFIX 2: Anonymous type serialization for a variable of the Anonymous class did not work as expected
+HOTFIX 3: version increase to adhere to the version increase of WinterRose.Reflection</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
   </PropertyGroup>

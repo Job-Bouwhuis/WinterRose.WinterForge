@@ -19,6 +19,7 @@ internal class Program
 
         AssetHeader header = new("test", "test.h");
 
+
         string serialized = WinterForge.SerializeToString(header, TargetFormat.FormattedHumanReadable);
         AssetHeader an2 = WinterForge.DeserializeFromHumanReadableString<AssetHeader>(serialized);
         //"Human.txt"
