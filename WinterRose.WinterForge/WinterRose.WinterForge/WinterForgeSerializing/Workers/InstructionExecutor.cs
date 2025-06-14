@@ -518,6 +518,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             if (raw is "null")
                 return null;
+            if (target == typeof(string))
+                return raw;
             string r = raw.Replace('.', ',');
             return TypeWorker.CastPrimitive(r, target);
         }

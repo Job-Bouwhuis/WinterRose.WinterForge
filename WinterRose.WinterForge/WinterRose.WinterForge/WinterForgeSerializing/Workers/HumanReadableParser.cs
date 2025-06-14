@@ -675,7 +675,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private string ValidateValue(string value)
         {
-            if (value.StartsWith('\"'))
+            if (value.StartsWith('\"') && value.StartsWith('\"'))
             {
                 string fullString = ReadString(value);
 
@@ -698,7 +698,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             if (start is "\"\"")
                 return start;
-            StringBuilder content = new();
+            StringBuilder content = new("");
             bool inEscape = false;
             bool isMultiline = false;
             bool inside = false;
@@ -725,8 +725,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 isMultiline = false;
             else if (quoteCount == 5)
                 isMultiline = true;
-            else if (quoteCount is 2)
-                return ""; // when there are only 2 quotes, it is an empty string
             else
                 throw new InvalidOperationException("Invalid number of quotes to start string. Use 1 or 5.");
 
@@ -757,18 +755,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     // check ahead to see if we hit the closing quote sequence
                     int remaining = start.Length - i;
+                    
                     if (isMultiline && remaining >= 5 && start.Substring(i, 5) == "\"\"\"\"\"")
                     {
-                        return content.ToString();
+                        return '\"' + content.ToString() + '\"';
                     }
                     else if (!isMultiline)
                     {
-                        return content.ToString();
+                        return '\"' + content.ToString() + '\"';
                     }
-                    else
-                    {
-                        content.Append('"');
-                    }
+                    content.Append('"');
                 }
                 else
                 {
@@ -814,7 +810,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         // lookahead for 5x quote
                         if (i + 4 < nextLine.Length && nextLine.Substring(i, 5) == "\"\"\"\"\"")
                         {
-                            return content.ToString();
+                            return '\"' + content.ToString() + '\"';
                         }
                         else
                         {

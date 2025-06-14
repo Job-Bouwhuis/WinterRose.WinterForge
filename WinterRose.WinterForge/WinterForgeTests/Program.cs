@@ -17,11 +17,11 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        AssetHeader header = new("test", "test.h");
+        AssetHeader header = new("te st", "te st.h");
+        header.Metadata["ok"] = "a a";
 
-
-        string serialized = WinterForge.SerializeToString(header, TargetFormat.FormattedHumanReadable);
-        AssetHeader an2 = WinterForge.DeserializeFromHumanReadableString<AssetHeader>(serialized);
+        string serialized = WinterForge.SerializeToString(header);
+        AssetHeader an2 = WinterForge.DeserializeFromString<AssetHeader>(serialized);
         //"Human.txt"
         //WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
 
