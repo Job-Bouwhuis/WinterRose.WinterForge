@@ -448,5 +448,14 @@ namespace WinterRose.WinterForgeSerializing
 
             return (IList)Activator.CreateInstance(constructedListType);
         }
+
+        internal static IDictionary CreateDictionary(Type keyType, Type valueType)
+        {
+            var dict = typeof(Dictionary<,>);
+            var constructedDictType = dict.MakeGenericType(keyType, valueType);
+
+            return (IDictionary)Activator.CreateInstance(constructedDictType)!;
+        }
+
     }
 }

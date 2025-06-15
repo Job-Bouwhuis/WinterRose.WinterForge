@@ -13,13 +13,46 @@ namespace WinterRose.WinterForgeSerializing.Workers
     /// </summary>
     public class InstructionExecutor : IDisposable
     {
+        private abstract class CollectionDefinition
+        {
+            public abstract ICollection Collection { get; }
+        }
+
+        private class ListDefinition : CollectionDefinition
+        {
+            public ListDefinition(Type itemType, IList newList)
+            {
+                ElementType = itemType;
+                Values = newList;
+            }
+
+            public Type ElementType { get; set; }
+            public IList Values { get; set; }
+            public override ICollection Collection => Values;
+        }
+
+        private class DictionaryDefinition : CollectionDefinition
+        {
+            public DictionaryDefinition(Type keyType, Type valueType, IDictionary values)
+            {
+                KeyType = keyType;
+                ValueType = valueType;
+                Values = values;
+            }
+
+            public Type KeyType { get; set; }
+            public Type ValueType { get; set; }
+            public IDictionary Values { get; set; }
+            public override ICollection Collection => Values;
+        }
+
         public bool IsDisposed { get; private set; }
 
         internal WinterForgeProgressTracker? progressTracker;
         private static readonly ConcurrentDictionary<string, Type> typeCache = new();
         private DeserializationContext context = null!;
         private readonly Stack<int> instanceIDStack;
-        private readonly Stack<KeyValuePair<Type, IList>> listStack = new();
+        private readonly Stack<CollectionDefinition> listStack = new();
         private readonly List<DispatchedReference> dispatchedReferences = [];
         private StringBuilder? sb;
         private Instruction current;
@@ -255,7 +288,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private void HandleEndList()
         {
-            IList list = listStack.Pop().Value;
+            ICollection list = listStack.Pop().Collection;
             context.ValueStack.Push(list);
         }
         private void HandleCreateList(string[] args)
@@ -264,8 +297,17 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 throw new Exception("Expected type to initialize list");
             Type itemType = ResolveType(args[0]);
 
+            if(args.Length == 2)
+            {
+                // its a dictionary
+                Type valueType = ResolveType(args[1]);
+                var newDict = WinterForge.CreateDictionary(itemType, valueType);
+                listStack.Push(new DictionaryDefinition(itemType, valueType, newDict));
+                return;
+            }
+
             var newList = WinterForge.CreateList(itemType);
-            listStack.Push(new(itemType, newList));
+            listStack.Push(new ListDefinition(itemType, newList));
         }
 
         private unsafe void HandleDefine(string[] args)
@@ -351,7 +393,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     if (member.Type.IsArray)
                         val = ((IList)val).GetInternalArray();
                 }
-                
+
                 member.SetValue(ref o, val);
             });
             if (value is Dispatched)
@@ -402,15 +444,29 @@ namespace WinterRose.WinterForgeSerializing.Workers
         }
         private void HandleAddElement(string[] args)
         {
-            var kv = listStack.Peek();
+            var collection = listStack.Peek();
 
-            object instance = GetArgumentValue(args[0], 0, kv.Key!, obj =>
-                {
-                    kv.Value.Add(obj);
-                });
-            if (instance is Dispatched)
-                return; // value has been dispatched to be set later
-            kv.Value.Add(instance);
+            if(collection is ListDefinition list)
+            {
+                object element = GetArgumentValue(args[0], 0, list.ElementType, o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
+                if (element is Dispatched)
+                    throw new WinterForgeDifferedException("Differed collection addition is not allowed");
+
+                list.Values.Add(element);
+            }
+            else if (collection is DictionaryDefinition dict)
+            {
+                object key = GetArgumentValue(args[0], 0, dict.KeyType, o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
+                if (key is Dispatched)
+                    throw new WinterForgeDifferedException("Differed collection addition is not allowed");
+
+                object value = GetArgumentValue(args[1], 0, dict.ValueType, o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
+                if (value is Dispatched)
+                    throw new WinterForgeDifferedException("Differed collection addition is not allowed");
+
+                dict.Values.Add(key, value);
+            }
+            
         }
         private object GetArgumentValue(string arg, int argIndex, Type desiredType, Action<object> onDispatch)
         {

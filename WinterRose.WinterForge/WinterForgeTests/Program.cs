@@ -1,7 +1,8 @@
-﻿using System.Numerics;
+﻿using System.Collections;
 using WinterRose;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
+using WinterRose.Vectors;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Logging;
 using WinterRose.WIP.TestClasses;
@@ -17,49 +18,75 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        AssetHeader header = new("te st", "te st.h");
-        header.Metadata["ok"] = "a a";
-
-        string serialized = WinterForge.SerializeToString(header);
-        AssetHeader an2 = WinterForge.DeserializeFromString<AssetHeader>(serialized);
-        //"Human.txt"
-        //WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
+        Console.WriteLine("\n\nSerializing ^^\nDeserializing vv\n\n");
 
         //WinterForge.SerializeToFile(an, "Human.txt", TargetFormat.FormattedHumanReadable, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.ClassOnly));
+
+        //var dict1 = new Dictionary<int, demo>();
+
+        //foreach(int i in 10)
+        //{
+        //    dict1.Add(dict1.NextAvalible(), demo.D());
+        //}
+
+        List<List<string>> strings = new();
+        foreach(int i in 10)
+        {
+            strings.Add([]);
+            foreach(int j in 5)
+            {
+                strings[i].Add(Randomness.RandomString(5));
+            }
+        }
+
+        WinterForge.SerializeToFile(strings, "Human.txt", TargetFormat.FormattedHumanReadable);
         WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
+        var result = WinterForge.DeserializeFromFile<IDictionary>("opcodes.txt");
 
-        //Console.WriteLine("\n\nSerializing ^^\nDeserializing vv\n\n");
-
-        var result = WinterForge.DeserializeFromFile<demo>("opcodes.txt", 
-            new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.ClassOnly));
+        PrintDictionary(result);
 
         Console.WriteLine("\n");
-        Console.WriteLine(result.ToString());
+
+        void PrintDictionary(IDictionary dict)
+        {
+            foreach (var key in dict.Keys)
+            {
+                var value = dict[key];
+                Console.WriteLine($"Key: {key}, Value: {value}");
+            }
+        }
     }
+
+    /*
+     <WinterRose.Vectors.Vector3, WinterRose.Vectors.Vector2>[
+	    WinterRose.Vectors.Vector3 : 1 {
+		    x = 1;
+		    y = 2;
+	 	    z = 3;
+	    } => WinterRose.Vectors.Vector2 : 0 {
+			    x = 1;
+			    y = 2;
+		    }
+        ]
+    return _stack();
+     */
 }
 
 public class demo
 {
-    [IncludeWithSerialization]
-    public string test { get; set; }
+    public Dictionary<int, string> randoms;
 
-    public override string ToString() => $"test: {test ?? "null"}";
+    public demo() { }
 
-    //[BeforeSerialize]
-    //public void beforeSer()
-    //{
-    //    Console.WriteLine("Im gonna be serialized!");
-    //}
-
-    //[BeforeDeserialize]
-    //public void beforeDeser()
-    //{
-    //    Console.WriteLine("Im going to be deserialized!");
-    //}
-
-    //[AfterDeserialize]
-    //public void afterDeser()
-    //{
-    //    Console.WriteLine("I have been deserialized!");
-    //}
+    public static demo D()
+    {
+        return new demo()
+        {
+            randoms = new()
+            {
+                {new Random().Next(), Randomness.RandomString(5) },
+                {new Random().Next(), Randomness.RandomString(5) }
+            }
+        };
+    }
 }

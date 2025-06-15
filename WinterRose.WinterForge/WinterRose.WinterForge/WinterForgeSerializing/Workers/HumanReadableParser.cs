@@ -1,18 +1,29 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using WinterRose.WinterForgeSerialization;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
     public class HumanReadableParser
     {
+        private enum CollectionParseResult
+        {
+            Failed,
+            NotACollection,
+            ListOrArray,
+            Dictionary
+        }
+
         private StreamReader reader = null!;
         private StreamWriter writer = null!;
         private string? currentLine;
@@ -38,6 +49,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
             writer = new StreamWriter(output, Encoding.UTF8, leaveOpen: true);
+
+            string version = typeof(WinterForge).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion;
+            WriteLine($"// Parsed by WinterForge {version.Split('+')[0]}\n\n");
 
             while ((currentLine = ReadNonEmptyLine()) != null)
                 ParseObjectOrAssignment();
@@ -70,6 +84,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private void ParseObjectOrAssignment()
         {
             string line = currentLine!.Trim();
+
+            if(line.Trim().StartsWith("//"))
+                return;
 
             // Constructor Definition: Type(arguments) : ID {
             if (line.Contains('(') && line.Contains(')') && line.Contains(':') && line.Contains('{'))
@@ -205,7 +222,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
             else if (HasValidGenericFollowedByBracket(line))
             {
-                ParseList();
+                ParseCollection();
             }
             else if (line.StartsWith("alias"))
             {
@@ -256,6 +273,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 string line = currentLine.Trim();
 
+                if (line.Trim().StartsWith("//"))
+                    continue;
+
                 if (line == "}")
                 {
                     depth--;
@@ -291,7 +311,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     int aliasid = int.Parse(parts[0]);
                     WriteLine($"{opcodeMap["ALIAS"]} {aliasid} {parts[1]}");
                 }
-                else if (TryParseList(line, out _))
+                else if (TryParseCollection(line, out _) is not CollectionParseResult.Failed or CollectionParseResult.NotACollection)
                 {
                     continue;
                 }
@@ -302,17 +322,17 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
         }
 
-        private bool TryParseList(string line, out string name)
+        private CollectionParseResult TryParseCollection(string line, out string name)
         {
             if (!line.Contains('['))
             {
                 name = line; 
-                return false;
+                return CollectionParseResult.NotACollection;
             }
             name = "_stack()";
 
             currentLine = line;
-            bool result = ParseList();
+            CollectionParseResult result = ParseCollection();
 
             int equalsIndex = line.IndexOf('=');
             if (equalsIndex != -1)
@@ -328,10 +348,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     string last = lineBuffers.Peek().PeekLast();
                     if (last.Trim() == "}")
-                        return true; // Successfully parsed list and reached closing block
+                        return result; // Successfully parsed list and reached closing block
                 }
 
-                return false; // Incomplete parse or something else to handle
+                return CollectionParseResult.Failed; // Incomplete parse or something else to handle
             }
 
             return result;
@@ -347,7 +367,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             string typeAndName = line[..colonIndex].Trim();
             string value = line[(colonIndex + 1)..].Trim();
 
-            TryParseList(value, out value);
+            TryParseCollection(value, out value);
 
             if (value.EndsWith(';'))
                 value = value[..^1].Trim();
@@ -492,17 +512,27 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
         }
 
-        private bool ParseList()
+        private CollectionParseResult ParseCollection()
         {
             int typeOpen = this.currentLine!.IndexOf("<");
             int typeClose = this.currentLine.LastIndexOf(">");
             if (typeOpen == -1 || typeClose == -1 || typeClose < typeOpen)
-                throw new Exception("Expected <TYPE1,TYPE2,...> to indicate the type(s) of the collection before [");
+                throw new Exception("Expected <TYPE> or <TYPE1, TYPE2> to indicate the type(s) of the collection before [");
 
             string types = this.currentLine.Substring(typeOpen + 1, typeClose - typeOpen - 1).Trim();
             if (string.IsNullOrWhiteSpace(types))
                 throw new Exception("Failed to parse types: " + this.currentLine);
-            WriteLine($"{opcodeMap["LIST_START"]} " + types);
+
+            string[] typeParts = types.Split(',').Select(t => t.Trim()).ToArray();
+            bool isDictionary = typeParts.Length == 2;
+
+            if (!isDictionary && typeParts.Length != 1)
+                throw new Exception("Invalid generic parameter count — expected one (List<T>) or two (Dict<K, V>)");
+
+            if (isDictionary)
+                WriteLine($"{opcodeMap["LIST_START"]} {typeParts[0]} {typeParts[1]}");
+            else
+                WriteLine($"{opcodeMap["LIST_START"]} {typeParts[0]}");
 
             bool insideFunction = false;
             StringBuilder currentElement = new();
@@ -524,7 +554,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     int res = handleChar(ref insideFunction, currentElement, ref collectingDefinition, ref depth, ref listDepth, c, ref prefStringChar);
                     if (res == -1)
-                        return true;
+                        return isDictionary ? CollectionParseResult.Dictionary : CollectionParseResult.ListOrArray;
                 }
                 if (collectingDefinition)
                     currentElement.Append('\n');
@@ -534,12 +564,81 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             void emitElement()
             {
-                if (currentElement.Length > 0)
+                if (currentElement.Length <= 0)
                 {
-                    string currentElementString = currentElement.ToString();
+                    return;
+                }
 
-                    if (currentElementString.Contains(":"))
+                string currentElementString = currentElement.ToString();
+
+                if (currentElementString.Contains(':'))
+                {
+                    if (isDictionary)
                     {
+                        int dictKVsplit = currentElementString.IndexOf("=>");
+                        if (dictKVsplit == -1)
+                            throw new WinterForgeFormatException(currentElementString, "Dictionary key-value not properly written. Expected 'key => value'");
+
+                        string rawKey = currentElementString[..dictKVsplit].Trim();
+                        string rawValue = currentElementString[(dictKVsplit + 2)..].Trim();
+
+                        string keyResult;
+                        string valueResult;
+
+                        // KEY PARSING
+                        if (rawKey.Contains(':'))
+                        {
+                            lineBuffers.Push(new OverridableStack<string>());
+                            var lines = rawKey.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                            for (int i = 0; i < lines.Length; i++)
+                                lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
+
+                            this.currentLine = ReadNonEmptyLine();
+                            int colonIndex = this.currentLine.IndexOf(':');
+                            int braceIndex = this.currentLine.IndexOf('{');
+
+                            string id = braceIndex == -1
+                                ? this.currentLine[colonIndex..].Trim()
+                                : this.currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                            ParseObjectOrAssignment();
+                            keyResult = $"_ref({id})";
+                        }
+                        else
+                        {
+                            keyResult = ValidateValue(rawKey);
+                        }
+
+                        // VALUE PARSING
+                        if (rawValue.Contains(':'))
+                        {
+                            // Push full remaining lines
+                            lineBuffers.Push(new OverridableStack<string>());
+                            var lines = rawValue.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                            for (int i = 0; i < lines.Length; i++)
+                                lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
+
+                            this.currentLine = ReadNonEmptyLine();
+                            int colonIndex = this.currentLine.IndexOf(':');
+                            int braceIndex = this.currentLine.IndexOf('{');
+
+                            string id = braceIndex == -1
+                                ? this.currentLine[colonIndex..].Trim()
+                                : this.currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                            ParseObjectOrAssignment();
+                            valueResult = $"_ref({id})";
+                        }
+                        else
+                        {
+                            valueResult = ValidateValue(rawValue);
+                        }
+
+                        WriteLine($"{opcodeMap["ELEMENT"]} {keyResult} {valueResult}");
+                    }
+                    else
+                    {
+                        // existing object parsing logic
                         lineBuffers.Push(new OverridableStack<string>());
                         var lines = currentElementString.Split('\n', StringSplitOptions.RemoveEmptyEntries);
                         foreach (var line in lines)
@@ -548,28 +647,41 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         this.currentLine = ReadNonEmptyLine();
                         int colonIndex = this.currentLine.IndexOf(':');
                         int braceIndex = this.currentLine.IndexOf('{');
-                        string id;
-                        if (braceIndex == -1)
-                            id = this.currentLine[colonIndex..].Trim();
-                        else
-                            id = this.currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                        string id = braceIndex == -1
+                            ? this.currentLine[colonIndex..].Trim()
+                            : this.currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
                         ParseObjectOrAssignment();
                         WriteLine($"{opcodeMap["ELEMENT"]} _ref({id})");
                     }
-                    else
-                    {
-                        currentElementString = ValidateValue(currentElementString);
-                        WriteLine($"{opcodeMap["ELEMENT"]} " + currentElementString);
-                    }
-                    currentElement.Clear();
                 }
+                else if (isDictionary)
+                {
+                    string[] parts = currentElementString.Split("=>", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (parts.Length == 0)
+                        throw new WinterForgeFormatException(currentElementString, "No dictionary key-value given");
+                    if (parts.Length == 1)
+                        throw new WinterForgeFormatException(currentElementString, "Only a key was given for the dictionary");
+
+                    parts[0] = ValidateValue(parts[0]);
+                    parts[1] = ValidateValue(parts[1]);
+
+                    WriteLine($"{opcodeMap["ELEMENT"]} {parts[0]} {parts[1]}");
+                }
+                else
+                {
+                    currentElementString = ValidateValue(currentElementString);
+                    WriteLine($"{opcodeMap["ELEMENT"]} " + currentElementString);
+                }
+                currentElement.Clear();
             }
 
             int handleChar(ref bool insideFunction, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref int listDepth, char? currentChar, ref char prefStringChar)
             {
                 char character = currentChar.Value;
-
-                if (!collectingDefinition && char.IsWhiteSpace(character))
+                
+                if (!collectingDefinition || listDepth is 0 or 1 && char.IsWhiteSpace(character))
                     return 1;
                 if (collectingString)
                 {
@@ -608,6 +720,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                     if (depth == 0)
                     {
+                        if (isDictionary && !ContainsSequence(currentElement, "=>"))
+                            return 1; // skip emiting the element when not complete yet
+
                         collectingDefinition = false;
                         emitElement();
                         return 1;
@@ -631,7 +746,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 if (!insideFunction && character == ',')
                 {
-                    if (!collectingDefinition)
+                    if (listDepth is 1)
                         emitElement();
                     else
                         currentElement.Append(character);
@@ -645,10 +760,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 if (!insideFunction && character == ']')
                 {
                     listDepth--;
+                    
                     if (listDepth is not 0 || collectingDefinition)
                     {
-                        currentElement.Append("\n]\n");
-                        return 1;
+                        if(!isDictionary && listDepth is not 0)
+                        {
+                            currentElement.Append("\n]\n");
+                        }
                     }
                     emitElement();
                     WriteLine(opcodeMap["LIST_END"].ToString());
@@ -673,6 +791,28 @@ namespace WinterRose.WinterForgeSerializing.Workers
             WriteLine($"{opcodeMap["SET"]} {key} {value}");
         }
 
+        bool ContainsSequence(StringBuilder sb, string sequence)
+        {
+            if (sequence.Length == 0) return true;
+            if (sb.Length < sequence.Length) return false;
+
+            for (int i = 0; i <= sb.Length - sequence.Length; i++)
+            {
+                bool found = true;
+                for (int j = 0; j < sequence.Length; j++)
+                {
+                    if (sb[i + j] != sequence[j])
+                    {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found) return true;
+            }
+
+            return false;
+        }
+
         private string ValidateValue(string value)
         {
             if (value.StartsWith('\"') && value.StartsWith('\"'))
@@ -690,6 +830,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                     return "_stack()";
                 }
+            }
+            if(HasValidGenericFollowedByBracket(value))
+            {
+                TryParseCollection()
             }
             return value;
         }

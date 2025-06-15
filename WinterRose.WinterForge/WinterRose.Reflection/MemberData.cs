@@ -222,7 +222,7 @@ namespace WinterRose.Reflection
             if (propertysource is null && fieldsource is null)
                 throw new InvalidOperationException("No property or field found.");
 
-            if (obj.GetType().IsValueType)
+            if (obj.GetType().IsValueType && fieldsource is not null)
             {
                 TypedReference tr = __makeref(obj);
                 object? valueTypeVal = fieldsource.GetValueDirect(tr);

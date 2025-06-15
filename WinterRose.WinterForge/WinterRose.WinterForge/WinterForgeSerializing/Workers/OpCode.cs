@@ -138,12 +138,14 @@
         /// </remarks>
         ANONYMOUS_SET = 17,
 
+        /// <summary>
+        /// Unused in this version
+        /// </summary>
         TEMPLATE_CREATE,
+        /// <summary>
+        /// Unused in this version
+        /// </summary>
         TEMPLATE_END,
-
-        DICT_START,
-        DICT_ELEMENT,
-        DICT_END,
     }
 
 }
