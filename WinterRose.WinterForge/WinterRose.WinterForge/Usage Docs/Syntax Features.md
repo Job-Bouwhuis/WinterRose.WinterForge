@@ -1,6 +1,6 @@
 # Winterforge, a high speed and very flexible serializer
 
-Looking for Anonymous type syntax? head to [Anonymous type syntax](Anonymous type syntax.md)
+Looking for Anonymous type syntax? head to (Anonymous type syntax)[Anonymous type syntax.md]
 
 ## Creating instances
 ```
