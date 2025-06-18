@@ -49,4 +49,8 @@ HOTFIX 4: Strings werent handled properly due to a bug introduced when multiline
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Usage Docs\" />
+  </ItemGroup>
+
 </Project>

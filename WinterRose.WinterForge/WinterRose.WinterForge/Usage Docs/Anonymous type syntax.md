@@ -53,5 +53,6 @@ Anonymous as MyAnonymous inherits MyBaseClass : 0 {
 	int:myCustomProperty = 10;
 }
 ```
-By specifying the type, it will create a new property for that field, by *not* specifying the type, it will assume the property exists on the base class.
+By specifying the type, it will create a new property for that field, by *not* specifying the type, 
+it will assume the property exists on the base class.
 this syntax only works when a custom base class was provided.
