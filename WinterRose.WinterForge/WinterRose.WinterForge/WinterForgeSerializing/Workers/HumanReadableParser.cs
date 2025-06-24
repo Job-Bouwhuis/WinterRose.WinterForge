@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -334,8 +335,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
             currentLine = line;
             CollectionParseResult result = ParseCollection();
 
+            int colonIndex = line.IndexOf(':');
+            if (colonIndex is -1)
+                colonIndex = line.IndexOf('[');
             int equalsIndex = line.IndexOf('=');
-            if (equalsIndex != -1)
+            if (equalsIndex != -1 && colonIndex > equalsIndex)
             {
                 name = line[..equalsIndex].Trim();
                 if (!string.IsNullOrEmpty(name))
@@ -515,11 +519,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private CollectionParseResult ParseCollection()
         {
             int typeOpen = this.currentLine!.IndexOf("<");
-            int typeClose = this.currentLine.LastIndexOf(">");
-            if (typeOpen == -1 || typeClose == -1 || typeClose < typeOpen)
+            int blockOpen = currentLine.IndexOf("[");
+            string start = currentLine[typeOpen..blockOpen];
+
+            if (typeOpen == -1 || blockOpen == -1 || blockOpen < typeOpen)
                 throw new Exception("Expected <TYPE> or <TYPE1, TYPE2> to indicate the type(s) of the collection before [");
 
-            string types = this.currentLine.Substring(typeOpen + 1, typeClose - typeOpen - 1).Trim();
+            string types = start[1..^1];
             if (string.IsNullOrWhiteSpace(types))
                 throw new Exception("Failed to parse types: " + this.currentLine);
 
@@ -527,7 +533,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             bool isDictionary = typeParts.Length == 2;
 
             if (!isDictionary && typeParts.Length != 1)
-                throw new Exception("Invalid generic parameter count — expected one (List<T>) or two (Dict<K, V>)");
+                throw new Exception("Invalid generic parameter count — expected one <T> for list or two <K, V> for dicts");
 
             if (isDictionary)
                 WriteLine($"{opcodeMap["LIST_START"]} {typeParts[0]} {typeParts[1]}");
@@ -545,12 +551,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
             int listDepth = 1;
             char? currentChar;
 
-            string currentLine = this.currentLine[(typeClose + 2)..];
+            string cur = this.currentLine[(typeOpen + start.Length + 1)..];
 
             bool lastCharWasClose = false;
             do
             {
-                foreach (char c in currentLine)
+                foreach (char c in cur)
                 {
                     int res = handleChar(ref insideFunction, currentElement, ref collectingDefinition, ref depth, ref listDepth, c, ref prefStringChar);
                     if (res == -1)
@@ -558,8 +564,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
                 if (collectingDefinition)
                     currentElement.Append('\n');
-            } while ((currentLine = ReadNonEmptyLine()) != null);
+            } while ((cur = ReadNonEmptyLine()) != null);
 
+            writer.Flush();
             throw new Exception("Expected ']' to close list.");
 
             void emitElement()
@@ -570,7 +577,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
 
                 string currentElementString = currentElement.ToString();
-
+                if (string.IsNullOrWhiteSpace(currentElementString))
+                    return;
                 if (currentElementString.Contains(':'))
                 {
                     if (isDictionary)
@@ -586,10 +594,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         string valueResult;
 
                         // KEY PARSING
-                        if (rawKey.Contains(':'))
+                        var lines = rawKey.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                        if (lines.Length >= 1 && lines[0].Contains(':'))
                         {
                             lineBuffers.Push(new OverridableStack<string>());
-                            var lines = rawKey.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                            
                             for (int i = 0; i < lines.Length; i++)
                                 lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
@@ -610,11 +619,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         }
 
                         // VALUE PARSING
-                        if (rawValue.Contains(':'))
+                        lines = rawValue.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                        if (lines.Length >= 1 && lines[0].Contains(':'))
                         {
                             // Push full remaining lines
                             lineBuffers.Push(new OverridableStack<string>());
-                            var lines = rawValue.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                            ;
                             for (int i = 0; i < lines.Length; i++)
                                 lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
@@ -656,7 +666,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         WriteLine($"{opcodeMap["ELEMENT"]} _ref({id})");
                     }
                 }
-                else if (isDictionary)
+                else if (isDictionary && !currentElementString.Contains("=<"))
                 {
                     string[] parts = currentElementString.Split("=>", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                     if (parts.Length == 0)
@@ -681,8 +691,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 char character = currentChar.Value;
                 
-                if (!collectingDefinition || listDepth is 0 or 1 && char.IsWhiteSpace(character))
-                    return 1;
                 if (collectingString)
                 {
                     currentElement.Append(character);
@@ -713,12 +721,20 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     return 1;
                 }
 
+                if(character == '<' && !collectingDefinition)
+                {
+                    collectingDefinition = true;
+                    currentElement.Append(character);
+                    return 1;
+                }
+
                 if (character == '}')
                 {
                     depth--;
+
                     currentElement.Append(character);
 
-                    if (depth == 0)
+                    if (listDepth == 0 && depth <= 0)
                     {
                         if (isDictionary && !ContainsSequence(currentElement, "=>"))
                             return 1; // skip emiting the element when not complete yet
@@ -727,6 +743,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         emitElement();
                         return 1;
                     }
+                        
                     return 1;
                 }
 
@@ -746,7 +763,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 if (!insideFunction && character == ',')
                 {
-                    if (listDepth is 1)
+                    if (listDepth is 1 && !collectingDefinition)
                         emitElement();
                     else
                         currentElement.Append(character);
@@ -755,26 +772,41 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
 
                 if (!insideFunction && character == '[')
+                {
                     listDepth++;
+                    collectingDefinition = true;
+                }
 
                 if (!insideFunction && character == ']')
                 {
-                    listDepth--;
-                    
-                    if (listDepth is not 0 || collectingDefinition)
+                    if (listDepth is not 0)
+                        listDepth--;
+                    else
+                        ;
+
+                    if (listDepth is not <= 0 || collectingDefinition)
                     {
-                        if(!isDictionary && listDepth is not 0)
+                        if (listDepth is not 0)
                         {
                             currentElement.Append("\n]\n");
                         }
+
+                        if (collectingDefinition && listDepth is 0 or 1)
+                            collectingDefinition = false;
                     }
-                    emitElement();
-                    WriteLine(opcodeMap["LIST_END"].ToString());
+                    if(listDepth is 0)
+                    {
+                        emitElement();
+                        WriteLine(opcodeMap["LIST_END"].ToString());
+                    }
+
                     if (listDepth == 0)
                         return -1;
                     else return 1;
                 }
 
+                //if (!collectingDefinition || listDepth is 0 or 1 && char.IsWhiteSpace(character))
+                //    return 1;
                 currentElement.Append(character);
                 return 0;
             }
@@ -833,7 +865,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
             if(HasValidGenericFollowedByBracket(value))
             {
-                TryParseCollection()
+                TryParseCollection(value, out string name);
+                return name;
             }
             return value;
         }
@@ -1012,6 +1045,19 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private void WriteLine(string line)
         {
+            if (line.Contains('\n'))
+            {
+                int lastIndex = line.Length - 1;
+
+                // Walk backwards to find where the trailing newlines start
+                while (lastIndex >= 0 && line[lastIndex] == '\n')
+                {
+                    lastIndex--;
+                }
+
+                string sanitized = line[..(lastIndex + 1)].Replace("\n", "");
+                line = sanitized;
+            }
             writer.WriteLine(line);
         }
     }

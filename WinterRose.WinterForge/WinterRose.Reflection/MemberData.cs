@@ -32,7 +32,6 @@ namespace WinterRose.Reflection
             CACHE[field] = data;
             return data;
         }
-
         public static MemberData FromProperty(PropertyInfo property)
         {
             if (CACHE.TryGetValue(property, out var cached))
@@ -255,8 +254,6 @@ namespace WinterRose.Reflection
         /// <exception cref="InvalidOperationException"></exception>
         public virtual void SetValue(ref object? obj, object? value)
         {
-            if (obj is null)
-                throw new ArgumentNullException(nameof(obj), "Object cannot be null when setting a value.");
             if (fieldsource is not null)
                 SetFieldValue(ref obj, value);
             else if (propertysource is not null)

@@ -1,6 +1,8 @@
 ﻿using System.Collections;
+using System.Text.Encodings.Web;
 using WinterRose;
 using WinterRose.AnonymousTypes;
+using WinterRose.ForgeGuardChecks;
 using WinterRose.Reflection;
 using WinterRose.Vectors;
 using WinterRose.WinterForgeSerializing;
@@ -18,63 +20,34 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        Console.WriteLine("\n\nSerializing ^^\nDeserializing vv\n\n");
+        var dict1 = new Dictionary<int, demo>();
 
-        //WinterForge.SerializeToFile(an, "Human.txt", TargetFormat.FormattedHumanReadable, new WinterForgeConsoleLogger(WinterForgeProgressVerbosity.ClassOnly));
-
-        //var dict1 = new Dictionary<int, demo>();
-
-        //foreach(int i in 10)
-        //{
-        //    dict1.Add(dict1.NextAvalible(), demo.D());
-        //}
-
-        List<List<string>> strings = new();
-        foreach(int i in 10)
+        foreach (int i in 10)
         {
-            strings.Add([]);
-            foreach(int j in 5)
-            {
-                strings[i].Add(Randomness.RandomString(5));
-            }
+            dict1.Add(dict1.NextAvalible(), demo.D());
         }
 
-        WinterForge.SerializeToFile(strings, "Human.txt", TargetFormat.FormattedHumanReadable);
+        //List<List<string>> strings = new();
+        //foreach(int i in 10)
+        //{
+        //    strings.Add([]);
+        //    foreach(int j in 5)
+        //    {
+        //        strings[i].Add(Randomness.RandomString(5));
+        //    }
+        //}
+
+        WinterForge.SerializeToFile(dict1, "Human.txt", TargetFormat.FormattedHumanReadable);
         WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
         var result = WinterForge.DeserializeFromFile<IDictionary>("opcodes.txt");
 
-        PrintDictionary(result);
-
         Console.WriteLine("\n");
-
-        void PrintDictionary(IDictionary dict)
-        {
-            foreach (var key in dict.Keys)
-            {
-                var value = dict[key];
-                Console.WriteLine($"Key: {key}, Value: {value}");
-            }
-        }
     }
-
-    /*
-     <WinterRose.Vectors.Vector3, WinterRose.Vectors.Vector2>[
-	    WinterRose.Vectors.Vector3 : 1 {
-		    x = 1;
-		    y = 2;
-	 	    z = 3;
-	    } => WinterRose.Vectors.Vector2 : 0 {
-			    x = 1;
-			    y = 2;
-		    }
-        ]
-    return _stack();
-     */
 }
 
 public class demo
 {
-    public Dictionary<int, string> randoms;
+    public Dictionary<int, List<ListClassTest>> randoms;
 
     public demo() { }
 
@@ -84,9 +57,22 @@ public class demo
         {
             randoms = new()
             {
-                {new Random().Next(), Randomness.RandomString(5) },
-                {new Random().Next(), Randomness.RandomString(5) }
+                {new Random().Next(), listdemo.L() },
+                {new Random().Next(), listdemo.L() }
             }
         };
+    }
+}
+
+public class listdemo
+{
+    public List<ListClassTest> texts;
+
+    public static List<ListClassTest> L()
+    {
+        listdemo d = new();
+        d.texts = [];
+        2.Repeat(i => d.texts.Add(ListClassTest.Random()));
+        return d.texts;
     }
 }

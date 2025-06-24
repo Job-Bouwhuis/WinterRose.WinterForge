@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="WinterRose" Version="25.2.3" />
+    <PackageReference Include="WinterRose.ForgeGuard" Version="25.2.1" />
   </ItemGroup>
 
   <ItemGroup>

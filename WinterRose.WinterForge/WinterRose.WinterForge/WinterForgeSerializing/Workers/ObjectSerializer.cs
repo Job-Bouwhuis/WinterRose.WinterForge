@@ -496,7 +496,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     string keySerialized = RecursiveSerialization(enu.Key).TrimEnd('\n');
                     string valueSerialized = RecursiveSerialization(enu.Value).TrimEnd('\n');
-                    sb.Append($"{keySerialized} => {valueSerialized},\n");
+                    sb.Append($"{keySerialized} => {valueSerialized}\n,\n");
                 }
                 sb.Remove(sb.Length - 2, 2).Append("\n]\n");
                 return sb.ToString();
@@ -531,7 +531,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             foreach (var item in collection)
             {
                 if (!first)
-                    sb.Append("\n,\n");
+                    sb.Append("\n, \n");
 
                 sb.Append(SerializeValue(item));
                 first = false;

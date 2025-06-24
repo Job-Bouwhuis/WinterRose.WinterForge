@@ -16,7 +16,7 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
         }
         public override string CreateString(Type obj, ObjectSerializer serializer)
         {
-            return obj.FullName;
+            return $"_type({obj.FullName})";
         }
     }
 }

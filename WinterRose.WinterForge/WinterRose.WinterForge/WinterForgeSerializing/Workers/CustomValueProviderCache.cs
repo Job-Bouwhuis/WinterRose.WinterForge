@@ -23,12 +23,24 @@ internal static class CustomValueProviderCache
 
     public static bool Get(Type t, out CustomValueProviderINTERNAL provider)
     {
-        if(t.Name is "Nullable`1")
+        if (t.Name is "Nullable`1")
         {
-            // type is nullable, find the type for its generic type
             t = t.GetGenericArguments()[0];
-            return valueProviders.TryGetValue(t, out provider!);
         }
-        return valueProviders.TryGetValue(t, out provider!);
+
+        if (valueProviders.TryGetValue(t, out provider!))
+            return true;
+
+        foreach (var kvp in valueProviders)
+        {
+            if (kvp.Key.IsAssignableFrom(t))
+            {
+                provider = kvp.Value;
+                return true;
+            }
+        }
+
+        provider = null!;
+        return false;
     }
 }
