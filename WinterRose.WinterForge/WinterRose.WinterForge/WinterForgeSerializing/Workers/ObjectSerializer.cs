@@ -217,7 +217,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 objType.GetCustomAttributes<IncludePrivateFieldsAttribute>().FirstOrDefault() is not null;
 
             // Serialize properties
-            var members = rh.GetMembers();
+            var members = rh.GetMembers()
+                .OrderByDescending(m => m.GetAttribute<IncludeWithSerializationAttribute>()?.Priority ?? 0);
             foreach (var member in members)
             {
                 if (member.IsStatic)

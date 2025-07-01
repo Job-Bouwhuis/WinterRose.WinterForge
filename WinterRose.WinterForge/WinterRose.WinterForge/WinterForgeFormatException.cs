@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace WinterRose.WinterForgeSerialization
+namespace WinterRose.WinterForgeSerializing
 {
     /// <summary>
     /// Thrown when the format trying to parse or deserialize was not correct

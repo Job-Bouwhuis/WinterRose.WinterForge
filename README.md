@@ -6,6 +6,10 @@ to conform to its rules. It blends speed with developer clarity by offering a du
 format system that supports both human-readable text and opcode-based intermediate representation 
 for maximum performance.
 
+**Slight disclaimer**
+I work on this package alone and on my free time. updates may be slow.
+Contact me on discord 'thesnowowl' if you want to get into contact with me. be it in interest in usage of WinterForge, contribution, or other packages made by me, all folks are welcome!
+
 ## Core Features
 
 - **Stream-based I/O:**  

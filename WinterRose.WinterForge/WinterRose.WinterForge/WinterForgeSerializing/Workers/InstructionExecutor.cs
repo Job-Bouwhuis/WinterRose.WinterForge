@@ -460,6 +460,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 if (key is Dispatched)
                     throw new WinterForgeDifferedException("Differed collection addition is not allowed");
 
+                if (args.Length < 2)
+                    throw new WinterForgeExecutionException("Dictionary element did not have a value");
+
                 object value = GetArgumentValue(args[1], 0, dict.ValueType, o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
                 if (value is Dispatched)
                     throw new WinterForgeDifferedException("Differed collection addition is not allowed");

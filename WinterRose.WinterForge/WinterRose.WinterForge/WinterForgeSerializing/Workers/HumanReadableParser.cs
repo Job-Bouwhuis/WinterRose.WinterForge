@@ -11,7 +11,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using WinterRose.WinterForgeSerialization;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
@@ -274,6 +273,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 string line = currentLine.Trim();
 
+                if(line.StartsWith("components"))
+                {
+
+                }
+
                 if (line.Trim().StartsWith("//"))
                     continue;
 
@@ -312,7 +316,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     int aliasid = int.Parse(parts[0]);
                     WriteLine($"{opcodeMap["ALIAS"]} {aliasid} {parts[1]}");
                 }
-                else if (TryParseCollection(line, out _) is not CollectionParseResult.Failed or CollectionParseResult.NotACollection)
+                else if (TryParseCollection(line, out _) is var colres && colres is not CollectionParseResult.Failed or CollectionParseResult.NotACollection)
                 {
                     continue;
                 }
@@ -351,7 +355,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 if (lineBuffers.Peek().Count >= 1)
                 {
                     string last = lineBuffers.Peek().PeekLast();
-                    if (last.Trim() == "}")
+                    if (last.Trim().EndsWith('}'))
                         return result; // Successfully parsed list and reached closing block
                 }
 
@@ -734,8 +738,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                     currentElement.Append(character);
 
-                    if (listDepth == 0 && depth <= 0)
+                    if (listDepth is 0 or 1 && depth <= 0)
                     {
+                        string s = currentElement.ToString();
                         if (isDictionary && !ContainsSequence(currentElement, "=>"))
                             return 1; // skip emiting the element when not complete yet
 
@@ -791,7 +796,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             currentElement.Append("\n]\n");
                         }
 
-                        if (collectingDefinition && listDepth is 0 or 1)
+                        if (collectingDefinition && listDepth is 0)
                             collectingDefinition = false;
                     }
                     if(listDepth is 0)

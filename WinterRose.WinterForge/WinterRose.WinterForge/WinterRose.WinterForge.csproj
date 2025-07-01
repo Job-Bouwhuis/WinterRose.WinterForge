@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.19-alpha-3</Version>
+    <Version>25.2.19-alpha-5</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -19,7 +19,7 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <PackageReleaseNotes>Dictionary support is now in alpha!
 
-with the test setup in the working project the dictionary and lists are fully working even when nested like crazy.</PackageReleaseNotes>
+more tries on making dictionaries truly functional. currently no way that custom class/struct keys will work.</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
   </PropertyGroup>
