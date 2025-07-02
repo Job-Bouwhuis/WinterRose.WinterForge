@@ -62,10 +62,6 @@ eg:
 ```
 assigning and top level function the same as lists, just with this syntax
 
-#### DISCLAIMER
-This feature is still being worked on, and isnt in the released package yet (as of 25.2.18)
-Once this gets released tho, you can expect keys and value types to be any type you want. be it primitive values, object instances, even other collections.
-
 
 ## Static / Instance accessing
 
@@ -89,7 +85,7 @@ Accessing can also be chained
 AppSettings->Window->Vsync = true;
 ```
 
-Method calls are like you are probably imagining given the accessing syntax above, except methods may never be on the left of the = sign. currently (as of 25.2.18) there is no support to just call a method and ignore the result. this is planned in the future.
+Method calls are like you are probably imagining given the accessing syntax above, except methods may never be on the left of the = sign. currently (as of 25.2.19) there is no support to just call a method and ignore the result. this is planned in the future.
 
 ```
 myWork = Worker->ComputeSomething();
@@ -120,3 +116,25 @@ return 0;
 returns object at reference id 0 to the caller. (as of 25.2.18 an alias can not be used here. its planned for a later version)
 
 'return' does allow _stack() as return parameter in case a collection is required to be returned.
+
+
+## Enums
+Enums are defined like this:
+```
+Foo = Bar.Baz;
+```
+where 'Foo' is the name of the field, and 'Bar' is the enum type, and 'Baz' is the enum value.
+in C# enums can have the [Flags] attribute, which allows for bitwise operations on the enum values.
+In WinterForge, multiple enum values can be combined using the | operator, like this:
+```
+Foo = Bar.Baz | Qux;
+```
+You dont repeat the enum type, just the values. Its illegal to do for example `Foo = Bar.Baz | Bar.Qux`. WinterForge expects only the values to be after |
+
+## Comments
+Comments are defined like this:
+```
+// this is a comment
+```
+Its like that in both the human readable syntax, and the opcode syntax, however i dont know why you would want to write comments in the opcode syntax, as its not human readable anyway.
+it was added for the "// Parsed by WinterForge {version}" line.

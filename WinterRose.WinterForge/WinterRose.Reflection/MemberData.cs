@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices.ObjectiveC;
 using System.Text;
 using System.Threading.Tasks;
@@ -205,11 +206,7 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <returns>The object stored in the field or property</returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public object? GetValue(object? obj)
-        {
-            object? o = obj;
-            return GetValue(ref o);
-        }
+        public object? GetValue(object? obj) => GetValue(ref obj);
 
         /// <summary>
         /// Gets the value stored at this field or property

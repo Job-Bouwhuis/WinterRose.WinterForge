@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -23,12 +24,14 @@ namespace WinterRose.Reflection
         /// Gets the referenced value
         /// </summary>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref object Get() => ref *(object*)ptr;
         /// <summary>
         /// Gets the referenced value as <typeparamref name="T"/>
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T As<T>() => ref *(T*)ptr;
         
     }

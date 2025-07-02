@@ -20,37 +20,39 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        var dict1 = new Dictionary<demo, demo>();
+        //var dict1 = new Dictionary<demo, demo>();
 
-        foreach (int i in 2)
-        {
-            dict1.Add(demo.D(), demo.D());
-        }
-
-        //var dict1 = new Dictionary<Type, demo>
+        //foreach (int i in 2)
         //{
-        //    { typeof(Program), demo.D() },
-        //    { typeof(Type), demo.D() },
-        //    { typeof(WinterForge), demo.D() },
-        //    { typeof(WinterDelegate), demo.D() }
-        //};
-
-        //List<List<string>> strings = new();
-        //foreach(int i in 10)
-        //{
-        //    strings.Add([]);
-        //    foreach(int j in 5)
-        //    {
-        //        strings[i].Add(Randomness.RandomString(5));
-        //    }
+        //    dict1.Add(demo.D(), demo.D());
         //}
 
+        var dict1 = new test();
+
         WinterForge.SerializeToFile(dict1, "Human.txt", TargetFormat.FormattedHumanReadable);
+
         WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
-        var result = WinterForge.DeserializeFromFile<IDictionary>("opcodes.txt");
+        var result = WinterForge.DeserializeFromFile<test>("opcodes.txt");
 
         Console.WriteLine("\n");
     }
+}
+
+[Flags]
+public enum LoveState : byte
+{
+    HeadOverHeels = 1,
+    Infatuated = 1 << 1,
+    InLove = 1 << 2,
+    Heartbroken = 1 << 3,
+    Single = 1 << 4,
+    Complicated = 1 << 5
+}
+
+public class test
+{
+    [IncludeWithSerialization]
+    public LoveState state { get; set; } = LoveState.Single | LoveState.HeadOverHeels;
 }
 
 public class demo

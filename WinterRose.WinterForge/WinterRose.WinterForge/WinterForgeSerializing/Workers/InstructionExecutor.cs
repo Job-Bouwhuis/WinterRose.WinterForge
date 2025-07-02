@@ -350,7 +350,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             instanceIDStack.Push(id);
 
-            FlowHookItem item = FlowHookCache.Get(type);
+            FlowHookItem item = FlowHookCache.Get(type, progressTracker);
             if (item.Any)
                 item.InvokeBeforeDeserialize(instance);
 
@@ -510,6 +510,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         value = provider._CreateObject(s, this);
                     }
                     break;
+                case string s when desiredType.IsEnum:
+                    Type enumNumType = Enum.GetUnderlyingType(desiredType);
+                    object num = TypeWorker.CastPrimitive(s, enumNumType);
+                    value = Enum.ToObject(desiredType, num);
+                    break;
                 default:
                     value = ParseLiteral(arg, desiredType);
                     break;
@@ -556,7 +561,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
             else
             {
-                FlowHookItem item = FlowHookCache.Get(currentObj.GetType());
+                FlowHookItem item = FlowHookCache.Get(currentObj.GetType(), progressTracker);
                 if (item.Any)
                     item.InvokeAfterDeserialize(currentObj);
             }

@@ -44,12 +44,12 @@ namespace WinterRose.WinterForgeSerializing.Logging
 
         internal void OnInstance(string message, string typeName, bool isClass, int currentInstruction, int totalInstructions)
         {
-            if(totalInstructions is not 0)
+            if (totalInstructions is not 0)
             {
                 float progress = (float)currentInstruction / totalInstructions;
                 Report(progress);
             }
-            
+
 
             if (verbosity == WinterForgeProgressVerbosity.None)
                 return;
@@ -60,7 +60,7 @@ namespace WinterRose.WinterForgeSerializing.Logging
             if (verbosity == WinterForgeProgressVerbosity.Full)
                 pathStack.Push(typeName);
 
-            
+
             Report(message);
 
         }
@@ -103,5 +103,26 @@ namespace WinterRose.WinterForgeSerializing.Logging
         /// <param name="graphPercentage"></param>
         internal protected abstract void Report(float graphPercentage);
         internal void OnMethod(string typeName, string methodName) => Report($"Invoking: {typeName}.{methodName}()");
+        internal void OnError(Exception exception, string hookMethodName, string? typeName)
+        {
+            if (exception is null)
+                return;
+            StringBuilder sb = new();
+            sb.AppendLine($"Error in {hookMethodName} ({typeName})");
+            if (exception is AggregateException agex)
+            {
+                foreach (var ex in agex.InnerExceptions)
+                {
+                    sb.AppendLine(ex.Message);
+                    sb.AppendLine(ex.StackTrace);
+                }
+            }
+            else
+            {
+                sb.AppendLine(exception.Message);
+                sb.AppendLine(exception.StackTrace);
+            }
+            Report(sb.ToString());
+        }
     }
 }

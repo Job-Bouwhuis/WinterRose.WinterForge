@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.Design;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
@@ -272,11 +273,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             while ((currentLine = ReadNonEmptyLine()) != null)
             {
                 string line = currentLine.Trim();
-
-                if(line.StartsWith("components"))
-                {
-
-                }
 
                 if (line.Trim().StartsWith("//"))
                     continue;
@@ -573,7 +569,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             writer.Flush();
             throw new Exception("Expected ']' to close list.");
 
-            void emitElement()
+            void emitElement(int dictValueSplitterIndex = -1)
             {
                 if (currentElement.Length <= 0)
                 {
@@ -587,7 +583,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     if (isDictionary)
                     {
-                        int dictKVsplit = currentElementString.IndexOf("=>");
+                        int dictKVsplit = dictValueSplitterIndex == -1 ? currentElementString.IndexOf("=>") : dictValueSplitterIndex;
                         if (dictKVsplit == -1)
                             throw new WinterForgeFormatException(currentElementString, "Dictionary key-value not properly written. Expected 'key => value'");
 
@@ -741,11 +737,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     if (listDepth is 0 or 1 && depth <= 0)
                     {
                         string s = currentElement.ToString();
-                        if (isDictionary && !ContainsSequence(currentElement, "=>"))
+                        int dvsp = -1;
+                        if (isDictionary && (dvsp = ContainsSequenceOutsideBraces(currentElement, "=>")) == -1)
                             return 1; // skip emiting the element when not complete yet
 
                         collectingDefinition = false;
-                        emitElement();
+                        emitElement(dvsp);
                         return 1;
                     }
                         
@@ -850,6 +847,50 @@ namespace WinterRose.WinterForgeSerializing.Workers
             return false;
         }
 
+        int ContainsSequenceOutsideBraces(StringBuilder sb, string sequence)
+        {
+            if (sequence.Length == 0) return 0;          // empty sequence is “found” at 0
+            if (sb.Length < sequence.Length) return -1;  // obviously too short
+
+            int braceDepth = 0;
+
+            for (int i = 0; i <= sb.Length - sequence.Length; i++)
+            {
+                char current = sb[i];
+
+                if (current == '{')
+                {
+                    braceDepth++;
+                    continue;
+                }
+
+                if (current == '}')
+                {
+                    if (braceDepth > 0) braceDepth--;
+                    continue;
+                }
+
+                if (braceDepth == 0)
+                {
+                    bool found = true;
+                    for (int j = 0; j < sequence.Length; j++)
+                    {
+                        if (sb[i + j] != sequence[j])
+                        {
+                            found = false;
+                            break;
+                        }
+                    }
+
+                    if (found) 
+                        return i;
+                }
+            }
+
+            return -1;
+        }
+
+
         private string ValidateValue(string value)
         {
             if (value.StartsWith('\"') && value.StartsWith('\"'))
@@ -873,7 +914,75 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 TryParseCollection(value, out string name);
                 return name;
             }
+            if(value.Contains('.') && !IsValidNumericString(value))
+            {
+                string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                string enumType;
+                string enumValue;
+                if (parts.Length > 2)
+                {
+                    enumType = parts.Take(parts.Length - 1).Aggregate((a, b) => a + "." + b);
+                    enumValue = parts.Last();
+                }
+                else if (parts.Length == 2)
+                {
+                    enumType = parts[0];
+                    enumValue = parts[1];
+                }
+                else
+                    throw new WinterForgeFormatException(value, "Invalid enum format. Expected 'EnumType.EnumValue' or 'Namespace.EnumType.EnumValue'");
+
+                Type? e = TypeWorker.FindType(enumType);
+                if (!e.IsEnum)
+                    throw new WinterForgeFormatException(value, $"Type '{enumType}' is not an enum type.");
+
+                string[] values = enumValue.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                Enum result = null!;
+                for (int i = 0; i < values.Length; i++)
+                {
+                    string v = values[i];
+                    if (!Enum.IsDefined(e, v))
+                        throw new WinterForgeFormatException(value, $"Enum '{enumType}' does not contain value '{enumValue}'.");
+
+                    object parsedEnumValue = Enum.Parse(e, v);
+                    if (i == 0)
+                        result = (Enum)parsedEnumValue;
+                    else
+                        result = (Enum)Enum.ToObject(e, Convert.ToInt32(result) | Convert.ToInt32(parsedEnumValue));
+                }
+
+                return Convert.ChangeType(result, Enum.GetUnderlyingType(e)).ToString()!;
+            }
             return value;
+        }
+
+        public static bool IsValidNumericString(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            int dotCount = 0;
+            int commaCount = 0;
+
+            foreach (char ch in input)
+            {
+                if (ch == '.') dotCount++;
+                if (ch == ',') commaCount++;
+            }
+
+            if (dotCount > 1 || commaCount > 1) return false;      // too many separators
+            if (dotCount > 0 && commaCount > 0) return false;      // mixed separators
+
+            string normalized = commaCount > 0
+                ? input.Replace(',', '.')                          // unify on '.'
+                : input;
+
+            double parsedNumber;
+            return double.TryParse(
+                normalized,
+                NumberStyles.Float | NumberStyles.AllowLeadingSign,
+                CultureInfo.InvariantCulture,
+                out parsedNumber);
         }
 
         private string ReadString(string start)

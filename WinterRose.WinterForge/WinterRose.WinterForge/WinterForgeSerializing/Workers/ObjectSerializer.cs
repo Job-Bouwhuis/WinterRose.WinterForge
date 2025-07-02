@@ -59,6 +59,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 WriteToStream(destinationStream, "\n\n");
             }
 
+            if(obj.GetType().IsEnum)
+            {
+                Type t = obj.GetType();
+                if (t.IsDefined(typeof(FlagsAttribute), false))
+                    WriteToStream(destinationStream, $"{obj.GetType().FullName}.{obj}".Replace(", ", " | "));
+                else
+                    WriteToStream(destinationStream, $"{obj.GetType().FullName}.{obj}");
+                return;
+            }
+
             if (cache.TryGetValue(obj, out int key))
             {
                 WriteToStream(destinationStream, $"_ref({key})");
@@ -118,7 +128,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             progressTracker?.OnInstance($"Serializing {objType.Name}", objType.Name, objType.IsClass, 0, 0);
 
-            FlowHookItem item = FlowHookCache.Get(objType);
+            FlowHookItem item = FlowHookCache.Get(objType, progressTracker);
             if (item.Any)
                 item.InvokeBeforeSerialize(obj);
 

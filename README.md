@@ -13,7 +13,11 @@ Contact me on discord 'thesnowowl' if you want to get into contact with me. be i
 ## Core Features
 
 - **Stream-based I/O:**  
-  Utilizes `IO.Stream` for serialization and deserialization, enabling flexible storage and transfer.
+  - Utilizes `IO.Stream` for serialization and deserialization, enabling flexible storage and transfer.
+
+- **Dictionaries with Arbitrary Keys and Values:**  
+  - Supports `Dictionary<TKey, TValue>` with **any** object as `TKey` or `TValue`.  
+  - Nested dictionaries, lists, and combinations are fully supported.  
 
 - **Dual Format System:**  
   - **Human-readable text:** Easy for developers to read, debug, diff, and edit manually.  
@@ -31,7 +35,7 @@ Contact me on discord 'thesnowowl' if you want to get into contact with me. be i
     - `BeforeSerialize`  
     - `BeforeDeserialize`  
     - `AfterDeserialize`  
-  - Hooks can be asynchronous (`async Task`), currently not awaited but planned as optional.
+  - Hooks can be asynchronous (`async Task`). by default they are fired and forgotten, but optionally they can be awaited before the serialization or deserialization process continues.
 
 - **Advanced Object Handling:**  
   - Object reference ID system with aliasing and stack-based referencing for reuse.  
@@ -60,14 +64,11 @@ Contact me on discord 'thesnowowl' if you want to get into contact with me. be i
   Data is always read in the order it is written, ensuring deterministic and reliable serialization.
 
 ## Current Limitations & Future Plans
-
-- Dictionaries not yet supported.  
 - Upcoming features:  
   - Support for math and boolean expressions within serialized data.  
   - Importing and including other WinterForge files/modules.  
   - Templates and repeatable code blocks.  
   - Conditional serialization and expression support.  
-  - Optional async lifecycle hook awaiting.
 
 ## License
 
