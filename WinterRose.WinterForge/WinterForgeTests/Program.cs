@@ -20,19 +20,19 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
-        //var dict1 = new Dictionary<demo, demo>();
+        //var dict1 = new Dictionary<int, LoveState>();
 
         //foreach (int i in 2)
-        //{
-        //    dict1.Add(demo.D(), demo.D());
-        //}
+        //dict1.Add(dict1.NextAvalible(), LoveState.Single);
 
-        var dict1 = new test();
+        //var dict1 = new test();
+
+        var dict1 = new List<LoveState>() { LoveState.HeadOverHeels, LoveState.Single | LoveState.Complicated, LoveState.All };
 
         WinterForge.SerializeToFile(dict1, "Human.txt", TargetFormat.FormattedHumanReadable);
 
         WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
-        var result = WinterForge.DeserializeFromFile<test>("opcodes.txt");
+        var result = WinterForge.DeserializeFromFile<List<LoveState>>("opcodes.txt");
 
         Console.WriteLine("\n");
     }
@@ -46,7 +46,8 @@ public enum LoveState : byte
     InLove = 1 << 2,
     Heartbroken = 1 << 3,
     Single = 1 << 4,
-    Complicated = 1 << 5
+    Complicated = 1 << 5,
+    All = HeadOverHeels | Infatuated | InLove | Heartbroken | Single | Complicated
 }
 
 public class test
