@@ -121,8 +121,6 @@
         /// player - the alias to give it<br></br>
         /// </summary>
         ALIAS = 16,
-
-
         /// <summary>
         /// lets the type and name of a field inside an anonymous object definition<br></br>
         /// <br></br>
@@ -137,6 +135,9 @@
         /// This requres a value, to define a value with its default value for the given type, set the value to 'default'
         /// </remarks>
         ANONYMOUS_SET = 17,
+
+
+
 
         /// <summary>
         /// Unused in this version

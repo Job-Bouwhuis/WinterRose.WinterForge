@@ -1,6 +1,12 @@
-﻿using System.Collections;
+﻿using System.Buffers;
+using System.Collections;
+using System.Diagnostics;
+using System.Drawing;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using WinterRose;
 using WinterRose.AnonymousTypes;
 using WinterRose.ForgeGuardChecks;
@@ -15,29 +21,9 @@ internal class Program
 {
     public static int data = 15;
 
-    private static void Main(string[] args)
+    private static void Main()
     {
-        //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
-        (1..2).Contains(1);
-
-        Tests().GetAwaiter().GetResult();
-    }
-
-    private static async Task Tests()
-    {
-        //var dict1 = new Dictionary<int, LoveState>();
-
-        //foreach (int i in 2)
-        //    dict1.Add(dict1.NextAvalible(), LoveState.Single);
-
-        var dict1 = new test();
-
-        await WinterForge.SerializeToFileAsync(dict1, "Human.txt", TargetFormat.FormattedHumanReadable);
-        WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
-        var task = WinterForge.DeserializeFromFileAsync<test>("opcodes.txt");
-        var result = await task;
-        
-        Console.WriteLine(result?.ToString() ?? "null");
+       
     }
 }
 
@@ -120,4 +106,107 @@ public class ListClassTest<T> where T : INumber<T>
     {
         return $"{num1} - {num2}";
     }
+}
+
+public enum TerrainType { Forest, Desert, Tundra, Urban }
+
+public static class Constants
+{
+    public const int MAX_PARTY_SIZE = 6;
+}
+
+
+// ---------- Polymorphic actor hierarchy ----------
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(PlayerCharacter), "player")]
+[JsonDerivedType(typeof(NpcCharacter), "npc")]
+public abstract class Actor
+{
+    [IncludeWithSerialization]
+    public string Id { get; set; }
+    [IncludeWithSerialization]
+    public string DisplayName { get; set; }
+    [IncludeWithSerialization]
+    public int Level { get; set; }
+}
+
+public class PlayerCharacter : Actor
+{
+    [IncludeWithSerialization]
+    public Inventory Inventory { get; set; }
+    [IncludeWithSerialization]
+    public string Faction { get; set; }
+}
+
+public class NpcCharacter : Actor
+{
+    [IncludeWithSerialization]
+    public string Disposition { get; set; }
+    [IncludeWithSerialization]
+    public DialogueScript Script { get; set; }
+}
+
+// ---------- Supporting types ----------
+public class Inventory
+{
+    [IncludeWithSerialization]
+    public int Gold { get; set; }
+    [IncludeWithSerialization]
+    public List<ItemStack> Items { get; set; }
+}
+
+public class ItemStack
+{
+    [IncludeWithSerialization]
+    public string ItemId { get; set; }
+    [IncludeWithSerialization]
+    public int Quantity { get; set; }
+}
+
+public class DialogueScript
+{
+    [IncludeWithSerialization]
+    public string Greeting { get; set; }
+    [IncludeWithSerialization]
+    public Dictionary<string, string> Branches { get; set; }
+}
+
+// ---------- The world model ----------
+public class Region
+{
+    [IncludeWithSerialization]
+    public string RegionId { get; set; }
+    [IncludeWithSerialization]
+    public TerrainType Terrain { get; set; }
+    [IncludeWithSerialization]
+    public List<Actor> Occupants { get; set; }
+    [IncludeWithSerialization]
+    public Dictionary<string, object> Metadata { get; set; }
+
+    // catch-all bag for unknown fields the engine might add later
+    [JsonExtensionData]
+    [IncludeWithSerialization]
+    public Dictionary<string, object> Extra { get; set; }
+}
+
+public class GameEvent
+{
+    [IncludeWithSerialization]
+    public string EventId { get; set; }
+    [IncludeWithSerialization]
+    public DateTimeOffset Timestamp { get; set; }
+    [IncludeWithSerialization]
+    public List<string> Tags { get; set; }
+    [IncludeWithSerialization]
+    public Dictionary<string, object> Payload { get; set; }
+}
+
+public class GameWorld
+{
+    [IncludeWithSerialization]
+    public string WorldName { get; set; }
+    [IncludeWithSerialization]
+    public Dictionary<string, Region> Regions { get; set; }
+    [IncludeWithSerialization]
+    public List<GameEvent> EventQueue { get; set; }
 }
