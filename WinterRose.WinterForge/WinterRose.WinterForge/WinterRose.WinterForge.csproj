@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.21</Version>
+    <Version>25.2.22</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -17,22 +17,7 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <PackageReleaseNotes>Dictionary support is now fully functional
-
-Flow hooks can now be awaited, before they could be async, but were a "fire and forget" kind of async. now they can optionally be awaited by specifying it in the attribute as a named paramter "IsAwaited". that parameter is only used if the flow hook method returns "async Task"
-
-Enums are now a first class feature in WinterForge!
-before it was something like
-YourEnumType : 0 {
-    value__ = 0;
-}
-foo = _ref(0);
-
-but now, its as simle as:
-foo = YourEnumType.Bar;
-
-HOTIX: Enums flagged with [Flags] are now also supported under the syntax
-foo = Bar.Fass | Xata | Lohk;</PackageReleaseNotes>
+    <PackageReleaseNotes>Added asynchronous methods to the WinterForge class</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
   </PropertyGroup>

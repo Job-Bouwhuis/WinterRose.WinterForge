@@ -6,19 +6,12 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>25.2.7</Version>
+    <Version>25.2.8</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>WinterRose.Reflection</Title>
     <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>
     <Configurations>Debug;Release;debug FileServer</Configurations>
-    <PackageReleaseNotes>Anonymous now holds a collection of runtime variables, and inherits from DynamicObject to allow getting the fields through dynamic context too, even though the Anonymous type does its best to allow usage without dynamic context.
-
-on top of that, the runtime variables are able to be used interchangably with generated members.
-ReflectionHelper will also get the runtime variables as valid members
-
-HOTFIX 1: Anonymous type creation that wishes for no customization simply returns 'typeof(Anonymous)'
-HOTFIX 2: Anonymous type now has a TryGet method
-HOTFIX 3: SetValue methods on a static field threw the exception that an instance should be passed, no longer the case</PackageReleaseNotes>
+    <PackageReleaseNotes>Minor performance patches</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
   </PropertyGroup>
 

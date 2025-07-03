@@ -28,19 +28,16 @@ internal class Program
         //var dict1 = new Dictionary<int, LoveState>();
 
         //foreach (int i in 2)
-        //dict1.Add(dict1.NextAvalible(), LoveState.Single);
+        //    dict1.Add(dict1.NextAvalible(), LoveState.Single);
 
         var dict1 = new test();
 
-        WinterForge.SerializeToFile(dict1, "Human.txt", TargetFormat.FormattedHumanReadable);
-
+        await WinterForge.SerializeToFileAsync(dict1, "Human.txt", TargetFormat.FormattedHumanReadable);
         WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
-
         var task = WinterForge.DeserializeFromFileAsync<test>("opcodes.txt");
-        Console.WriteLine(task.GetResult().ToString());
-
-        var res = WinterForge.DeserializeFromFile<test>("opcodes.txt");
-        Console.WriteLine(res.ToString());
+        var result = await task;
+        
+        Console.WriteLine(result?.ToString() ?? "null");
     }
 }
 

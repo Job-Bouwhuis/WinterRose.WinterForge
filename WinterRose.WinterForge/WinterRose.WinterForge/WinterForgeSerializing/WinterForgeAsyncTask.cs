@@ -1,12 +1,13 @@
-﻿using WinterRose.WinterForgeSerializing.Logging;
+﻿using System.Runtime.CompilerServices;
+using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterRose.WinterForgeSerializing;
 
 /// <summary>
-/// The base class for <see cref="WinterForgeSerializeTask"/> and <see cref="WinterForgeDeserializationTask{T}"/>
+/// The base class for <see cref="WinterForgeSerializationTask"/> and <see cref="WinterForgeDeserializationTask{T}"/>
 /// </summary>
 /// <typeparam name="T"></typeparam>
-public abstract class WinterForgeAsyncTask<T>
+public abstract class WinterForgeAsyncTask<T> : INotifyCompletion
 {
     private Action? continuation;
     private Exception? ex;

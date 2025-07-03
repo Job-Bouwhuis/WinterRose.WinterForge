@@ -9,7 +9,7 @@ namespace WinterRose.WinterForgeSerializing;
 /// Represents an asynchrounous task for <see cref="WinterForge"/> where <typeparamref name="T"/> is the desired return type for the deserialization process
 /// </summary>
 /// <typeparam name="T"></typeparam>
-public class WinterForgeDeserializationTask<T> : WinterForgeAsyncTask<T>, INotifyCompletion
+public class WinterForgeDeserializationTask<T> : WinterForgeAsyncTask<T>
 {
     /// <summary>
     /// Gets the result, and waits if required

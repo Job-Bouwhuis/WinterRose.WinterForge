@@ -1,5 +1,5 @@
 
-# How to use WinterForge in C\#
+# How to use WinterForge in C#
 
 For convenience, all major functionality has been packed into a generalized static class 'WinterForge' it has methods to 
 serialize to various formats, and deserialize from those formats. aswell as to convert various input sources containing human 
