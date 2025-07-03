@@ -23,6 +23,9 @@ namespace WinterRose.WinterForgeSerializing
     /// </summary>
     public static class WinterForge
     {
+        /// <summary>
+        /// The primitive types that are handled as-is by WinterForge
+        /// </summary>
         public static List<Type> SupportedPrimitives { get; } =
            [
                typeof(bool),
@@ -151,6 +154,58 @@ namespace WinterRose.WinterForgeSerializing
             DoStaticSerialization(serializer, type, serialized, data, targetFormat);
         }
 
+        /// <summary>
+        /// Serializes to a file in the provided <paramref name="format"/>
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="path"></param>
+        /// <param name="format"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeSerializeTask SerializeToFileAsync(object obj, string path, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToFile(obj, path, format, progressTracker));
+        /// <summary>
+        /// Serializes to a string in the provided <paramref name="format"/>
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="format"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeSerializeTask SerializeToStringAsync( object obj, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToString(obj, format, progressTracker));
+        /// <summary>
+        /// Serializes to a stream in the provided <paramref name="format"/>
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="stream"></param>
+        /// <param name="format"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeSerializeTask SerializeToStreamAsync( object obj, Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToStream(obj, stream, format, progressTracker));
+        /// <summary>
+        /// Serializes a static type to a file in the provided <paramref name="format"/>
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="path"></param>
+        /// <param name="format"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeSerializeTask SerializeStaticToFileAsync( Type type, string path, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToFile(type, path, format, progressTracker));
+        /// <summary>
+        /// Serializes a static type to a string in the provided <paramref name="format"/>
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="format"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeSerializeTask SerializeStaticToStringAsync( Type type, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToString(type, format, progressTracker));
+        /// <summary>
+        /// Serializes a static type to a stream in the provided <paramref name="format"/>
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="stream"></param>
+        /// <param name="format"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeSerializeTask SerializeStaticToStreamAsync( Type type,  Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToStream(type, stream, format, progressTracker));
 
 
         /// <summary>
@@ -159,7 +214,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="stream"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static object DeserializeFromStream(Stream stream, WinterForgeProgressTracker? progressTracker = null)
+        public static object? DeserializeFromStream(Stream stream, WinterForgeProgressTracker? progressTracker = null)
         {
             var instr = InstructionParser.ParseOpcodes(stream);
             return DoDeserialization(typeof(Nothing), instr, progressTracker);
@@ -171,9 +226,9 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="stream"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static T DeserializeFromStream<T>(Stream stream, WinterForgeProgressTracker? progressTracker = null)
+        public static T? DeserializeFromStream<T>(Stream stream, WinterForgeProgressTracker? progressTracker = null)
         {
-            return (T)DeserializeFromStream(stream, progressTracker);
+            return (T?)DeserializeFromStream(stream, progressTracker);
         }
         /// <summary>
         /// Deserializes from the given string of opcodes
@@ -181,10 +236,10 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="opcodes"></param>
         /// <param name="encoding"></param>
         /// <returns></returns>
-        public static object DeserializeFromString(string opcodes, Encoding? encoding = null)
+        public static object? DeserializeFromString(string opcodes, Encoding? encoding = null, WinterForgeProgressTracker? progressTracker = null)
         {
             using MemoryStream ops = new MemoryStream((encoding ?? Encoding.UTF8).GetBytes(opcodes));
-            return DeserializeFromStream(ops);
+            return DeserializeFromStream(ops, progressTracker);
         }
         /// <summary>
         /// Deserializes from the given string of opcodes
@@ -193,9 +248,9 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="opcodes"></param>
         /// <param name="encoding"></param>
         /// <returns></returns>
-        public static T DeserializeFromString<T>(string opcodes, Encoding? encoding = null)
+        public static T? DeserializeFromString<T>(string opcodes, Encoding? encoding = null, WinterForgeProgressTracker? progressTracker = null)
         {
-            return (T)DeserializeFromString(opcodes, encoding);
+            return (T?)DeserializeFromString(opcodes, encoding, progressTracker);
         }
         /// <summary>
         /// Deserializes from the given human readable string
@@ -203,7 +258,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="humanReadable"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static object DeserializeFromHumanReadableString(string humanReadable, WinterForgeProgressTracker? progressTracker = null)
+        public static object? DeserializeFromHumanReadableString(string humanReadable, WinterForgeProgressTracker? progressTracker = null)
         {
             using var opcodes = new MemoryStream();
             using var serialized = new MemoryStream();
@@ -226,9 +281,9 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="humanReadable"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static T DeserializeFromHumanReadableString<T>(string humanReadable, WinterForgeProgressTracker? progressTracker = null)
+        public static T? DeserializeFromHumanReadableString<T>(string humanReadable, WinterForgeProgressTracker? progressTracker = null)
         {
-            return (T)DeserializeFromHumanReadableString(humanReadable, progressTracker);
+            return (T?)DeserializeFromHumanReadableString(humanReadable, progressTracker);
         }
         /// <summary>
         /// Deserializes from the given human readable stream
@@ -236,7 +291,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="humanReadable"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static object DeserializeFromHumanReadableStream(Stream humanReadable, WinterForgeProgressTracker? progressTracker = null)
+        public static object? DeserializeFromHumanReadableStream(Stream humanReadable, WinterForgeProgressTracker? progressTracker = null)
         {
             using var opcodes = new MemoryStream();
 
@@ -247,16 +302,15 @@ namespace WinterRose.WinterForgeSerializing
             return DoDeserialization(typeof(Nothing), instructions, progressTracker);
         }
         /// <summary>
-        /// 
         /// Deserializes from the given human readable stream
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="humanReadable"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static T DeserializeFromHumanReadableStream<T>(Stream humanReadable, WinterForgeProgressTracker? progressTracker = null)
+        public static T? DeserializeFromHumanReadableStream<T>(Stream humanReadable, WinterForgeProgressTracker? progressTracker = null)
         {
-            return (T)DeserializeFromHumanReadableStream(humanReadable, progressTracker);
+            return (T?)DeserializeFromHumanReadableStream(humanReadable, progressTracker);
         }
         /// <summary>
         /// Deserialies from the given file that has the human readable format
@@ -264,7 +318,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="path"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static object DeserializeFromHumanReadableFile(string path, WinterForgeProgressTracker? progressTracker = null)
+        public static object? DeserializeFromHumanReadableFile(string path, WinterForgeProgressTracker? progressTracker = null)
         {
             using var opcodes = new MemoryStream();
             using var humanReadable = File.OpenRead(path);
@@ -282,9 +336,9 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="path"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static T DeserializeFromHumanReadableFile<T>(string path, WinterForgeProgressTracker? progressTracker = null)
+        public static T? DeserializeFromHumanReadableFile<T>(string path, WinterForgeProgressTracker? progressTracker = null)
         {
-            return (T)DeserializeFromHumanReadableFile(path, progressTracker);
+            return (T?)DeserializeFromHumanReadableFile(path, progressTracker);
         }
         /// <summary>
         /// Deserializes from the file that has the opcodes
@@ -292,7 +346,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="path"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static object DeserializeFromFile(string path, WinterForgeProgressTracker? progressTracker = null)
+        public static object? DeserializeFromFile(string path, WinterForgeProgressTracker? progressTracker = null)
         {
             using Stream opcodes = File.OpenRead(path);
             var instructions = InstructionParser.ParseOpcodes(opcodes);
@@ -305,9 +359,9 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="path"></param>
         /// <param name="progress"></param>
         /// <returns></returns>
-        public static T DeserializeFromFile<T>(string path, WinterForgeProgressTracker? progressTracker = null)
+        public static T? DeserializeFromFile<T>(string path, WinterForgeProgressTracker? progressTracker = null)
         {
-            return (T)DeserializeFromFile(path, progressTracker);
+            return (T?)DeserializeFromFile(path, progressTracker);
         }
 
         /// <summary>
@@ -315,7 +369,7 @@ namespace WinterRose.WinterForgeSerializing
         /// </summary>
         /// <param name="humanreadable"></param>
         /// <param name="opcodeDestination"></param>
-        public static void ConvertHumanReadable(Stream humanreadable, Stream opcodeDestination) 
+        public static void ConvertHumanReadable(Stream humanreadable, Stream opcodeDestination)
             => new HumanReadableParser().Parse(humanreadable, opcodeDestination);
         /// <summary>
         /// Converts a human-readable file to an opcode file.
@@ -382,6 +436,112 @@ namespace WinterRose.WinterForgeSerializing
             return outputStream;
         }
 
+        /// <summary>
+        /// Deserializes from the given opcode stream
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<object> DeserializeFromStreamAsync(Stream stream, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromStream(stream, progressTracker));
+        /// <summary>
+        /// Deserializes from the given opcode stream
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="stream"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<T?> DeserializeFromStreamAsync<T>(Stream stream, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromStream<T>(stream, progressTracker));
+        /// <summary>
+        /// Deserializes from the given opcode string
+        /// </summary>
+        /// <param name="opcodes"></param>
+        /// <param name="encoding"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<object> DeserializeFromStringAsync(string opcodes, Encoding? encoding = null, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromString(opcodes, encoding, progressTracker));
+        /// <summary>
+        /// Deserializes from the given opcode string
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="opcodes"></param>
+        /// <param name="encoding"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<T?> DeserializeFromStringAsync<T>(string opcodes, Encoding? encoding = null, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromString<T>(opcodes, encoding, progressTracker));
+        /// <summary>
+        /// Deserializes from the given opcode file
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<object> DeserializeFromFileAsync(string path, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromFile(path, progressTracker));
+        /// <summary>
+        /// Deserializes from the given opcode file
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="path"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<T?> DeserializeFromFileAsync<T>(string path, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromFile<T>(path, progressTracker));
+
+        /// <summary>
+        /// Deserializes from the given human readable string
+        /// </summary>
+        /// <param name="humanReadable"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<object> DeserializeFromHumanReadableStringAsync(string humanReadable, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromHumanReadableString(humanReadable, progressTracker));
+        /// <summary>
+        /// Deserializes from the given human readable stirng
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="humanReadable"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<T?> DeserializeFromHumanReadableStringAsync<T>(string humanReadable, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromHumanReadableString<T>(humanReadable, progressTracker));
+        /// <summary>
+        /// Deserializes from the given human readable stream
+        /// </summary>
+        /// <param name="humanReadable"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<object> DeserializeFromHumanReadableStreamAsync(Stream humanReadable, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromHumanReadableStream(humanReadable, progressTracker));
+        /// <summary>
+        /// Deserializes from the given human readable stream
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="humanReadable"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<T?> DeserializeFromHumanReadableStreamAsync<T>(Stream humanReadable, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromHumanReadableStream<T>(humanReadable, progressTracker));
+        /// <summary>
+        /// Deserializes from the given human readable file
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<object> DeserializeFromHumanReadableFileAsync(string path, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromHumanReadableFile(path, progressTracker));
+        /// <summary>
+        /// Deserializes from the given human readable file
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="path"></param>
+        /// <param name="progressTracker"></param>
+        /// <returns></returns>
+        public static WinterForgeDeserializationTask<T?> DeserializeFromHumanReadableFileAsync<T>(string path, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromHumanReadableFile<T>(path, progressTracker));
+
 
         private static void DoStaticSerialization(ObjectSerializer serializer, Type type, Stream serialized, Stream opcodes, TargetFormat target)
         {
@@ -407,12 +567,12 @@ namespace WinterRose.WinterForgeSerializing
             else
                 new HumanReadableParser().Parse(serialized, opcodes);
         }
-        private static object DoDeserialization(Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
+        private static object? DoDeserialization(Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
         {
             using var executor = new InstructionExecutor();
             if (progressTracker is not null)
                 executor.progressTracker = progressTracker;
-            object res = executor.Execute(instructions);
+            object? res = executor.Execute(instructions);
 
             if (res is List<object> list)
             {
@@ -447,6 +607,40 @@ namespace WinterRose.WinterForgeSerializing
             var constructedListType = list.MakeGenericType(t);
 
             return (IList)Activator.CreateInstance(constructedListType);
+        }
+
+        // ── helper runners ────────────────────────────────────────────────────────
+        private static WinterForgeDeserializationTask<object> RunAsync(Func<object?> work)
+        {
+            var task = new WinterForgeDeserializationTask<object>();
+            Task.Run(() =>
+            {
+                try { task.Result = work(); }
+                catch (Exception exception) { task.Exception = exception; }
+            });
+            return task;
+        }
+
+        private static WinterForgeSerializeTask RunSerializeAsync(Action work)
+        {
+            var task = new WinterForgeSerializeTask();
+            Task.Run(() =>
+            {
+                try { work(); }
+                catch (Exception exception) { task.Exception = exception; }
+            });
+            return task;
+        }
+
+        private static WinterForgeDeserializationTask<T?> RunAsync<T>(Func<T?> work)
+        {
+            var task = new WinterForgeDeserializationTask<T?>();
+            Task.Run(() =>
+            {
+                try { task.Result = work(); }
+                catch (Exception exception) { task.Exception = exception; }
+            });
+            return task;
         }
 
         internal static IDictionary CreateDictionary(Type keyType, Type valueType)

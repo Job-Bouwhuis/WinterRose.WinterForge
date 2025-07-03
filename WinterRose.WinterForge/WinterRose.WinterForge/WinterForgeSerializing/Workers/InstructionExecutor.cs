@@ -89,7 +89,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// </summary>
         /// <param name="instructions"></param>
         /// <returns></returns>
-        public unsafe object Execute(List<Instruction> instructions)
+        public unsafe object? Execute(List<Instruction> instructions)
         {
             ObjectDisposedException.ThrowIf(IsDisposed, this);
             instructionTotal = instructions.Count;
@@ -174,6 +174,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             Validate();
                             if (instruction.Args[0] == "_stack()")
                                 return context.ValueStack.Peek();
+                            if (instruction.Args[0] == "null")
+                                return null;
                             return context.GetObject(int.Parse(instruction.Args[0])) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
                         case OpCode.PROGRESS:
                             progressTracker?.Report((instructionIndex + 1) / (float)instructions.Count);

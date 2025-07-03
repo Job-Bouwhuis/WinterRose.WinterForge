@@ -46,6 +46,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             if (obj == null)
             {
+                if (isRootCall)
+                {
+                    WriteToStream(destinationStream, "return null");
+                    return;
+                }
+
                 WriteToStream(destinationStream, "null");
                 return;
             }
@@ -61,6 +67,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             if(obj.GetType().IsEnum)
             {
+                if (isRootCall)
+                    throw new WinterForgeSerializeException(obj, "An enum isnt allowed to be serialized on its own!");
+
                 Type t = obj.GetType();
                 if (t.IsDefined(typeof(FlagsAttribute), false))
                     WriteToStream(destinationStream, $"{obj.GetType().FullName}.{obj}".Replace(", ", " | "));

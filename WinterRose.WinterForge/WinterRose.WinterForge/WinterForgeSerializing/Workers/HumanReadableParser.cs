@@ -200,7 +200,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 if (line.EndsWith(';'))
                     trimoffEnd = 1;
                 string ID = line[6..new Index(trimoffEnd, true)].Trim();
-                if (string.IsNullOrWhiteSpace(ID) || !ID.All(char.IsDigit) && ID != "_stack()")
+                if (string.IsNullOrWhiteSpace(ID) || !ID.All(char.IsDigit) && ID != "_stack()" && ID != "null")
                     throw new Exception("Invalid ID parameter in RETURN statement");
                 string result = $"{opcodeMap["RET"]} {ID}";
                 WriteLine(result);

@@ -20,21 +20,27 @@ internal class Program
         //loading of the WinterRose library. this reference is only in the test project so that i dont have to re-create test classes. im lazy :/
         (1..2).Contains(1);
 
+        Tests().GetAwaiter().GetResult();
+    }
+
+    private static async Task Tests()
+    {
         //var dict1 = new Dictionary<int, LoveState>();
 
         //foreach (int i in 2)
         //dict1.Add(dict1.NextAvalible(), LoveState.Single);
 
-        //var dict1 = new test();
-
-        var dict1 = new List<LoveState>() { LoveState.HeadOverHeels, LoveState.Single | LoveState.Complicated, LoveState.All };
+        var dict1 = new test();
 
         WinterForge.SerializeToFile(dict1, "Human.txt", TargetFormat.FormattedHumanReadable);
 
         WinterForge.ConvertFromFileToFile("Human.txt", "opcodes.txt");
-        var result = WinterForge.DeserializeFromFile<List<LoveState>>("opcodes.txt");
 
-        Console.WriteLine("\n");
+        var task = WinterForge.DeserializeFromFileAsync<test>("opcodes.txt");
+        Console.WriteLine(task.GetResult().ToString());
+
+        var res = WinterForge.DeserializeFromFile<test>("opcodes.txt");
+        Console.WriteLine(res.ToString());
     }
 }
 
@@ -54,6 +60,8 @@ public class test
 {
     [IncludeWithSerialization]
     public LoveState state { get; set; } = LoveState.Single | LoveState.HeadOverHeels;
+
+    public override string ToString() => $"state: {state}";
 }
 
 public class demo
