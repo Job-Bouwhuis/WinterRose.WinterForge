@@ -133,7 +133,7 @@ namespace WinterRose
                         if (t.Name == typeName || t.FullName == typeName)
                         {
                             type = t;
-                            break;
+                            goto Found;
                         }
                     }
                 }
@@ -145,11 +145,12 @@ namespace WinterRose
                     if (t.Name == typeName || t.FullName == typeName)
                     {
                         type = t;
-                        break;
+                        goto Found;
                     }
                 }
             }
 
+            Found:
 
             if (type != null)
                 typeCache.AddOrUpdate(typeName, type, (key, existing) => existing);

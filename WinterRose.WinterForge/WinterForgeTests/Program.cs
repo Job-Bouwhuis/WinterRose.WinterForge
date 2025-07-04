@@ -1,9 +1,12 @@
 ﻿using System.Buffers;
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Drawing;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -12,6 +15,7 @@ using WinterRose.AnonymousTypes;
 using WinterRose.ForgeGuardChecks;
 using WinterRose.Reflection;
 using WinterRose.Vectors;
+using WinterRose.WinterForgeSerialization;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Logging;
 
@@ -23,8 +27,16 @@ internal class Program
 
     private static void Main()
     {
-       
+        int[] a = [1, 2, 3, 4, 5];
+        var b = TypeConverter.Convert<HashSet<int>>(a);
     }
+}
+
+internal class ListToDictionary<TKey, TValue>
+    : TypeConverter<List<TKey>, Dictionary<TKey, TValue>>
+{
+    public override Dictionary<TKey, TValue> Convert(List<TKey> source) =>
+            source.ToDictionary(key => key, key => default(TValue)!);
 }
 
 [Flags]
@@ -36,7 +48,7 @@ public enum LoveState : byte
     Heartbroken = 1 << 3,
     Single = 1 << 4,
     Complicated = 1 << 5,
-    All = HeadOverHeels | Infatuated | InLove | Heartbroken | Single | Complicated
+    All = 0b111111
 }
 
 public class test

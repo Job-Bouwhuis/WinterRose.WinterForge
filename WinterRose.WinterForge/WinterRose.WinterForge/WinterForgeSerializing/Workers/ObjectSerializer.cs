@@ -69,12 +69,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 if (isRootCall)
                     throw new WinterForgeSerializeException(obj, "An enum isnt allowed to be serialized on its own!");
-
-                Type t = obj.GetType();
-                if (t.IsDefined(typeof(FlagsAttribute), false))
-                    WriteToStream(destinationStream, $"{obj.GetType().FullName}.{obj}".Replace(", ", " | "));
-                else
-                    WriteToStream(destinationStream, $"{obj.GetType().FullName}.{obj}");
+                SerializeEnum(obj, destinationStream);
                 return;
             }
 
@@ -101,11 +96,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             if (WinterForge.SupportedPrimitives.Contains(objType))
             {
-                WriteToStream(destinationStream, obj?.ToString() ?? "null");
+                if(obj is string)
+                    WriteToStream(destinationStream, $"\"{obj?.ToString()}\"" ?? "null");
+                else
+                    WriteToStream(destinationStream, obj?.ToString() ?? "null");
                 return;
             }
 
-            string? collection = TryCollection(obj);
+            string? collection = TryCollection(obj, destinationStream);
             if (collection is not null)
             {
                 WriteToStream(destinationStream, collection);
@@ -147,6 +145,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (isRootCall)
                 WriteToStream(destinationStream, "\n\nreturn " + key);
             destinationStream.Flush();
+        }
+
+        private void SerializeEnum(object obj, Stream destinationStream)
+        {
+            Type t = obj.GetType();
+            if (t.IsDefined(typeof(FlagsAttribute), false))
+                WriteToStream(destinationStream, $"{obj.GetType().FullName}.{obj}".Replace(", ", " | "));
+            else
+                WriteToStream(destinationStream, $"{obj.GetType().FullName}.{obj}");
         }
 
         private void SerializeAnonymous(ref object obj, int id, Stream destinationStream)
@@ -305,7 +312,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             object? value = member.GetValue();
 
-            string serializedString = SerializeValue(value);
+            string serializedString = SerializeValue(value, destinationStream);
             int linePos = serializedString.IndexOf('\n');
             if (linePos != -1)
             {
@@ -347,7 +354,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             object value = member.GetValue(ref obj);
 
-            string serializedString = SerializeValue(value);
+            string serializedString = SerializeValue(value, destinationStream);
             int linePos = serializedString.IndexOf('\n');
             if (linePos != -1)
             {
@@ -395,7 +402,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         }
         private void CommitValue(ref object obj, Stream destinationStream, string typeName, string memberName, ref object value, bool includeType = false)
         {
-            string serializedString = SerializeValue(value);
+            string serializedString = SerializeValue(value, destinationStream);
             int linePos = serializedString.IndexOf('\n');
             if (linePos != -1)
             {
@@ -473,7 +480,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
             return true;
         }
-        private string SerializeValue(object value)
+        private string SerializeValue(object value, Stream destinationStream)
         {
             if (value == null)
                 return "null";
@@ -491,15 +498,22 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (valueType.IsPrimitive)
                 return value.ToString();
 
+            if (valueType.IsEnum)
+            {
+                using var str = new MemoryStream();
+                SerializeEnum(value, str);
+                return Encoding.UTF8.GetString(str.ToArray());
+            }
+
             // Handle arrays, lists, and collections (nested objects)
-            string? collection = TryCollection(value);
+            string? collection = TryCollection(value, destinationStream);
             if (collection is not null)
                 return collection;
 
             // If the value is a nested object, recursively serialize it
             return RecursiveSerialization(value); // We can reuse the same serializer method for nested objects
         }
-        private string? TryCollection(object value)
+        private string? TryCollection(object value, Stream destinationStream)
         {
             if (value is not IEnumerable collection)
                 return null;
@@ -553,7 +567,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 if (!first)
                     sb.Append("\n, \n");
 
-                sb.Append(SerializeValue(item));
+                sb.Append(SerializeValue(item, destinationStream));
                 first = false;
             }
 
@@ -562,7 +576,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
             return sb.ToString();
         }
 
-        private string ParseTypeName(Type elementType)
+        /// <summary>
+        /// Gets the type name in a normal way
+        /// </summary>
+        /// <param name="elementType"></param>
+        /// <returns></returns>
+        public string ParseTypeName(Type elementType)
         {
             if (elementType == typeof(Anonymous)
                 || elementType == typeof(AnonymousTypeBuilder)

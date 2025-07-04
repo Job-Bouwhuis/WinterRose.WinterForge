@@ -6,12 +6,12 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>25.2.8</Version>
+    <Version>25.2.9</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>WinterRose.Reflection</Title>
     <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>
     <Configurations>Debug;Release;debug FileServer</Configurations>
-    <PackageReleaseNotes>Minor performance patches</PackageReleaseNotes>
+    <PackageReleaseNotes>added XML docs to some parts that were missing it</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
   </PropertyGroup>
 

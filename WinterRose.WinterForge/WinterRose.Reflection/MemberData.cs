@@ -279,8 +279,10 @@ namespace WinterRose.Reflection
                     actualValue = TypeWorker.CastPrimitive(value, Type);
                 else if (TypeWorker.FindImplicitConversionMethod(Type, value.GetType()) is MethodInfo conversionMethod)
                     actualValue = conversionMethod.Invoke(null, [value])!;
+                else if (TypeConverter.CanConvert(value.GetType(), Type))
+                    actualValue = TypeConverter.Convert(value, Type);
             }
-
+            
             if (obj is null && !propertysource.SetMethod.IsStatic && !(Type.IsAbstract && Type.IsSealed))
                 throw new Exception("Reflection helper was created type only.");
 
@@ -298,12 +300,16 @@ namespace WinterRose.Reflection
                     actualValue = TypeWorker.CastPrimitive(value, Type);
                 else if (TypeWorker.FindImplicitConversionMethod(Type, value.GetType()) is MethodInfo conversionMethod)
                         actualValue = conversionMethod.Invoke(null, [value])!;
+                else if (TypeConverter.CanConvert(value.GetType(), Type))
+                    actualValue = TypeConverter.Convert(value, Type);
             }
 
             if (obj is null && !fieldsource.IsStatic && !(Type.IsAbstract && Type.IsSealed))
                 throw new Exception("Reflection helper was created type only.");
 
-            if (!obj.GetType().IsValueType)
+            if (obj is null)
+                fieldsource.SetValue(null, value);
+            else if (!obj.GetType().IsValueType)
                 fieldsource.SetValue(obj, actualValue);
             else
                 fieldsource!.SetValueDirect(__makeref(obj), actualValue);

@@ -7,12 +7,10 @@ using WinterRose.Reflection;
 namespace WinterRose.AnonymousTypes;
 
 /// <summary>
-/// <br></br> This is also a base class for any type generated using <see cref="AnonymousTypeBuilder"/> / <see cref="AnonymousTypeReader"/>
+/// This is a base class for any type generated using <see cref="AnonymousTypeBuilder"/> / <see cref="AnonymousTypeReader"/>
 /// and thus can be used to store these objects as class fields even
 /// <br></br><br></br>
 /// Can also be used on its own to store runtime variables in a dictionary-like manner.
-/// 
-/// 
 /// </summary>
 /// <remarks>This class inherits <see cref="DynamicObject"/></remarks>
 public class Anonymous() : DynamicObject

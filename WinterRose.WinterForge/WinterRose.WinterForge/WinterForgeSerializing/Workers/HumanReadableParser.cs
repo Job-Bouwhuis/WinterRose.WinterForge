@@ -32,6 +32,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         private Dictionary<string, int> aliasMap = [];
         private readonly Stack<OverridableStack<string>> lineBuffers = new();
         List<int> foundIds = [];
+        private int autoAsIDs;
         private static readonly Dictionary<string, int> opcodeMap = Enum
             .GetValues<OpCode>()
             .ToDictionary(op => op.ToString(), op => (int)op);
@@ -51,9 +52,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
             reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
             writer = new StreamWriter(output, Encoding.UTF8, leaveOpen: true);
 
-            string version = typeof(WinterForge).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion;
-            WriteLine($"// Parsed by WinterForge {version.Split('+')[0]}\n\n");
+            string version = typeof(WinterForge)
+                .Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                .InformationalVersion;
 
+            WriteLine($"// Parsed by WinterForge {version.Split('+')[0]}");
+            WriteLine("");
+            WriteLine("");
+        
             while ((currentLine = ReadNonEmptyLine()) != null)
                 ParseObjectOrAssignment();
 
@@ -405,7 +412,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     if (firstRhs == "this")
                     {
                         if (id is null)
-                            throw new Exception("'this' reference outside the bounds of an object");
+                            throw new WinterForgeFormatException("'this' reference outside the bounds of an object");
 
                         WriteLine($"{opcodeMap["PUSH"]} _ref({id})");
                     }
@@ -435,7 +442,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     }
                 }
                 else
-                    throw new Exception($"nothing to access on the right side...");
+                    throw new WinterForgeFormatException($"nothing to access on the right side...");
             }
 
             // Step 3: Process LHS
@@ -455,7 +462,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (first == "this")
             {
                 if (id is null)
-                    throw new Exception("'this' reference outside the bounds of an object");
+                    throw new WinterForgeFormatException("'this' reference outside the bounds of an object");
 
                 WriteLine($"{opcodeMap["PUSH"]} _ref({id})");
             }
@@ -475,7 +482,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 bool isLast = i == lhsParts.Length - 1;
 
                 if (part.Contains('(') && part.Contains(')'))
-                    throw new Exception("Left hand side function is illegal.");
+                    throw new WinterForgeFormatException("Left hand side function is illegal.");
                 else
                 {
                     if (rhs != null && isLast)
@@ -483,6 +490,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         string val = rhs.Contains("->") ? "_stack()" : rhs;
                         if (val.EndsWith(';'))
                             val = val[..^1];
+                        val = ValidateValue(val);
+                        if (val is "_stack()")
+                        {
+                            int asID = int.MaxValue - 1000 - autoAsIDs++;
+                            WriteLine($"{opcodeMap["AS"]} {asID}");
+                            val = $"_ref({asID})";
+                        }
                         WriteLine($"{opcodeMap["SETACCESS"]} {part} {val}");
                     }
                     else
@@ -514,6 +528,27 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 WriteLine($"{opcodeMap["CALL"]} {methodName} {args.Count}");
             }
+        }
+
+        private int NextAvalible(List<int>? list)
+        {
+            if (list is null)
+                return -1;
+            if (list.Count == 0)
+                return 0;
+
+            var sorted = list.OrderBy(x => x).ToList();
+
+            int last = 0;
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                if (sorted[i] != i)
+                {
+                    return last + 1;
+                }
+                last = i;
+            }
+            return last + 1;
         }
 
         private CollectionParseResult ParseCollection()
@@ -909,12 +944,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     return "_stack()";
                 }
             }
+
+            if(value.StartsWith("_type"))
+                return value;
+
             if(HasValidGenericFollowedByBracket(value))
             {
                 TryParseCollection(value, out string name);
                 return name;
             }
-            if(value.Contains('.') && !IsValidNumericString(value))
+            if(value.Contains('.') && !IsValidNumericString(value) && !value.Contains('<'))
             {
                 string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 string enumType;

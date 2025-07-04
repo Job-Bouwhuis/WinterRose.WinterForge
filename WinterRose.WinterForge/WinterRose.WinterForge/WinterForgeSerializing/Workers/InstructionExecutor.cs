@@ -4,6 +4,7 @@ using System.Data;
 using System.Text;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerialization;
 using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterRose.WinterForgeSerializing.Workers
@@ -91,6 +92,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// <returns></returns>
         public unsafe object? Execute(List<Instruction> instructions)
         {
+#if DEBUG
+            if(AccessFilterCache.FilterKind == AccessFilterKind.Blacklist)
+            {
+                string msg = "WARN - WinterForge will allow all method calls and member " +
+                    "accesses unless explicitly blacklisted through 'AccessFilterCache'";
+                progressTracker?.Report(msg);
+                System.Diagnostics.Debug.WriteLine(msg);
+            }
+#endif
+
             ObjectDisposedException.ThrowIf(IsDisposed, this);
             instructionTotal = instructions.Count;
             try
@@ -183,6 +194,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.ACCESS:
                             {
                                 object o = context.ValueStack.Pop();
+                                AccessFilterCache.Validate(o is Type ? (Type)o : o.GetType(), instruction.Args[0]);
                                 ReflectionHelper rh = CreateReflectionHelper(ref o, out _);
                                 context.ValueStack.Push(rh.GetValueFrom(instruction.Args[0]));
                                 break;
@@ -193,6 +205,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                                 var rawValue = instruction.Args[1];
 
                                 var target = context.ValueStack.Pop();
+
+                                AccessFilterCache.Validate(target is Type ? (Type)target : target.GetType(), field);
 
                                 var helper = CreateReflectionHelper(ref target, out object actual);
 
@@ -426,6 +440,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
 
             var target = context.ValueStack.Pop();
+            AccessFilterCache.Validate(target is Type ? (Type)target : target.GetType(), methodName);
+
             progressTracker?.OnMethod(target.GetType().Name, methodName);
 
             object? val = DynamicMethodInvoker.InvokeMethodWithArguments(
@@ -601,7 +617,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
             return TypeWorker.FindType(inner);
         }
 
-        private static Type ResolveType(string typeName)
+        /// <summary>
+        /// Resolves the type from a string that was generated using <see cref="ObjectSerializer.ParseTypeName(Type)"/> back into a <see cref="Type"/> reference
+        /// </summary>
+        /// <param name="typeName"></param>
+        /// <returns></returns>
+        public static Type ResolveType(string typeName)
         {
             ValidateKeywordType(ref typeName);
 

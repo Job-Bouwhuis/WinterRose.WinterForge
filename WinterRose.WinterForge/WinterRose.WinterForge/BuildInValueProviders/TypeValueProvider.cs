@@ -12,11 +12,11 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
     {
         public override Type? CreateObject(string value, InstructionExecutor executor)
         {
-            return TypeWorker.FindType(value);
+            return InstructionExecutor.ResolveType(value);
         }
         public override string CreateString(Type obj, ObjectSerializer serializer)
         {
-            return $"_type({obj.FullName})";
+            return $"_type({serializer.ParseTypeName(obj)})";
         }
     }
 }

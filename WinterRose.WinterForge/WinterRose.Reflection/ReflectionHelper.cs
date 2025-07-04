@@ -15,17 +15,28 @@ namespace WinterRose.Reflection
     /// Provides helper functions
     /// </summary>
     public class ReflectionHelper : DynamicObject
-    {
+    {        
+        /// <summary>
+        /// Creates a reflection helper for the given object
+        /// </summary>
         public static ReflectionHelper ForObject(ref object o) => new(ref o);
+        /// <summary>
+        /// Creates a reflection helper for the given object
+        /// </summary>
         public static ReflectionHelper ForObject(object o) => new(ref o);
 
+        /// <summary>
+        /// Creates a new ReflectionHelper for type only. instance operations are not available
+        /// </summary>
         public static ReflectionHelper ForType(Type type) => new(type);
 
         private readonly static BindingFlags withPrivateFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
         private static readonly BindingFlags noPrivateFlags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
         private BindingFlags flags = withPrivateFlags;
+
         /// <summary>
-        /// Explicitly set that private fields should be included
+        /// Explicitly set that private fields should be included<br></br>
+        /// Default is <see langword="true"/>
         /// </summary>
         public bool IncludePrivateFields
         {
@@ -39,26 +50,47 @@ namespace WinterRose.Reflection
             }
         }
         object obj;
+        /// <summary>
+        /// The type of the object this ReflectionHelper operates on
+        /// </summary>
         public Type ObjectType { get; init; }
 
+        /// <summary>
+        /// Creates a reflection helper for the given object
+        /// </summary>
+        /// <param name="obj"></param>
         public ReflectionHelper(ref object obj)
         {
             this.obj = obj;
             ObjectType = obj.GetType();
         }
 
+        /// <summary>
+        /// Creates a reflection helper for the given object
+        /// </summary>
+        /// <param name="obj"></param>
         public ReflectionHelper(object obj)
         {
             this.obj = obj;
             ObjectType = obj.GetType();
         }
 
+        /// <summary>
+        /// Creates a new ReflectionHelper for type only. instance operations are not available
+        /// </summary>
+        /// <param name="objType"></param>
         public ReflectionHelper(Type objType)
         {
             this.ObjectType = objType;
         }
 
-        public MemberData GetMember(string name)
+        /// <summary>
+        /// Gets a member, whether that is a field, a property, or a runtime variable from <see cref="Anonymous"/>
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        /// <exception cref="FieldNotFoundException"></exception>
+        public MemberData? GetMember(string name)
         {
             int res = GetFieldOrProperty(name, out var field, out var property);
             if (res is -1)
@@ -68,8 +100,9 @@ namespace WinterRose.Reflection
                     // anonymous types are special, they may not have the field or property if they are not compiled using AnonymousTypeBuilder
                     // look through their runtime variables for the name
                     Anonymous anon = (Anonymous)obj;
-                    if (anon.runtimeVariables.TryGetValue(name, out object? value))
-                    { // found in runtime variables
+                    if (anon.runtimeVariables.TryGetValue(name, out _))
+                    { 
+                        // found in runtime variables
                         return new AnonymousMember(name, anon);
                     }
                 }
@@ -78,11 +111,16 @@ namespace WinterRose.Reflection
             }
                 
             if (res is 0)
-                return field;
+                return field!;
             if (res is 1)
-                return property;
+                return property!;
             return null;
         }
+
+        /// <summary>
+        /// Gets all members, meaning fields, properties, and runtime variables from <see cref="Anonymous"/> in one unified data structure
+        /// </summary>
+        /// <returns></returns>
         public List<MemberData> GetMembers()
         {
             List<MemberData> members = 
@@ -96,12 +134,37 @@ namespace WinterRose.Reflection
             return [.. members.Where(x => x.IsValid)];
 
         }
+        /// <summary>
+        /// Gets all fields
+        /// </summary>
+        /// <returns></returns>
         public List<FieldInfo> GetFields() => ObjectType.GetFields(flags).ToList();
+        /// <summary>
+        /// Gets all properties
+        /// </summary>
+        /// <returns></returns>
         public List<PropertyInfo> GetProperties() => ObjectType.GetProperties(flags).ToList();
 
+        /// <summary>
+        /// Gets a field
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
         public FieldInfo? GetField(string name) => ObjectType.GetField(name, flags);
+        /// <summary>
+        /// Gets a property
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
         public PropertyInfo? GetProperty(string name) => ObjectType.GetProperty(name, flags);
 
+        /// <summary>
+        /// From <see cref="DynamicMetaObject"/> allows for getting of members through the dynamic keyword on the object/type 
+        /// this reflection helper represents rather than the reflectionhelper itself
+        /// </summary>
+        /// <param name="binder"></param>
+        /// <param name="result"></param>
+        /// <returns></returns>
         public override bool TryGetMember(GetMemberBinder binder, out object? result)
         {
             result = null;
@@ -119,6 +182,13 @@ namespace WinterRose.Reflection
 
         public MethodInfo GetMethod(string method) => ObjectType.GetMethod(method, flags);
 
+        /// <summary>
+        /// From <see cref="DynamicObject"/> allows for setting of members through the dynamic keyword on the object/type 
+        /// this reflection helper represents rather than the reflectionhelper itself
+        /// </summary>
+        /// <param name="binder"></param>
+        /// <param name="value"></param>
+        /// <returns></returns>
         public override bool TrySetMember(SetMemberBinder binder, object? value)
         {
             SetValue(binder.Name, value);
