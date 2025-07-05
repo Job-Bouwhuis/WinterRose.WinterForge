@@ -5,9 +5,14 @@ For convenience, all major functionality has been packed into a generalized stat
 serialize to various formats, and deserialize from those formats. aswell as to convert various input sources containing human 
 readable to the optimized format.
 
+#### Other docs
+[Syntax Features](Syntax_Features.md)
+[Anonymous Type Syntax](Anonymous_Type_Syntax.md)
+[Built-in Functions](WinterForge_Built-in_Functions.md)
+
 ## Serialization
 
-#### Sinchrounous
+#### Synchrounous
 ```cs
 WinterForge.SerializeToFile(object, string, TargetFormat, WinterForgeProgressTracker)
 WinterForge.SerializeToString(object, TargetFormat, WinterForgeProgressTracker)
@@ -16,6 +21,10 @@ WinterForge.SerializeToStream(object, Stream, TargetFormat, WinterForgeProgressT
 WinterForge.SerializeStaticToFile(Type, string, TargetFormat, WinterForgeProgressTracker)
 WinterForge.SerializeStaticToString(Type, TargetFormat, WinterForgeProgressTracker)
 WinterForge.SerializeStaticToStream(Type, Stream, TargetFormat, WinterForgeProgressTracker)
+
+// example:
+var foo = new Foo(420, "some data");
+WinterForge.SerializeToFile(foo, "foo.txt");
 ```
 
 #### Asynchronous
@@ -27,6 +36,11 @@ SerializeToStreamAsync(object, Stream, TargetFormat, WinterForgeProgressTracker)
 SerializeStaticToFileAsync(Type, string, TargetFormat, WinterForgeProgressTracker)
 SerializeStaticToStringAsync(Type, TargetFormat, WinterForgeProgressTracker)
 SerializeStaticToStreamAsync(Type, Stream, TargetFormat, WinterForgeProgressTracker)
+
+// example:
+var foo = new Foo(420, "some data");
+WinterForgeSerializationTask serTask = WinterForge.SerializeToFileAsync(foo, "foo.txt");
+await serTask;
 ```
 
 ## Deserialization
@@ -47,6 +61,9 @@ WinterForge.DeserializeFromHumanReadableStream<T>(Stream, WinterForgeProgressTra
 
 WinterForge.DeserializeFromHumanReadableFile(string, WinterForgeProgressTracker)
 WinterForge.DeserializeFromHumanReadableFile<T>(string, WinterForgeProgressTracker)
+
+// example:
+Foo foo = WinterForge.DeserializeFromFile("foo.txt");
 ```
 
 #### Asynchronous
@@ -68,6 +85,13 @@ WinterForge.DeserializeFromHumanReadableStreamAsync<T>(Stream humanReadable, Win
 
 WinterForge.DeserializeFromHumanReadableFileAsync(string, WinterForgeProgressTracker)
 WinterForge.DeserializeFromHumanReadableFileAsync<T>(string, WinterForgeProgressTracker)
+
+// example:
+WinterForgeDeserializationTask deserTask = WinterForge.DeserializeFromFile("foo.txt);
+Foo f = await deserTask; 
+
+// or skip creating the variable for the deserTask and await the deserialize method directly
+f = await WinterForge.DeserializeFromFile("foo.txt");
 ```
 
 ## Format conversion

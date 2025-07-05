@@ -6,6 +6,11 @@ ill be honest barely anyone may actually use it in a actual project rather than 
 
 Regardless, ive had a blast working on them
 
+#### Other docs
+[CSharp Usage](CSharp_Usage.md)
+[Syntax Features](Syntax_Features.md)
+[Built-in Functions](WinterForge_Built-in_Functions.md)
+
 Define an anonymous type:
 ```
 Anonymous : 0 {

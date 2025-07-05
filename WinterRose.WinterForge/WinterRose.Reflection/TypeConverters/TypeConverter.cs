@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using WinterRose.Reflection.TypeConverters;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace WinterRose.Reflection
@@ -14,11 +16,11 @@ namespace WinterRose.Reflection
     /// </summary>
     public static class TypeConverter
     {
-        private static readonly ConcurrentDictionary<(Type, Type), ITypeConverter> _cache
-            = new();                                                // closed, ready‑to‑use
+        private static readonly ConcurrentDictionary<(Type, Type), ITypeConverter> _cache = [];
 
-        private static readonly ConcurrentDictionary<(Type, Type), Type> _genericTemplates
-            = new();                                                // open generic “blueprints”
+        private static readonly ConcurrentDictionary<(Type, Type), Type> _genericTemplates = [];
+
+        private static readonly HashSet<Type> scannedTypeCache = [];
 
         static TypeConverter() => DiscoverConverters();
 
@@ -130,7 +132,7 @@ namespace WinterRose.Reflection
                             out var conv))
                     {
                         conv = (ITypeConverter)Activator.CreateInstance(closed)!;
-                        _cache.TryAdd((conv.SourceType, conv.TargetType), conv);
+                        AddToCache((conv.SourceType, conv.TargetType), conv);
                     }
                     yield return conv;
                 }
@@ -239,7 +241,7 @@ namespace WinterRose.Reflection
 
                             if (Activator.CreateInstance(closedConverter) is ITypeConverter convInstance)
                             {
-                                _cache.TryAdd((src, tgt), convInstance); // cache by actual src and tgt
+                                AddToCache((src, tgt), convInstance); // cache by actual src and tgt
                                 candidates.Add(convInstance);
                                 continue;
                             }
@@ -275,7 +277,7 @@ namespace WinterRose.Reflection
 
                                 if (Activator.CreateInstance(closedConverter) is ITypeConverter convInstance)
                                 {
-                                    _cache.TryAdd((convInstance.SourceType, convInstance.TargetType), convInstance);
+                                    AddToCache((convInstance.SourceType, convInstance.TargetType), convInstance);
                                     candidates.Add(convInstance);
                                 }
                             }
@@ -313,9 +315,50 @@ namespace WinterRose.Reflection
 
                     if (Activator.CreateInstance(closed) is ITypeConverter conv)
                     {
-                        _cache.TryAdd((src, tgt), conv);
+                        AddToCache((src, tgt), conv);
                         candidates.Add(conv);
                     }
+                }
+            }
+        }
+
+        private static void AddToCache((Type SourceType, Type TargetType) value, ITypeConverter convInstance)
+        {
+            _cache.TryAdd(value, convInstance);
+            ScanType(value.SourceType);
+            ScanType(value.TargetType);
+        }
+
+        private const string OP_IMPLICIT = "op_Implicit";
+        private const string OP_EXPLICIT = "op_Explicit";
+
+        private static void ScanType(Type sourceType)
+        {
+            if (!scannedTypeCache.Add(sourceType))
+                return;
+
+            var methods = sourceType.GetMethods(
+                    BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+
+            foreach (var method in methods)
+            {
+                if (!method.IsSpecialName) continue;
+
+                var parameters = method.GetParameters();
+                if (parameters.Length != 1) continue;
+
+                var tuple = (Source: parameters[0].ParameterType, Target: method.ReturnType);
+
+                if (method.Name == OP_IMPLICIT)
+                {
+                    _genericTemplates.TryAdd(tuple, typeof(DelegateConverter<,>));
+                }
+                else if (method.Name == OP_EXPLICIT)
+                {
+                    // ignored for now, will maybe later support
+                    // explicit conversions could intice dataloss, implicit ones by convension do not
+                    // hence why its safer to only support implicits for now. maybe later a option can be introduced
+                    // to enable explicit conversion usage
                 }
             }
         }
@@ -345,20 +388,25 @@ namespace WinterRose.Reflection
                 while (cur is { } && cur != typeof(object))
                 {
                     if (cur.IsGenericType &&
-                        cur.GetGenericTypeDefinition() == typeof(TypeConverter<,>))
+                        (cur.GetGenericTypeDefinition() == typeof(TypeConverter<,>)
+                        || cur.GetGenericTypeDefinition() == typeof(DelegateConverter<,>)))
                         break;
                     cur = cur.BaseType;
                 }
                 if (cur is null) continue;
 
                 var genericArgs = cur.GetGenericArguments();
+                if (genericArgs.Length is not 2)
+                    ;
                 Type srcTemplate = GetTemplate(genericArgs[0]);
                 Type tgtTemplate = GetTemplate(genericArgs[1]);
 
                 if (t.IsGenericTypeDefinition)
+                {
                     _genericTemplates.TryAdd((srcTemplate, tgtTemplate), t);
+                }
                 else if (Activator.CreateInstance(t) is ITypeConverter inst)
-                    _cache.TryAdd((inst.SourceType, inst.TargetType), inst);
+                    AddToCache((inst.SourceType, inst.TargetType), inst);
 
                 static Type GetTemplate(Type x) =>
                     x.IsGenericType ? x.GetGenericTypeDefinition() : x;

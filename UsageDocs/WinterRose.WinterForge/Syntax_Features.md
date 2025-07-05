@@ -1,4 +1,4 @@
-# Winterforge, a high speed and very flexible serializer
+# Winterforge, a very flexible serializer which is still fast for its broad featureset
 
 Looking for Anonymous type syntax? head to 'Anonymous type syntax.md'
 

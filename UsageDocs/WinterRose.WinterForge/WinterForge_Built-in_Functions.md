@@ -1,3 +1,8 @@
+#### Other docs
+[CSharp Usage](CSharp_Usage.md)
+[Syntax Features](Syntax_Features.md)
+[Anonymous Type Syntax](Anonymous_Type_Syntax.md)
+
 ## _ref(int)
 
 Gets a reference to the object with the given integer ID.
