@@ -6,9 +6,9 @@ serialize to various formats, and deserialize from those formats. aswell as to c
 readable to the optimized format.
 
 #### Other docs
-[Syntax Features](Syntax_Features.md)
-[Anonymous Type Syntax](Anonymous_Type_Syntax.md)
-[Built-in Functions](WinterForge_Built-in_Functions.md)
+[Syntax Features](Syntax_Features.md)  
+[Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+[Built-in Functions](WinterForge_Built-in_Functions.md)  
 
 ## Serialization
 

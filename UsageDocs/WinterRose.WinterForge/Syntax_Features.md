@@ -1,6 +1,9 @@
 # Winterforge, a very flexible serializer which is still fast for its broad featureset
 
-Looking for Anonymous type syntax? head to 'Anonymous type syntax.md'
+#### Other docs
+[CSharp Usage](CSharp_Usage.md)  
+[Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+[Built-in Functions](WinterForge_Built-in_Functions.md)  
 
 ## Creating instances
 ```

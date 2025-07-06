@@ -23,6 +23,12 @@ It also allows accessing fields of already deserialzied objects, static classes.
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Usage Docs\**" />
+    <EmbeddedResource Remove="Usage Docs\**" />
+    <None Remove="Usage Docs\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\LICENSE.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
@@ -42,10 +48,6 @@ It also allows accessing fields of already deserialzied objects, static classes.
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Usage Docs\" />
   </ItemGroup>
 
 </Project>

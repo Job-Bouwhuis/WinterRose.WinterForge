@@ -27,8 +27,7 @@ internal class Program
 
     private static void Main()
     {
-        int[] a = [1, 2, 3, 4, 5];
-        var b = TypeConverter.Convert<HashSet<int>>(a);
+        
     }
 }
 
