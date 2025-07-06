@@ -1,14 +1,20 @@
 # Stream-Based Object Serialization and Deserialization — WinterForge
 
-WinterForge is a high-performance, human-readable object serialization 
-framework designed to adapt fluidly to project needs rather than forcing projects 
-to conform to its rules. It blends speed with developer clarity by offering a dual 
-format system that supports both human-readable text and opcode-based intermediate representation 
-for maximum performance.
+WinterForge is a flexible and human-friendly object 
+serialization system that works around your project, not the other way around. 
+It's not as blazing fast as barebones formats like JSON, but for everything it does, 
+it's honestly pretty quick. You get the best of both worlds: a clean and readable text 
+format for devs, plus a compact opcode-based format for when performance matters.
+
+It's tuned for the kind of power it gives you, especially 
+when you're dealing with complex object setups or need to handle versioning gracefully. 
+So yeah, maybe not the fastest out there, but definitely one of the most capable.
 
 **Slight disclaimer**
 I work on this package alone and on my free time. updates may be slow.
-Contact me on discord 'thesnowowl' if you want to get into contact with me. be it in interest in usage of WinterForge, contribution, or other packages made by me, all folks are welcome!
+Contact me on discord 'thesnowowl' if you want to get into contact with me. 
+be it in interest in usage of WinterForge, contribution, or other packages made by me,
+all folks are welcome!
 
 #### Find Usage docs here!
 [CSharp Usage](UsageDocs/WinterRose.WinterForge/CSharp_Usage.md)  
