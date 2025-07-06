@@ -53,6 +53,12 @@ WinterForge.DeserializeFromStream<T>(Stream, WinterForgeProgressTracker)
 WinterForge.DeserializeFromString(string)
 WinterForge.DeserializeFromString<T>(string)
 
+WinterForge.DeserializeFromFile(string, WinterForgeProgressTracker)
+WinterForge.DeserializeFromFile<T>(string, WinterForgeProgressTracker)
+
+WinterForge.DeserializeFromFileAsync(string, WinterForgeProgressTracker)
+WinterForge.DeserializeFromFileAsync<T>(string, WinterForgeProgressTracker)
+
 WinterForge.DeserializeFromHumanReadableString(string, WinterForgeProgressTracker)
 WinterForge.DeserializeFromHumanReadableString<T>(string, WinterForgeProgressTracker)
 

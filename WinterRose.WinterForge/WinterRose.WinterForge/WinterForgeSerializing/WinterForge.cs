@@ -236,9 +236,9 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="opcodes"></param>
         /// <param name="encoding"></param>
         /// <returns></returns>
-        public static object? DeserializeFromString(string opcodes, Encoding? encoding = null, WinterForgeProgressTracker? progressTracker = null)
+        public static object? DeserializeFromString(string opcodes, WinterForgeProgressTracker? progressTracker = null)
         {
-            using MemoryStream ops = new MemoryStream((encoding ?? Encoding.UTF8).GetBytes(opcodes));
+            using MemoryStream ops = new MemoryStream(Encoding.UTF8.GetBytes(opcodes));
             return DeserializeFromStream(ops, progressTracker);
         }
         /// <summary>
@@ -248,11 +248,10 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="opcodes"></param>
         /// <param name="encoding"></param>
         /// <returns></returns>
-        public static T? DeserializeFromString<T>(string opcodes, Encoding? encoding = null, WinterForgeProgressTracker? progressTracker = null)
+        public static T? DeserializeFromString<T>(string opcodes, WinterForgeProgressTracker? progressTracker = null)
         {
-            return (T?)DeserializeFromString(opcodes, encoding, progressTracker);
+            return (T?)DeserializeFromString(opcodes, progressTracker);
         }
-        /// <summary>
         /// Deserializes from the given human readable string
         /// </summary>
         /// <param name="humanReadable"></param>
@@ -460,8 +459,8 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="encoding"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeDeserializationTask<object> DeserializeFromStringAsync(string opcodes, Encoding? encoding = null, WinterForgeProgressTracker? progressTracker = null) =>
-            RunAsync(() => DeserializeFromString(opcodes, encoding, progressTracker));
+        public static WinterForgeDeserializationTask<object> DeserializeFromStringAsync(string opcodes, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromString(opcodes, progressTracker));
         /// <summary>
         /// Deserializes from the given opcode string
         /// </summary>
@@ -470,8 +469,8 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="encoding"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeDeserializationTask<T?> DeserializeFromStringAsync<T>(string opcodes, Encoding? encoding = null, WinterForgeProgressTracker? progressTracker = null) =>
-            RunAsync(() => DeserializeFromString<T>(opcodes, encoding, progressTracker));
+        public static WinterForgeDeserializationTask<T?> DeserializeFromStringAsync<T>(string opcodes, WinterForgeProgressTracker? progressTracker = null) =>
+            RunAsync(() => DeserializeFromString<T>(opcodes, progressTracker));
         /// <summary>
         /// Deserializes from the given opcode file
         /// </summary>
