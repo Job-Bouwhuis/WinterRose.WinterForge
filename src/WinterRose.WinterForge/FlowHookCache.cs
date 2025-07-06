@@ -5,7 +5,7 @@ using WinterRose.WinterForgeSerializing.Logging;
 namespace WinterRose.WinterForgeSerializing
 {
     internal class FlowHookItem
-    {
+    {   
         internal struct FlowMethod
         {
             public MethodInfo method { get; set; }

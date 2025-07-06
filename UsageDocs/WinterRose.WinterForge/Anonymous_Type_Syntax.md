@@ -1,4 +1,3 @@
-
 # Anonymous type syntax
 
 Anonymous types are a funky thing, why would you even want to serialize and deserialize them
@@ -11,6 +10,7 @@ Regardless, ive had a blast working on them
 [Syntax Features](Syntax_Features.md)  
 [Built-in Functions](WinterForge_Built-in_Functions.md)  
 [Custom Value Providers](CustomValueProvider_Examples.md)  
+[Flow Hooks](FlowHooks.md)  
 
 Define an anonymous type:
 ```

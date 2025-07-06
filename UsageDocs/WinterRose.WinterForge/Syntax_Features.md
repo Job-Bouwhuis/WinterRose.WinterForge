@@ -5,6 +5,7 @@
 [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
 [Built-in Functions](WinterForge_Built-in_Functions.md)  
 [Custom Value Providers](CustomValueProvider_Examples.md)  
+[Flow Hooks](FlowHooks.md)  
 
 ## Creating instances
 ```

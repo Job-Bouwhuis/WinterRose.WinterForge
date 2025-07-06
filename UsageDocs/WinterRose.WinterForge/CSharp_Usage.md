@@ -1,4 +1,3 @@
-
 # How to use WinterForge in C#
 
 For convenience, all major functionality has been packed into a generalized static class 'WinterForge' it has methods to 
@@ -9,6 +8,8 @@ readable to the optimized format.
 [Syntax Features](Syntax_Features.md)  
 [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
 [Built-in Functions](WinterForge_Built-in_Functions.md)  
+[Custom Value Providers](CustomValueProvider_Examples.md)  
+[Flow Hooks](FlowHooks.md)  
 
 ## Serialization
 

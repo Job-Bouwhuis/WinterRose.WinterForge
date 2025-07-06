@@ -21,6 +21,7 @@ all folks are welcome!
 [Syntax Features](UsageDocs/WinterRose.WinterForge/Syntax_Features.md)  
 [Anonymous Type Syntax](UsageDocs/WinterRose.WinterForge/Anonymous_Type_Syntax.md)  
 [Built-in Functions](UsageDocs/WinterRose.WinterForge/WinterForge_Built-in_Functions.md)  
+[Custom Value Providers](UsageDocs/WinterRose.WinterForge/CustomValueProvider_Examples.md)  
 
 ## Core Features
 
@@ -36,7 +37,7 @@ all folks are welcome!
   - **Opcode intermediate representation:** Structured sequential opcodes for fast, optimized serialization cycles.
 
 - **Comprehensive Type Support:**  
-  - Primitive types (`int`, `float`, `bool`, `string`, etc.) with full typename transcription.  
+  - Primitive types (`int`, `float`, `bool`, `string`, etc.) with full typename transcription. (eg: int is recognized as System.Int32) 
   - **Anonymous types:** Supports serialization and deserialization of inline, unnamed objects, including nested anonymous types.  
   - Nested objects, enums, lists, arrays, and nullable types.  
   - Static classes, fields, and properties.
@@ -52,7 +53,7 @@ all folks are welcome!
 - **Advanced Object Handling:**  
   - Object reference ID system with aliasing and stack-based referencing for reuse.  
   - Ability to call methods during deserialization, using return values dynamically.  
-  - Custom value providers via `CustomValueProvider<T>` for type-specific value control, without manual registration.  
+  - Custom value providers via `CustomValueProvider<T>` for type-specific value control, without manual registration. [More info here!](UsageDocs/WinterRose.WinterForge/CustomValueProvider_Examples.md)  
   - Supports both structs and classes.
 
 - **Progress and Formatting:**  
