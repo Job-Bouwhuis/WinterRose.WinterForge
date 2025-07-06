@@ -10,11 +10,11 @@ for maximum performance.
 I work on this package alone and on my free time. updates may be slow.
 Contact me on discord 'thesnowowl' if you want to get into contact with me. be it in interest in usage of WinterForge, contribution, or other packages made by me, all folks are welcome!
 
-**Find Usage docs here!**
-[CSharp Usage](UsageDocs/WinterRose.WinterForge/CSharp_Usage.md)
-[Syntax Features](UsageDocs/WinterRose.WinterForge/Syntax_Features.md)
-[Anonymous Type Syntax](UsageDocs/WinterRose.WinterForge/Anonymous_Type_Syntax.md)
-[Built-in Functions](UsageDocs/WinterRose.WinterForge/WinterForge_Built-in_Functions.md)
+**Find Usage docs here!** 
+[CSharp Usage](UsageDocs/WinterRose.WinterForge/CSharp_Usage.md)  
+[Syntax Features](UsageDocs/WinterRose.WinterForge/Syntax_Features.md)  
+[Anonymous Type Syntax](UsageDocs/WinterRose.WinterForge/Anonymous_Type_Syntax.md)  
+[Built-in Functions](UsageDocs/WinterRose.WinterForge/WinterForge_Built-in_Functions.md)  
 
 ## Core Features
 
