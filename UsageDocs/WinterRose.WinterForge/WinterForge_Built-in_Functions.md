@@ -2,6 +2,7 @@
 [CSharp Usage](CSharp_Usage.md)  
 [Syntax Features](Syntax_Features.md)  
 [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+[Custom Value Providers](CustomValueProvider_Examples.md)  
 
 ## _ref(int)
 

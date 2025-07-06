@@ -10,6 +10,7 @@ Regardless, ive had a blast working on them
 [CSharp Usage](CSharp_Usage.md)  
 [Syntax Features](Syntax_Features.md)  
 [Built-in Functions](WinterForge_Built-in_Functions.md)  
+[Custom Value Providers](CustomValueProvider_Examples.md)  
 
 Define an anonymous type:
 ```

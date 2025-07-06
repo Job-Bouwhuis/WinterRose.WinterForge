@@ -4,6 +4,7 @@
 [CSharp Usage](CSharp_Usage.md)  
 [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
 [Built-in Functions](WinterForge_Built-in_Functions.md)  
+[Custom Value Providers](CustomValueProvider_Examples.md)  
 
 ## Creating instances
 ```
@@ -141,3 +142,11 @@ Comments are defined like this:
 ```
 Its like that in both the human readable syntax, and the opcode syntax, however i dont know why you would want to write comments in the opcode syntax, as its not human readable anyway.
 it was added for the "// Parsed by WinterForge {version}" line.
+
+## Multi line strings
+```
+myString = """""
+This is my multuline
+string. you can also put up to 4 consecutive quotes in here """"
+"""""
+```
