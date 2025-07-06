@@ -69,7 +69,7 @@ WinterForge.DeserializeFromHumanReadableFile(string, WinterForgeProgressTracker)
 WinterForge.DeserializeFromHumanReadableFile<T>(string, WinterForgeProgressTracker)
 
 // example:
-Foo foo = WinterForge.DeserializeFromFile("foo.txt");
+Foo foo = WinterForge.DeserializeFromFile<Foo>("foo.txt");
 ```
 
 #### Asynchronous
@@ -93,16 +93,17 @@ WinterForge.DeserializeFromHumanReadableFileAsync(string, WinterForgeProgressTra
 WinterForge.DeserializeFromHumanReadableFileAsync<T>(string, WinterForgeProgressTracker)
 
 // example:
-WinterForgeDeserializationTask deserTask = WinterForge.DeserializeFromFile("foo.txt);
+WinterForgeDeserializationTask deserTask = WinterForge.DeserializeFromFile<Foo>("foo.txt);
 Foo f = await deserTask; 
 
 // or skip creating the variable for the deserTask and await the deserialize method directly
-f = await WinterForge.DeserializeFromFile("foo.txt");
+f = await WinterForge.DeserializeFromFile<Foo>("foo.txt");
 ```
 
-## Format conversion
+## Format conversion. 
+WinterForge only supports human readable > opcodes. it does not support opcodes > human readable  
 ```cs
-WinterForge.ConvertHumanReadable(Stream, Stream)
+WinterForge.ConvertFromStreamToString(Stream, Stream)
 
 WinterForge.ConvertFromFileToFile(string, string)
 WinterForge.ConvertFromStringToString(string)
@@ -111,4 +112,7 @@ WinterForge.ConvertFromStringToFile(string, string)
 
 WinterForge.ConvertFromFileToStream(string)
 WinterForge.ConvertFromStringToStream(string)
+
+// example:
+WinterForge.ConvertFromFileToFile("foo.txt");
 ```
