@@ -9,6 +9,19 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinterRose.Reflection", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinterRose.WinterForge", "src\WinterRose.WinterForge\WinterRose.WinterForge.csproj", "{907DE2CF-5234-72AB-CB5A-EF7CA4C0F6AF}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UsageDocs", "UsageDocs", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WinterForge", "WinterForge", "{B43472FE-BB19-40E1-803C-07CC445E7B7A}"
+	ProjectSection(SolutionItems) = preProject
+		UsageDocs\WinterRose.WinterForge\Access_Restrictions.md = UsageDocs\WinterRose.WinterForge\Access_Restrictions.md
+		UsageDocs\WinterRose.WinterForge\Anonymous_Type_Syntax.md = UsageDocs\WinterRose.WinterForge\Anonymous_Type_Syntax.md
+		UsageDocs\WinterRose.WinterForge\CSharp_Usage.md = UsageDocs\WinterRose.WinterForge\CSharp_Usage.md
+		UsageDocs\WinterRose.WinterForge\CustomValueProvider_Examples.md = UsageDocs\WinterRose.WinterForge\CustomValueProvider_Examples.md
+		UsageDocs\WinterRose.WinterForge\FlowHooks.md = UsageDocs\WinterRose.WinterForge\FlowHooks.md
+		UsageDocs\WinterRose.WinterForge\Syntax_Features.md = UsageDocs\WinterRose.WinterForge\Syntax_Features.md
+		UsageDocs\WinterRose.WinterForge\WinterForge_Built-in_Functions.md = UsageDocs\WinterRose.WinterForge\WinterForge_Built-in_Functions.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,6 +43,9 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B43472FE-BB19-40E1-803C-07CC445E7B7A} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {F6F597C7-96B7-4BFB-9AD1-505A1CF7CF26}

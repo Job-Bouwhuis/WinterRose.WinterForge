@@ -90,18 +90,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// </summary>
         /// <param name="instructions"></param>
         /// <returns></returns>
-        public unsafe object? Execute(List<Instruction> instructions)
+        public unsafe object? Execute(List<Instruction> instructions, AccessFilterKind FilterKindOnNewFilter)
         {
-#if DEBUG
-            if(AccessFilterCache.FilterKind == AccessFilterKind.Blacklist)
-            {
-                string msg = "WARN - WinterForge will allow all method calls and member " +
-                    "accesses unless explicitly blacklisted through 'AccessFilterCache'";
-                progressTracker?.Report(msg);
-                System.Diagnostics.Debug.WriteLine(msg);
-            }
-#endif
-
             ObjectDisposedException.ThrowIf(IsDisposed, this);
             instructionTotal = instructions.Count;
             try
@@ -194,7 +184,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.ACCESS:
                             {
                                 object o = context.ValueStack.Pop();
-                                AccessFilterCache.Validate(o is Type ? (Type)o : o.GetType(), instruction.Args[0]);
+                                AccessFilterCache.Validate(o is Type ? (Type)o : o.GetType(), AccessFilterKind.Blacklist, instruction.Args[0]);
                                 ReflectionHelper rh = CreateReflectionHelper(ref o, out _);
                                 context.ValueStack.Push(rh.GetValueFrom(instruction.Args[0]));
                                 break;
@@ -206,7 +196,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                                 var target = context.ValueStack.Pop();
 
-                                AccessFilterCache.Validate(target is Type ? (Type)target : target.GetType(), field);
+                                AccessFilterCache.Validate(target is Type ? (Type)target : target.GetType(), AccessFilterKind.Blacklist, field);
 
                                 var helper = CreateReflectionHelper(ref target, out object actual);
 
@@ -440,7 +430,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
 
             var target = context.ValueStack.Pop();
-            AccessFilterCache.Validate(target is Type ? (Type)target : target.GetType(), methodName);
+            AccessFilterCache.Validate(target is Type type ? type : target.GetType(), AccessFilterKind.Blacklist, methodName);
 
             progressTracker?.OnMethod(target.GetType().Name, methodName);
 
