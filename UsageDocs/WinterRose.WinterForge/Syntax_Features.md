@@ -36,7 +36,15 @@ element2,
 element3
 ]
 ```
-Elements can be on the same line, or the next line. the comma that seperates the elements can also be on its own seperate line
+Elements can be on the same line, or the next line. the comma that seperates the elements can also be on its own seperate line such as:
+```
+<collectiontype>[
+element1
+,
+element2
+,
+element3
+]```
 
 #### int collection as top level
 ```
@@ -50,7 +58,6 @@ nums = <int>[1, 2, 3, 4, 5]
 ```
 
 ## Dictionary collections
-**STILL A WORK IN PROGRESS**
 
 ```
 <keytype, valuetype>[
