@@ -1,4 +1,4 @@
-# Stream-Based Object Serialization and Deserialization — WinterForge
+# Stream-Based Object Serialization and Deserialization WinterForge™
 
 WinterForge is a flexible and human-friendly object 
 serialization system that works around your project, not the other way around. 
