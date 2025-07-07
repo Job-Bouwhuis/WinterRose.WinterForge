@@ -3,7 +3,7 @@ The abstract class to give WinterForge some context on how to serialize the valu
 rather than doing it per-field, its able to be given a single value.
 
 #### NOTE:
-This value should *not* contain the space character, or it should be wrapped in quotes (as such: "your value")
+This value should *not* contain the space character, or it should be wrapped in quotes (as such: "your value")  
 On the 'GetObject' method (more on that method below) you do not have to account for these quotes, they are removed automatically
 
 #### Other docs
@@ -18,14 +18,16 @@ On the 'GetObject' method (more on that method below) you do not have to account
 ```cs
 class MyValueProvider : CustomValueProvider<Foo>
 {
+    // automatically called when serializing an object of type 'Foo'
     public override string CreateString(Foo obj, ObjectSerializer serializer)
     {
         return $"\"{obj.Name}\"";
     }
 
+    // automatically called when deserializing an object of type 'Foo'
     public override Foo CreateObject(string value, InstructionExecutor executor)
     {
-        return Foo.FromName(value);
+        return new Foo(value);
     }
 }
 
