@@ -20,6 +20,13 @@ using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterForgeTests;
 
+public enum Gender
+{
+    Male,
+    Female,
+    Other
+}
+
 internal class Program
 {
     public static int data = 15;
@@ -29,7 +36,23 @@ internal class Program
         WinterForge.GlobalAccessRestriction = WinterForgeGlobalAccessRestriction.AllAccessing;
 
         string opcodes = WinterForge.ConvertFromStringToString("""
-            Program->data = 10;
+            Person : 0 {
+                name = "Roza";
+                age = 21;
+                isBald = false;
+                gender = Gender.Female;
+                mother = null;
+                children = <Person>[
+                    Person : 1 {
+                        name = "Riven";
+                        age = 5;
+                        isBald = false;
+                        gender = Gender.Male;
+                        children = null;
+                        mother = _ref(0);
+                    }
+                ]
+            }
             """);
 
         var attack = WinterForge.DeserializeFromString<Anonymous>(opcodes);

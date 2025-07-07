@@ -24,6 +24,8 @@ all folks are welcome!
 [Custom Value Providers](UsageDocs/WinterRose.WinterForge/CustomValueProvider_Examples.md)  
 [Flow Hooks](UsageDocs/WinterRose.WinterForge/FlowHooks.md)  
 [Access Restrictions](UsageDocs/WinterRose.WinterForge/Access_Restrictions.md)  
+  
+[Find quick start and syntax examples here!](##Quick Examples)
 
 ## Core Features
 
@@ -85,6 +87,99 @@ all folks are welcome!
   - Templates and repeatable code blocks.  
   - Conditional serialization and expression support.  
 
-## License
 
+
+## Quick Examples
+Using these types as an example
+```cs
+public enum Gender
+{
+    Male,
+    Female,
+    Other
+}
+
+public class Person
+{
+    public string name;
+    public int age;
+    public bool isBald;
+    public Gender gender;
+    public List<Person> children;
+    public Person mother;
+
+    public static Person NewPerson()
+    {
+        Person p = new();
+        p.name = "Roza";
+        p.age = 21;
+        p.isBald = false;
+        p.gender = Gender.Female;
+
+        Person kid = new();
+        kid.name = "Riven";
+        kid.age = 5;
+        kid.isBald = false;
+        kid.gender = Gender.Male;
+        kid.mother = p;
+
+        p.children = [kid];
+    }
+}
+```
+
+Serialized using:
+```cs
+WinterForge.SerializeToFile(foo, "foo.txt");
+```
+Deserialized using:
+```cs
+Foo fooClone = WinterForge.DeserializeFromFile<Foo>("foo.txt");
+```
+#### Human Readable
+```
+Person : 0 {
+    name = "Roza";
+    age = 21;
+    isBald = false;
+    gender = Gender.Female;
+    mother = null;
+    children = <Person>[
+        Person : 1 {
+            name = "Riven";
+            age = 5;
+            isBald = false;
+            gender = Gender.Male;
+            children = null;
+            mother = _ref(0);
+        }
+    ]
+}
+```
+
+#### Opcodes
+Opcode format may change in the future. Backwards compatibility between this format and the potential new one will exist if the format ever changes
+```
+0 Person 0 0
+1 name "Roza"
+1 age 21
+1 isBald false
+1 gender 1
+1 mother null
+6 Person
+0 Person 1 0
+1 name "Riven"
+1 age 5
+1 isBald false
+1 gender 0
+1 children null
+1 mother _ref(0)
+2 1
+5 _ref(1)
+7
+1 children _stack()
+2 0
+```
+
+## License
 You can find the license details [here](LICENSE.md).
