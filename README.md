@@ -1,4 +1,4 @@
-# Stream-Based Object Serialization and Deserialization WinterForge™
+# Stream-Based Object Serialization and Deserialization WinterForge
 
 WinterForge is a flexible and human-friendly object 
 serialization system that works around your project, not the other way around. 
@@ -9,6 +9,8 @@ format for devs, plus a compact opcode-based format
 It's tuned for the kind of power it gives you, especially 
 when you're dealing with complex object setups or need to handle versioning gracefully. 
 So yeah, maybe not the fastest out there, but definitely one of the most capable.
+
+The projects within this repository are licensed under the MPL-2.0 license
 
 **Slight disclaimer**
 I work on this package alone and on my free time. updates may be slow.
