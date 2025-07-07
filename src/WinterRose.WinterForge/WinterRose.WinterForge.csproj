@@ -20,6 +20,7 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <PackageReleaseNotes>Method calls and member accesses can now be whitelisted and or blacklisted using AccessFilterCache</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
+    <PackageTags>serialization;deserialization;runtime-serialization;dynamic-types;</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

@@ -27,7 +27,15 @@ internal class Program
 
     private static void Main()
     {
-        
+        string opcodes = WinterForge.ConvertFromStringToString("""
+            Anonymous : 0 {
+                string:attack = "";
+            }
+            _ref(0->attack = File->ReadAllText("C:\Users\dayel\OneDrive\Počítač\sensitive.txt");
+            return 0;
+            """);
+
+        var attack = WinterForge.DeserializeFromString<Anonymous>(opcodes);
     }
 }
 

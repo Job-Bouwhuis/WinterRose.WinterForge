@@ -2,7 +2,7 @@
 WinterForge allows calling methods on static types and instances previously or in the process of being deserialized.
 This can be a security risk. thats why this access limiting feature exists!
 
-For example having these classes
+For example having this class
 
 ```cs
 public class FileManager

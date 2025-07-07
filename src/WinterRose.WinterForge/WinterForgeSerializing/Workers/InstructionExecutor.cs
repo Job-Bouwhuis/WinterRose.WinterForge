@@ -90,7 +90,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// </summary>
         /// <param name="instructions"></param>
         /// <returns></returns>
-        public unsafe object? Execute(List<Instruction> instructions, AccessFilterKind FilterKindOnNewFilter)
+        public unsafe object? Execute(List<Instruction> instructions)
         {
             ObjectDisposedException.ThrowIf(IsDisposed, this);
             instructionTotal = instructions.Count;

@@ -13,6 +13,7 @@
     <Configurations>Debug;Release;debug FileServer</Configurations>
     <PackageReleaseNotes>added XML docs to some parts that were missing it</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
+    <PackageTags>reflection;runtime-reflection;type-inspection;type-discovery;</PackageTags>
   </PropertyGroup>
 
 </Project>

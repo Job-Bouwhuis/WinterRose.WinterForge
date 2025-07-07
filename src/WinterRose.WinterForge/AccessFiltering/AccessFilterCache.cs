@@ -44,7 +44,7 @@ namespace WinterRose.WinterForgeSerialization
             GetFilter(typeof(Environment), AccessFilterKind.Whitelist);
             GetFilter(typeof(AppDomain), AccessFilterKind.Whitelist);
             GetFilter(typeof(Console), AccessFilterKind.Whitelist);
-
+            
             GetFilter(typeof(Type), AccessFilterKind.Whitelist);
             GetFilter(typeof(MemberInfo), AccessFilterKind.Whitelist);
             GetFilter(typeof(MethodInfo), AccessFilterKind.Whitelist);
@@ -86,7 +86,35 @@ namespace WinterRose.WinterForgeSerialization
 
             GetFilter(typeof(Debug), AccessFilterKind.Whitelist);
             GetFilter(typeof(Trace), AccessFilterKind.Whitelist);
+
+            GetFiltersForDllImports();
         }
+
+        private static void GetFiltersForDllImports()
+        {
+            foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                foreach (Type type in asm.GetTypes())
+                {
+                    AccessFilter filter = null;
+
+                    foreach (MethodInfo method in type.GetMethods(BindingFlags.Public |
+                                                                  BindingFlags.NonPublic |
+                                                                  BindingFlags.Instance |
+                                                                  BindingFlags.Static |
+                                                                  BindingFlags.DeclaredOnly))
+                    {
+                        if (method.IsDefined(typeof(DllImportAttribute), false) ||
+                            method.IsDefined(typeof(LibraryImportAttribute), false))
+                        {
+                            filter ??= GetFilter(type, AccessFilterKind.Blacklist);
+                            filter.Govern(method.Name);
+                        }
+                    }
+                }
+            }
+        }
+
 
         /// <summary>
         /// Gets the filter for the given <paramref name="type"/>. if it doesnt exist yet, a whitelist or blacklist is created depending on the global state
