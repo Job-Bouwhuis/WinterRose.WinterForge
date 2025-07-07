@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.23</Version>
+    <Version>25.2.24</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -17,7 +17,7 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <PackageReleaseNotes>Method calls and member accesses can now be whitelisted and or blacklisted using AccessFilterCache</PackageReleaseNotes>
+    <PackageReleaseNotes>Added access restrictions to the -&gt; syntax. reworked project file structure and added usage docs to the github</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
     <PackageTags>serialization;deserialization;runtime-serialization;dynamic-types;</PackageTags>
