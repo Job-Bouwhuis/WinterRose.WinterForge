@@ -303,7 +303,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 throw new Exception("Expected type to initialize list");
             Type itemType = ResolveType(args[0]);
 
-            if(args.Length == 2)
+            if (args.Length == 2)
             {
                 // its a dictionary
                 Type valueType = ResolveType(args[1]);
@@ -395,10 +395,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             object? value = GetArgumentValue(rawValue, 1, member.Type, val =>
             {
                 if (member.Type.IsArray)
-                {
-                    if (member.Type.IsArray)
-                        val = ((IList)val).GetInternalArray();
-                }
+                    val = ((IList)val).GetInternalArray();
 
                 member.SetValue(ref o, val);
             });
@@ -454,7 +451,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             var collection = listStack.Peek();
 
-            if(collection is ListDefinition list)
+            if (collection is ListDefinition list)
             {
                 object element = GetArgumentValue(args[0], 0, list.ElementType, o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
                 if (element is Dispatched)
@@ -477,7 +474,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 dict.Values.Add(key, value);
             }
-            
+
         }
         private object GetArgumentValue(string arg, int argIndex, Type desiredType, Action<object> onDispatch)
         {

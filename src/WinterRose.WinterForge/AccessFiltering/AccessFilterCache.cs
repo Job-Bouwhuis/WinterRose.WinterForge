@@ -33,68 +33,59 @@ namespace WinterRose.WinterForgeSerialization
 
         static AccessFilterCache()
         {
-            // IO and filesystem
-            GetFilter(typeof(File), AccessFilterKind.Blacklist);
-            GetFilter(typeof(FileInfo), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Directory), AccessFilterKind.Blacklist);
-            GetFilter(typeof(DirectoryInfo), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Path), AccessFilterKind.Blacklist);
-            GetFilter(typeof(DriveInfo), AccessFilterKind.Blacklist);
+            GetFilter(typeof(File), AccessFilterKind.Whitelist);
+            GetFilter(typeof(FileInfo), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Directory), AccessFilterKind.Whitelist);
+            GetFilter(typeof(DirectoryInfo), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Path), AccessFilterKind.Whitelist);
+            GetFilter(typeof(DriveInfo), AccessFilterKind.Whitelist);
 
-            // Process and environment
-            GetFilter(typeof(Process), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Environment), AccessFilterKind.Blacklist);
-            GetFilter(typeof(AppDomain), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Console), AccessFilterKind.Blacklist);
+            GetFilter(typeof(Process), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Environment), AccessFilterKind.Whitelist);
+            GetFilter(typeof(AppDomain), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Console), AccessFilterKind.Whitelist);
 
-            // Reflection and dynamic access
-            GetFilter(typeof(Type), AccessFilterKind.Blacklist);
-            GetFilter(typeof(MemberInfo), AccessFilterKind.Blacklist);
-            GetFilter(typeof(MethodInfo), AccessFilterKind.Blacklist);
-            GetFilter(typeof(FieldInfo), AccessFilterKind.Blacklist);
-            GetFilter(typeof(PropertyInfo), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Assembly), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Activator), AccessFilterKind.Blacklist);
-            GetFilter(typeof(RuntimeTypeHandle), AccessFilterKind.Blacklist);
+            GetFilter(typeof(Type), AccessFilterKind.Whitelist);
+            GetFilter(typeof(MemberInfo), AccessFilterKind.Whitelist);
+            GetFilter(typeof(MethodInfo), AccessFilterKind.Whitelist);
+            GetFilter(typeof(FieldInfo), AccessFilterKind.Whitelist);
+            GetFilter(typeof(PropertyInfo), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Assembly), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Activator), AccessFilterKind.Whitelist);
+            GetFilter(typeof(RuntimeTypeHandle), AccessFilterKind.Whitelist);
 
-            // Interop & native access
-            GetFilter(typeof(Marshal), AccessFilterKind.Blacklist);
-            GetFilter(typeof(GCHandle), AccessFilterKind.Blacklist);
-            GetFilter(typeof(UnmanagedFunctionPointerAttribute), AccessFilterKind.Blacklist);
+            GetFilter(typeof(Marshal), AccessFilterKind.Whitelist);
+            GetFilter(typeof(GCHandle), AccessFilterKind.Whitelist);
+            GetFilter(typeof(UnmanagedFunctionPointerAttribute), AccessFilterKind.Whitelist);
 
-            // Security & critical access
-            GetFilter(typeof(WindowsIdentity), AccessFilterKind.Blacklist);
-            GetFilter(typeof(WindowsPrincipal), AccessFilterKind.Blacklist);
+            GetFilter(typeof(WindowsIdentity), AccessFilterKind.Whitelist);
+            GetFilter(typeof(WindowsPrincipal), AccessFilterKind.Whitelist);
 
-            // Networking
-            GetFilter(typeof(WebClient), AccessFilterKind.Blacklist);
-            GetFilter(typeof(HttpClient), AccessFilterKind.Blacklist);
-            GetFilter(typeof(WebRequest), AccessFilterKind.Blacklist);
-            GetFilter(typeof(HttpWebRequest), AccessFilterKind.Blacklist);
-            GetFilter(typeof(HttpWebResponse), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Socket), AccessFilterKind.Blacklist);
-            GetFilter(typeof(TcpClient), AccessFilterKind.Blacklist);
-            GetFilter(typeof(TcpListener), AccessFilterKind.Blacklist);
+            GetFilter(typeof(WebClient), AccessFilterKind.Whitelist);
+            GetFilter(typeof(HttpClient), AccessFilterKind.Whitelist);
+            GetFilter(typeof(WebRequest), AccessFilterKind.Whitelist);
+            GetFilter(typeof(HttpWebRequest), AccessFilterKind.Whitelist);
+            GetFilter(typeof(HttpWebResponse), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Socket), AccessFilterKind.Whitelist);
+            GetFilter(typeof(TcpClient), AccessFilterKind.Whitelist);
+            GetFilter(typeof(TcpListener), AccessFilterKind.Whitelist);
 
-            // Serialization libraries (to prevent re-entry attacks)
-            GetFilter(typeof(DataContractSerializer), AccessFilterKind.Blacklist);
-            GetFilter(typeof(XmlSerializer), AccessFilterKind.Blacklist);
-            GetFilter(typeof(WinterForge), AccessFilterKind.Blacklist);
-            GetFilter(typeof(ObjectSerializer), AccessFilterKind.Blacklist);
-            GetFilter(typeof(HumanReadableParser), AccessFilterKind.Blacklist);
-            GetFilter(typeof(HumanReadableIndenter), AccessFilterKind.Blacklist);
-            GetFilter(typeof(InstructionExecutor), AccessFilterKind.Blacklist);
-            GetFilter(typeof(InstructionParser), AccessFilterKind.Blacklist);
+            GetFilter(typeof(DataContractSerializer), AccessFilterKind.Whitelist);
+            GetFilter(typeof(XmlSerializer), AccessFilterKind.Whitelist);
+            GetFilter(typeof(WinterForge), AccessFilterKind.Whitelist);
+            GetFilter(typeof(ObjectSerializer), AccessFilterKind.Whitelist);
+            GetFilter(typeof(HumanReadableParser), AccessFilterKind.Whitelist);
+            GetFilter(typeof(HumanReadableIndenter), AccessFilterKind.Whitelist);
+            GetFilter(typeof(InstructionExecutor), AccessFilterKind.Whitelist);
+            GetFilter(typeof(InstructionParser), AccessFilterKind.Whitelist);
 
-            // Dangerous threading stuff
-            GetFilter(typeof(Thread), AccessFilterKind.Blacklist);
-            GetFilter(typeof(ThreadPool), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Task), AccessFilterKind.Blacklist); // optional
-            GetFilter(typeof(Timer), AccessFilterKind.Blacklist);
+            GetFilter(typeof(Thread), AccessFilterKind.Whitelist);
+            GetFilter(typeof(ThreadPool), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Task), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Timer), AccessFilterKind.Whitelist);
 
-            // Anything from System.Diagnostics besides Process (already blacklisted)
-            GetFilter(typeof(Debug), AccessFilterKind.Blacklist);
-            GetFilter(typeof(Trace), AccessFilterKind.Blacklist);
+            GetFilter(typeof(Debug), AccessFilterKind.Whitelist);
+            GetFilter(typeof(Trace), AccessFilterKind.Whitelist);
         }
 
         /// <summary>
@@ -142,10 +133,12 @@ namespace WinterRose.WinterForgeSerialization
                 type.GetGenericTypeDefinition().FullName :
                 type.FullName;
 
-                throw new WinterForgeAccessFilterException($"Accessing Member {fullName}.{v} is not allowed");
+                throw new WinterForgeAccessIllegalException($"Accessing Member {fullName}.{v} is not allowed");
             }
         }
     }
+
+    internal class WinterForgeAccessIllegalException(string msg) : Exception(msg);
 
     [Serializable]
     internal class WinterForgeAccessFilterException : Exception
@@ -189,15 +182,10 @@ namespace WinterRose.WinterForgeSerialization
         public HashSet<string> GovernedMembers { get; private set; } = [];
 
         /// <summary>
-        /// These members are exemt from the filter. even when <c><see cref="ActsOnAllMembers"/> = <see langword="true"/></c>
+        /// These members are explicitly exemt from the filter.
         /// </summary>
         [IncludeWithSerialization]
         public HashSet<string> ExceptThese { get; private set; } = [];
-
-        /// <summary>
-        /// When <see langword="true"/>, the filter applies to <b>all</b> members of <see cref="Type"/>
-        /// </summary>
-        public bool ActsOnAllMembers => GovernedMembers.Count is 0;
 
         /// <summary>
         /// The kind of filter this is
@@ -249,13 +237,10 @@ namespace WinterRose.WinterForgeSerialization
         {
             if (memberName.StartsWith("get_", StringComparison.Ordinal) ||
                 memberName.StartsWith("set_", StringComparison.Ordinal))
-                return false;
+                return false; // default to block property getters and setters for they should be accessed through the property, not the direct methods
 
             if (ExceptThese.Contains(memberName))
                 return !IsWhitelist;
-
-            if (ActsOnAllMembers)
-                return IsWhitelist;
 
             bool listed = GovernedMembers.Contains(memberName);
             return IsWhitelist ? listed : !listed;
