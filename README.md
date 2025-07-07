@@ -12,22 +12,22 @@ So yeah, maybe not the fastest out there, but definitely one of the most capable
 
 **Slight disclaimer**
 I work on this package alone and on my free time. updates may be slow.
-Contact me on discord 'thesnowowl' if you want to get into contact with me. 
+Contact me on discord `thesnowowl` if you want to get into contact with me. 
 be it in interest in usage of WinterForge, contribution, or other packages made by me,
 all folks are welcome!
 
-#### Find Usage docs here!
-[CSharp Usage](UsageDocs/WinterRose.WinterForge/CSharp_Usage.md)  
-[Syntax Features](UsageDocs/WinterRose.WinterForge/Syntax_Features.md)  
-[Anonymous Type Syntax](UsageDocs/WinterRose.WinterForge/Anonymous_Type_Syntax.md)  
-[Built-in Functions](UsageDocs/WinterRose.WinterForge/WinterForge_Built-in_Functions.md)  
-[Custom Value Providers](UsageDocs/WinterRose.WinterForge/CustomValueProvider_Examples.md)  
-[Flow Hooks](UsageDocs/WinterRose.WinterForge/FlowHooks.md)  
-[Access Restrictions](UsageDocs/WinterRose.WinterForge/Access_Restrictions.md)  
+#### **Find Usage docs here!**
+- [CSharp Usage](UsageDocs/WinterRose.WinterForge/CSharp_Usage.md)  
+- [Syntax Features](UsageDocs/WinterRose.WinterForge/Syntax_Features.md)  
+- [Anonymous Type Syntax](UsageDocs/WinterRose.WinterForge/Anonymous_Type_Syntax.md)  
+- [Built-in Functions](UsageDocs/WinterRose.WinterForge/WinterForge_Built-in_Functions.md)  
+- [Custom Value Providers](UsageDocs/WinterRose.WinterForge/CustomValueProvider_Examples.md)  
+- [Flow Hooks](UsageDocs/WinterRose.WinterForge/FlowHooks.md)  
+- [Access Restrictions](UsageDocs/WinterRose.WinterForge/Access_Restrictions.md)  
   
 [Find quick start and syntax examples here!](#quick-examples)  
 
-## Core Features
+## **Core Features**
 
 - **Stream-based I/O:**  
   - Utilizes `IO.Stream` for serialization and deserialization, enabling flexible storage and transfer.
@@ -72,7 +72,7 @@ all folks are welcome!
   - Dynamically discovers types and members.  
   - Supports runtime variables and integration with reflection helpers.
 
-## Design Philosophy
+## **Design Philosophy**
 
 - **Performance + Developer Clarity:**  
   Optimized to serialize thousands of objects in milliseconds while maintaining human readability for easier debugging and version control.
@@ -80,7 +80,7 @@ all folks are welcome!
 - **Structure-First Approach:**  
   Data is always read in the order it is written, ensuring deterministic and reliable serialization.
 
-## Current Limitations & Future Plans
+## **Current Limitations & Future Plans**
 - Upcoming features:  
   - Support for math and boolean expressions within serialized data.  
   - Importing and including other WinterForge files/modules.  
@@ -89,7 +89,7 @@ all folks are welcome!
 
 
 
-## Quick Examples
+## **Quick Examples**
 Using these types as an example
 ```cs
 public enum Gender
@@ -124,19 +124,22 @@ public class Person
         kid.mother = p;
 
         p.children = [kid];
+
+        return p;
     }
 }
 ```
 
 Serialized using:
 ```cs
+Person foo = Person.NewPerson();
+// Serialized using
 WinterForge.SerializeToFile(foo, "foo.txt");
+
+// Deserialized using 
+Person fooClone = WinterForge.DeserializeFromFile<Person>("foo.txt");
 ```
-Deserialized using:
-```cs
-Foo fooClone = WinterForge.DeserializeFromFile<Foo>("foo.txt");
-```
-#### Human Readable
+#### **Human Readable**
 ```
 Person : 0 {
     name = "Roza";
@@ -157,7 +160,7 @@ Person : 0 {
 }
 ```
 
-#### Opcodes
+#### **Opcodes**
 Opcode format may change in the future. Backwards compatibility between this format and the potential new one will exist if the format ever changes
 ```
 0 Person 0 0
@@ -181,5 +184,5 @@ Opcode format may change in the future. Backwards compatibility between this for
 2 0
 ```
 
-## License
-You can find the license details [here](LICENSE.md).
+## **License**
+This project is licensed under the terms described [here](LICENSE.md).
