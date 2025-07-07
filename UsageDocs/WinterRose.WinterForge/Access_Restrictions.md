@@ -8,12 +8,12 @@ During standard deserialization there is no governing which fields can have thei
 Without accessing, theres no way to read a variable  
 
 #### Other docs
-[CSharp Usage](CSharp_Usage.md)  
-[Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
-[Syntax Features](Syntax_Features.md)  
-[Built-in Functions](WinterForge_Built-in_Functions.md)  
-[Custom Value Providers](CustomValueProvider_Examples.md)  
-[Flow Hooks](FlowHooks.md) 
+- [CSharp Usage](CSharp_Usage.md)  
+- [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+- [Syntax Features](Syntax_Features.md)  
+- [Built-in Functions](WinterForge_Built-in_Functions.md)  
+- [Custom Value Providers](CustomValueProvider_Examples.md)  
+- [Flow Hooks](FlowHooks.md) 
 
 ## Examples:
 ```cs

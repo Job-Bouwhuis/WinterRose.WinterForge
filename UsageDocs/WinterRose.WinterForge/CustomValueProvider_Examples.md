@@ -7,12 +7,12 @@ This value should *not* contain the space character, or it should be wrapped in 
 On the 'GetObject' method (more on that method below) you do not have to account for these quotes, they are removed automatically
 
 #### Other docs
-[CSharp Usage](CSharp_Usage.md)  
-[Syntax Features](Syntax_Features.md)  
-[Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
-[Built-in Functions](WinterForge_Built-in_Functions.md)  
-[Flow Hooks](FlowHooks.md)  
-[Access Restrictions](Access_Restrictions.md)  
+- [CSharp Usage](CSharp_Usage.md)  
+- [Syntax Features](Syntax_Features.md)  
+- [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+- [Built-in Functions](WinterForge_Built-in_Functions.md)  
+- [Flow Hooks](FlowHooks.md)  
+- [Access Restrictions](Access_Restrictions.md)  
 
 ## Code examples
 ```cs

@@ -1,12 +1,12 @@
 # Winterforge, a very flexible serializer which is still fast for its broad featureset
 
 #### Other docs
-[CSharp Usage](CSharp_Usage.md)  
-[Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
-[Built-in Functions](WinterForge_Built-in_Functions.md)  
-[Custom Value Providers](CustomValueProvider_Examples.md)  
-[Flow Hooks](FlowHooks.md)  
-[Access Restrictions](Access_Restrictions.md)  
+- [CSharp Usage](CSharp_Usage.md)  
+- [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+- [Built-in Functions](WinterForge_Built-in_Functions.md)  
+- [Custom Value Providers](CustomValueProvider_Examples.md)  
+- [Flow Hooks](FlowHooks.md)  
+- [Access Restrictions](Access_Restrictions.md)  
 
 ## Creating instances
 ```

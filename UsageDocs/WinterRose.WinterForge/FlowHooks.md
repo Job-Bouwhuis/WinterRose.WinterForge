@@ -2,12 +2,12 @@
 A way for an object instance to have a say in what happens before and after its handled
 
 #### Other docs
-[CSharp Usage](CSharp_Usage.md)  
-[Syntax Features](Syntax_Features.md)  
-[Built-in Functions](WinterForge_Built-in_Functions.md)  
-[Custom Value Providers](CustomValueProvider_Examples.md)  
-[Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
-[Access Restrictions](Access_Restrictions.md)  
+- [CSharp Usage](CSharp_Usage.md)  
+- [Syntax Features](Syntax_Features.md)  
+- [Built-in Functions](WinterForge_Built-in_Functions.md)  
+- [Custom Value Providers](CustomValueProvider_Examples.md)  
+- [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+- [Access Restrictions](Access_Restrictions.md)  
 
 Done by marking instance methods with one of these attributes  
 [BeforeSerialize]  

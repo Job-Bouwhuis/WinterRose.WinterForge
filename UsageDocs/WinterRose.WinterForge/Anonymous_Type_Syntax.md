@@ -6,12 +6,12 @@ ill be honest barely anyone may actually use it in a actual project rather than 
 Regardless, ive had a blast working on them
 
 #### Other docs
-[CSharp Usage](CSharp_Usage.md)  
-[Syntax Features](Syntax_Features.md)  
-[Built-in Functions](WinterForge_Built-in_Functions.md)  
-[Custom Value Providers](CustomValueProvider_Examples.md)  
-[Flow Hooks](FlowHooks.md)  
-[Access Restrictions](Access_Restrictions.md)  
+- [CSharp Usage](CSharp_Usage.md)  
+- [Syntax Features](Syntax_Features.md)  
+- [Built-in Functions](WinterForge_Built-in_Functions.md)  
+- [Custom Value Providers](CustomValueProvider_Examples.md)  
+- [Flow Hooks](FlowHooks.md)  
+- [Access Restrictions](Access_Restrictions.md)  
 
 Define an anonymous type:
 ```

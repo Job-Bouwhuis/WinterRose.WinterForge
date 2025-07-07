@@ -5,12 +5,12 @@ serialize to various formats, and deserialize from those formats. aswell as to c
 readable to the optimized format.
 
 #### Other docs
-[Syntax Features](Syntax_Features.md)  
-[Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
-[Built-in Functions](WinterForge_Built-in_Functions.md)  
-[Custom Value Providers](CustomValueProvider_Examples.md)  
-[Flow Hooks](FlowHooks.md)  
-[Access Restrictions](Access_Restrictions.md)  
+- [Syntax Features](Syntax_Features.md)  
+- [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+- [Built-in Functions](WinterForge_Built-in_Functions.md)  
+- [Custom Value Providers](CustomValueProvider_Examples.md)  
+- [Flow Hooks](FlowHooks.md)  
+- [Access Restrictions](Access_Restrictions.md)  
 
 ## Serialization
 
