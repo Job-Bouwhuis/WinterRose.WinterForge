@@ -25,7 +25,7 @@ all folks are welcome!
 [Flow Hooks](UsageDocs/WinterRose.WinterForge/FlowHooks.md)  
 [Access Restrictions](UsageDocs/WinterRose.WinterForge/Access_Restrictions.md)  
   
-[#quick-examples](#quick-examples)
+[Find quick start and syntax examples here!](#quick-examples)  
 
 ## Core Features
 
