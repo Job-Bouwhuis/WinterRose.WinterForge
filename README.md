@@ -4,7 +4,7 @@ WinterForge is a flexible and human-friendly object
 serialization system that works around your project, not the other way around. 
 It's not as blazing fast as barebones formats like JSON, but for everything it does, 
 it's honestly pretty quick. You get the best of both worlds: a clean and readable text 
-format for devs, plus a compact opcode-based format for when performance matters.
+format for devs, plus a compact opcode-based format
 
 It's tuned for the kind of power it gives you, especially 
 when you're dealing with complex object setups or need to handle versioning gracefully. 
