@@ -4,7 +4,6 @@ using System.Data;
 using System.Text;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
-using WinterRose.WinterForgeSerialization;
 using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterRose.WinterForgeSerializing.Workers

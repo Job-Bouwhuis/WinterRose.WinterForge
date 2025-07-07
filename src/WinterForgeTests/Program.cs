@@ -15,7 +15,6 @@ using WinterRose.AnonymousTypes;
 using WinterRose.ForgeGuardChecks;
 using WinterRose.Reflection;
 using WinterRose.Vectors;
-using WinterRose.WinterForgeSerialization;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Logging;
 
@@ -27,12 +26,10 @@ internal class Program
 
     private static void Main()
     {
+        WinterForge.GlobalAccessRestriction = WinterForgeGlobalAccessRestriction.AllAccessing;
+
         string opcodes = WinterForge.ConvertFromStringToString("""
-            Anonymous : 0 {
-                string:attack = "";
-            }
-            _ref(0->attack = File->ReadAllText("C:\Users\dayel\OneDrive\Počítač\sensitive.txt");
-            return 0;
+            Program->data = 10;
             """);
 
         var attack = WinterForge.DeserializeFromString<Anonymous>(opcodes);

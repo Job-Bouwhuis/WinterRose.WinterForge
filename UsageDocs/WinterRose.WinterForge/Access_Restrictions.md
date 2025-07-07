@@ -2,8 +2,13 @@
 WinterForge allows calling methods on static types and instances previously or in the process of being deserialized.
 This can be a security risk. thats why this access limiting feature exists!
 
-For example having this class
+#### NOTE:
+These filters and the global restrictions operate ONLY on the accessing syntax such as "Foo->bar" or "Foo->Qar()"  
+During standard deserialization there is no governing which fields can have their value set.  
+Without accessing, theres no way to read a variable  
+  
 
+## Examples:
 ```cs
 public class FileManager
 {
@@ -58,3 +63,29 @@ alias 3 as tcp
 // throws 'WinterForgeAccessIllegalException'
 tcp->Send(_ref(1)->fileReadAttack);
 ```
+
+
+## Globalized restrictions
+`WinterForge.GlobalAccessRestriction = WinterForgeGlobalAccessRestriction.AllAccessing;`
+having the options of these values:  
+#### `AllAccessing`
+- **All access is blocked**, including any syntax using `->`.
+- Serializing **statics is not possible** with this setting.
+
+#### `InstanceOnly`
+- **All access on static types is blocked**.
+- Serializing **statics is not possible** with this setting.
+
+#### `InstanceVariablesOnly`
+- **All access to static members and all methods (static + instance) is blocked**.
+- Only instance variables are allowed.
+- Serializing **statics is not possible** with this setting.
+
+#### `StaticAndInstanceVariableOnly`
+- **All method access is blocked**, both static and instance.
+- **Static and instance variables are allowed**.
+- Serializing **statics is possible** with this setting.
+
+#### `NoGlobalBlock`
+- **No global rule applied**.
+- All access decisions are delegated to the configured `AccessFilter`.

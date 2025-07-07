@@ -97,7 +97,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return;
 
             // Constructor Definition: Type(arguments) : ID {
-            if (line.Contains('(') && line.Contains(')') && line.Contains(':') && line.Contains('{'))
+            if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
             {
                 int openParenIndex = line.IndexOf('(');
                 int closeParenIndex = line.IndexOf(')');
@@ -120,7 +120,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 ParseBlock(id);
             }
             // Constructor Definition with no block: Type(arguments) : ID;
-            else if (line.Contains('(') && line.Contains(')') && line.Contains(':') && line.EndsWith(";"))
+            else if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.EndsWith(";"))
             {
                 int openParenIndex = line.IndexOf('(');
                 int closeParenIndex = line.IndexOf(')');
@@ -143,7 +143,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 WriteLine($"{opcodeMap["END"]} {id}");
             }
             // Definition: Type : ID {
-            else if (line.Contains(':') && line.Contains('{'))
+            else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
             {
                 int colonIndex = line.IndexOf(':');
                 int braceIndex = line.IndexOf('{');
@@ -161,7 +161,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 depth++;
                 ParseBlock(id);
             }
-            else if (line.Contains(':') && line.EndsWith(';'))
+            else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.EndsWith(';'))
             {
                 string type;
                 string id;
@@ -179,7 +179,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
                 WriteLine($"{opcodeMap["END"]} {id}");
             }
-            else if (line.Contains(':'))
+            else if (ContainsSequenceOutsideQuotes(line, ":") != -1)
             {
                 string type;
                 string id;
@@ -924,6 +924,84 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             return -1;
         }
+
+        int ContainsSequenceOutsideQuotes(string text, string sequence)
+        {
+            if (sequence.Length == 0) return 0;                 // empty sequence is “found” at 0
+            if (text.Length < sequence.Length) return -1;       // obviously too short
+
+            bool insideQuotes = false;
+
+            for (int i = 0; i <= text.Length - sequence.Length; i++)
+            {
+                char current = text[i];
+
+                if (current == '"')
+                {
+                    bool escaped = i > 0 && text[i - 1] == '\\';
+                    if (!escaped) insideQuotes = !insideQuotes;
+                    continue;
+                }
+
+                if (!insideQuotes)
+                {
+                    bool found = true;
+                    for (int j = 0; j < sequence.Length; j++)
+                    {
+                        if (text[i + j] != sequence[j])
+                        {
+                            found = false;
+                            break;
+                        }
+                    }
+
+                    if (found)
+                        return i;
+                }
+            }
+
+            return -1;
+        }
+
+
+        int ContainsSequenceOutsideQuotes(StringBuilder sb, string sequence)
+        {
+            if (sequence.Length == 0) return 0;          // empty sequence is “found” at 0
+            if (sb.Length < sequence.Length) return -1;  // obviously too short
+
+            bool insideQuotes = false;
+
+            for (int i = 0; i <= sb.Length - sequence.Length; i++)
+            {
+                char current = sb[i];
+
+                if (current == '"')
+                {
+                    bool escaped = i > 0 && sb[i - 1] == '\\';
+                    if (!escaped) insideQuotes = !insideQuotes;
+                    continue;
+                }
+
+                if (!insideQuotes)
+                {
+                    bool found = true;
+                    for (int j = 0; j < sequence.Length; j++)
+                    {
+                        if (sb[i + j] != sequence[j])
+                        {
+                            found = false;
+                            break;
+                        }
+                    }
+
+                    if (found)
+                        return i;
+                }
+            }
+
+            return -1;
+        }
+
 
 
         private string ValidateValue(string value)

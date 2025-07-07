@@ -17,8 +17,8 @@ using WinterRose.WinterForgeSerializing.Workers;
 namespace WinterRose.WinterForgeSerializing
 {
     /// <summary>
-    /// The main delegation class for the WinterForge serialization system. <br></br><br></br>
-    /// 
+    /// The main delegation class for the WinterForge serialization system. <br></br>
+    /// First use tends to take a whole lot longer due to caching.<br></br><br></br>
     /// Do you have feedback, or are you hitting a wall? Feel free to reach out on Discord: '<b>thesnowowl</b>'
     /// </summary>
     public static class WinterForge
@@ -28,7 +28,7 @@ namespace WinterRose.WinterForgeSerializing
         /// </summary>
         public static List<Type> SupportedPrimitives { get; } =
            [
-               typeof(bool),
+                typeof(bool),
                 typeof(byte),
                 typeof(sbyte),
                 typeof(char),
@@ -43,6 +43,9 @@ namespace WinterRose.WinterForgeSerializing
                 typeof(ushort),
                 typeof(string)
            ];
+
+        /// <inheritdoc cref="WinterForgeGlobalAccessRestriction"/>
+        public static WinterForgeGlobalAccessRestriction GlobalAccessRestriction { get; set; }
 
         /// <summary>
         /// Serializes the given object directly to opcodes for fastest deserialization
@@ -170,7 +173,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeToStringAsync( object obj, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToString(obj, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeToStringAsync(object obj, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToString(obj, format, progressTracker));
         /// <summary>
         /// Serializes to a stream in the provided <paramref name="format"/>
         /// </summary>
@@ -179,7 +182,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeToStreamAsync( object obj, Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToStream(obj, stream, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeToStreamAsync(object obj, Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToStream(obj, stream, format, progressTracker));
         /// <summary>
         /// Serializes a static type to a file in the provided <paramref name="format"/>
         /// </summary>
@@ -188,7 +191,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeStaticToFileAsync( Type type, string path, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToFile(type, path, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeStaticToFileAsync(Type type, string path, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToFile(type, path, format, progressTracker));
         /// <summary>
         /// Serializes a static type to a string in the provided <paramref name="format"/>
         /// </summary>
@@ -196,7 +199,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeStaticToStringAsync( Type type, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToString(type, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeStaticToStringAsync(Type type, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToString(type, format, progressTracker));
         /// <summary>
         /// Serializes a static type to a stream in the provided <paramref name="format"/>
         /// </summary>
@@ -205,7 +208,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeStaticToStreamAsync( Type type,  Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToStream(type, stream, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeStaticToStreamAsync(Type type, Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToStream(type, stream, format, progressTracker));
 
 
         /// <summary>

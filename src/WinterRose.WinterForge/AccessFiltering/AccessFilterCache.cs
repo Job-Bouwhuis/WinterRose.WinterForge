@@ -14,11 +14,12 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Transactions;
 using System.Xml.Serialization;
+using WinterRose.Reflection;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Workers;
 
-namespace WinterRose.WinterForgeSerialization
+namespace WinterRose.WinterForgeSerializing
 {
     /// <summary>
     /// Used to limit the types and members of said type can be accessed through WinterForge
@@ -153,15 +154,40 @@ namespace WinterRose.WinterForgeSerialization
                 configurator(GetFilter(t, FilterKindOnNewFilter));
         }
 
-        internal static void Validate(Type type, AccessFilterKind FilterKindOnNewFilter, string v)
+        internal static void Validate(Type type, AccessFilterKind FilterKindOnNewFilter, string memberName)
         {
-            if (!GetFilter(type, FilterKindOnNewFilter).IsAllowed(v))
+            if (!GetFilter(type, FilterKindOnNewFilter).IsAllowed(memberName))
+                throw Throw();
+
+            switch (WinterForge.GlobalAccessRestriction)
+            {
+                case WinterForgeGlobalAccessRestriction.AllAccessing:
+                    throw Throw(); // no accessing allowed at all
+                case WinterForgeGlobalAccessRestriction.InstanceOnly:
+                    if(type.IsClass && type.IsAbstract && type.IsSealed)
+                        throw Throw(); // on static type, throw
+                    break;
+                case WinterForgeGlobalAccessRestriction.InstanceVariablesOnly:
+                    if (type.IsClass && type.IsAbstract && type.IsSealed)
+                        throw Throw(); // on static type, throw
+                    if(type.GetMethod(memberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static) != null)
+                        throw Throw(); // dont allow methods
+                    break;
+                case WinterForgeGlobalAccessRestriction.StaticAndInstanceVariableOnly:
+                    if (type.GetMethod(memberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static) != null)
+                        throw Throw(); // dont allow methods
+                    break;
+                case WinterForgeGlobalAccessRestriction.NoGlobalBlock:
+                    break; // dont throw. if filter allowed it
+            }
+
+            WinterForgeAccessIllegalException Throw()
             {
                 string? fullName = type.IsGenericType ?
                 type.GetGenericTypeDefinition().FullName :
                 type.FullName;
 
-                throw new WinterForgeAccessIllegalException($"Accessing Member {fullName}.{v} is not allowed");
+                return new WinterForgeAccessIllegalException($"Accessing Member {fullName}.{memberName} is not allowed");
             }
         }
     }
