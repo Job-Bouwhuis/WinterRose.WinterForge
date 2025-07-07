@@ -66,25 +66,25 @@ tcp->Send(_ref(1)->fileReadAttack);
 
 
 ## Globalized restrictions
-`WinterForge.GlobalAccessRestriction = WinterForgeGlobalAccessRestriction.AllAccessing;`
+`WinterForge.GlobalAccessRestriction = WinterForgeGlobalAccessRestriction.AllAccessing;`  
 having the options of these values:  
 #### `AllAccessing`
 - **All access is blocked**, including any syntax using `->`.
-- Serializing **statics is not possible** with this setting.
+- Serializing statics is **not possible** with this setting.
 
 #### `InstanceOnly`
 - **All access on static types is blocked**.
-- Serializing **statics is not possible** with this setting.
+- Serializing statics is **not possible** with this setting.
 
 #### `InstanceVariablesOnly`
 - **All access to static members and all methods (static + instance) is blocked**.
 - Only instance variables are allowed.
-- Serializing **statics is not possible** with this setting.
+- Serializing statics is **not possible** with this setting.
 
 #### `StaticAndInstanceVariableOnly`
 - **All method access is blocked**, both static and instance.
 - **Static and instance variables are allowed**.
-- Serializing **statics is possible** with this setting.
+- Serializing statics **is possible** with this setting.
 
 #### `NoGlobalBlock`
 - **No global rule applied**.
