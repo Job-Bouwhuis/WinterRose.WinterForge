@@ -12,6 +12,7 @@ On the 'GetObject' method (more on that method below) you do not have to account
 [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
 [Built-in Functions](WinterForge_Built-in_Functions.md)  
 [Flow Hooks](FlowHooks.md)  
+[Access Restrictions](Access_Restrictions.md)  
 
 ## Code examples
 ```cs

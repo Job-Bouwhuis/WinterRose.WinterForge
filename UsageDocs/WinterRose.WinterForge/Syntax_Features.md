@@ -6,6 +6,7 @@
 [Built-in Functions](WinterForge_Built-in_Functions.md)  
 [Custom Value Providers](CustomValueProvider_Examples.md)  
 [Flow Hooks](FlowHooks.md)  
+[Access Restrictions](Access_Restrictions.md)  
 
 ## Creating instances
 ```

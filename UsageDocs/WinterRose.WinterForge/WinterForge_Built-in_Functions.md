@@ -6,6 +6,7 @@
 [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
 [Custom Value Providers](CustomValueProvider_Examples.md)  
 [Flow Hooks](FlowHooks.md)  
+[Access Restrictions](Access_Restrictions.md)  
 
 ## \_ref(int)
 

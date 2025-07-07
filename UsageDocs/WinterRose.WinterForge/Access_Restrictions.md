@@ -6,7 +6,14 @@ This can be a security risk. thats why this access limiting feature exists!
 These filters and the global restrictions operate ONLY on the accessing syntax such as "Foo->bar" or "Foo->Qar()"  
 During standard deserialization there is no governing which fields can have their value set.  
 Without accessing, theres no way to read a variable  
-  
+
+#### Other docs
+[CSharp Usage](CSharp_Usage.md)  
+[Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
+[Syntax Features](Syntax_Features.md)  
+[Built-in Functions](WinterForge_Built-in_Functions.md)  
+[Custom Value Providers](CustomValueProvider_Examples.md)  
+[Flow Hooks](FlowHooks.md) 
 
 ## Examples:
 ```cs
