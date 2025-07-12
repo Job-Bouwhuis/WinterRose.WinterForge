@@ -22,6 +22,19 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WinterForge", "WinterForge"
 		UsageDocs\WinterRose.WinterForge\WinterForge_Built-in_Functions.md = UsageDocs\WinterRose.WinterForge\WinterForge_Built-in_Functions.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WinterRose.Reflection", "WinterRose.Reflection", "{C97669F4-B3B9-44B8-A0ED-615DE415863E}"
+	ProjectSection(SolutionItems) = preProject
+		UsageDocs\WinterRose.Reflection\AnonymousTypeBuilder.md = UsageDocs\WinterRose.Reflection\AnonymousTypeBuilder.md
+		UsageDocs\WinterRose.Reflection\AnonymousTypeReader.md = UsageDocs\WinterRose.Reflection\AnonymousTypeReader.md
+		UsageDocs\WinterRose.Reflection\MemberData.md = UsageDocs\WinterRose.Reflection\MemberData.md
+		README_WinterRose.Reflection.md = README_WinterRose.Reflection.md
+		UsageDocs\WinterRose.Reflection\ReflectionHelper.md = UsageDocs\WinterRose.Reflection\ReflectionHelper.md
+		UsageDocs\WinterRose.Reflection\StructReference.md = UsageDocs\WinterRose.Reflection\StructReference.md
+		UsageDocs\WinterRose.Reflection\TypeConverterGeneral.md = UsageDocs\WinterRose.Reflection\TypeConverterGeneral.md
+		UsageDocs\WinterRose.Reflection\TypeWorker.md = UsageDocs\WinterRose.Reflection\TypeWorker.md
+		UsageDocs\WinterRose.Reflection\YourOwnTypeConverters.md = UsageDocs\WinterRose.Reflection\YourOwnTypeConverters.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -46,6 +59,7 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{B43472FE-BB19-40E1-803C-07CC445E7B7A} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{C97669F4-B3B9-44B8-A0ED-615DE415863E} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {F6F597C7-96B7-4BFB-9AD1-505A1CF7CF26}

@@ -6,14 +6,26 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>25.2.10</Version>
+    <Version>25.2.11</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>WinterRose.Reflection</Title>
     <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>
     <Configurations>Debug;Release;debug FileServer</Configurations>
-    <PackageReleaseNotes>Added an extensive type conversion system</PackageReleaseNotes>
+    <PackageReleaseNotes>Added an extensive type conversion system
+
+HOTFIX: added a README to the package</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
     <PackageTags>reflection;runtime-reflection;type-inspection;type-discovery;</PackageTags>
+    <PackageReadmeFile>README_WinterRose.Reflection.md</PackageReadmeFile>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README_WinterRose.Reflection.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
 </Project>

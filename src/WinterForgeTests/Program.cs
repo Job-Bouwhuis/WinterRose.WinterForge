@@ -4,7 +4,10 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Drawing;
+using System.Dynamic;
 using System.Numerics;
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Encodings.Web;
@@ -12,9 +15,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using WinterRose;
 using WinterRose.AnonymousTypes;
+using WinterRose.FileManagement;
 using WinterRose.ForgeGuardChecks;
 using WinterRose.Reflection;
-using WinterRose.Vectors;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Logging;
 
@@ -31,31 +34,16 @@ internal class Program
 {
     public static int data = 15;
 
-    private static void Main()
+    private unsafe static void Main()
     {
-        WinterForge.GlobalAccessRestriction = WinterForgeGlobalAccessRestriction.AllAccessing;
+        if (!File.Exists("human.txt"))
+            File.Create("human.txt").Close();
+        if (!File.Exists("human2.txt"))
+            File.Create("human2.txt").Close();
 
-        string opcodes = WinterForge.ConvertFromStringToString("""
-            Person : 0 {
-                name = "Roza";
-                age = 21;
-                isBald = false;
-                gender = Gender.Female;
-                mother = null;
-                children = <Person>[
-                    Person : 1 {
-                        name = "Riven";
-                        age = 5;
-                        isBald = false;
-                        gender = Gender.Male;
-                        children = null;
-                        mother = _ref(0);
-                    }
-                ]
-            }
-            """);
+        WinterForge.ConvertFromFileToFile("human.txt", "opcodes.txt");
 
-        var attack = WinterForge.DeserializeFromString<Anonymous>(opcodes);
+        object? result = WinterForge.DeserializeFromFile("opcodes.txt");
     }
 }
 

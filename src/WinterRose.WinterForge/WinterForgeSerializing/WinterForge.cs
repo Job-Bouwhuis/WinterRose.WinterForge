@@ -45,7 +45,21 @@ namespace WinterRose.WinterForgeSerializing
            ];
 
         /// <inheritdoc cref="WinterForgeGlobalAccessRestriction"/>
-        public static WinterForgeGlobalAccessRestriction GlobalAccessRestriction { get; set; }
+        public static WinterForgeGlobalAccessRestriction GlobalAccessRestriction { get; set; } = WinterForgeGlobalAccessRestriction.NoGlobalBlock;
+
+        private static void EnsurePathExists(string path)
+        {
+            List<string> list = path.Split('/', '\\').ToList();
+            if (list.Count > 1)
+            {
+                list.RemoveAt(list.Count - 1);
+                string path2 = string.Join("/", list);
+                if (!Directory.Exists(path2))
+                {
+                    Directory.CreateDirectory(path2);
+                }
+            }
+        }
 
         /// <summary>
         /// Serializes the given object directly to opcodes for fastest deserialization
@@ -54,15 +68,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="path"></param>
         public static void SerializeToFile(object o, string path, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
         {
-            List<string> paths = path.ToString().Split(['/', '\\']).ToList();
-            if (paths.Count > 1)
-            {
-                paths.RemoveAt(paths.Count - 1);
-
-                string directory = string.Join("/", paths);
-                if (!Directory.Exists(directory))
-                    Directory.CreateDirectory(directory);
-            }
+            EnsurePathExists(path);
 
             using (Stream serialized = new MemoryStream())
             using (Stream opcodes = File.Open(path, FileMode.Create, FileAccess.ReadWrite))
@@ -109,14 +115,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="progressTracker"></param>
         public static void SerializeStaticToFile(Type type, string path, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
         {
-            List<string> paths = path.ToString().Split(['/', '\\']).ToList();
-            if (paths.Count > 1)
-            {
-                paths.RemoveAt(paths.Count - 1);
-                string directory = string.Join("/", paths);
-                if (!Directory.Exists(directory))
-                    Directory.CreateDirectory(directory);
-            }
+            EnsurePathExists(path);
 
             using (Stream serialized = new MemoryStream())
             using (Stream opcodes = File.Open(path, FileMode.Create, FileAccess.ReadWrite))
@@ -220,7 +219,9 @@ namespace WinterRose.WinterForgeSerializing
         public static object? DeserializeFromStream(Stream stream, WinterForgeProgressTracker? progressTracker = null)
         {
             var instr = InstructionParser.ParseOpcodes(stream);
-            return DoDeserialization(typeof(Nothing), instr, progressTracker);
+            object? result = null;
+            DoDeserialization(out result, typeof(Nothing), instr, progressTracker);
+            return result;
         }
         /// <summary>
         /// Deserializes from the given stream in which opcodes should exist
@@ -273,7 +274,8 @@ namespace WinterRose.WinterForgeSerializing
             opcodes.Seek(0, SeekOrigin.Begin);
 
             var instructions = InstructionParser.ParseOpcodes(opcodes);
-            return DoDeserialization(typeof(Nothing), instructions, progressTracker);
+            DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
+            return res;
         }
         /// <summary>
         /// 
@@ -301,7 +303,8 @@ namespace WinterRose.WinterForgeSerializing
             opcodes.Seek(0, SeekOrigin.Begin);
 
             var instructions = InstructionParser.ParseOpcodes(opcodes);
-            return DoDeserialization(typeof(Nothing), instructions, progressTracker);
+            DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
+            return res;
         }
         /// <summary>
         /// Deserializes from the given human readable stream
@@ -329,7 +332,8 @@ namespace WinterRose.WinterForgeSerializing
             opcodes.Seek(0, SeekOrigin.Begin);
 
             var instructions = InstructionParser.ParseOpcodes(opcodes);
-            return DoDeserialization(typeof(Nothing), instructions, progressTracker);
+            DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
+            return res;
         }
         /// <summary>
         /// Deserialies from the given file that has the human readable format
@@ -352,8 +356,10 @@ namespace WinterRose.WinterForgeSerializing
         {
             using Stream opcodes = File.OpenRead(path);
             var instructions = InstructionParser.ParseOpcodes(opcodes);
-            return DoDeserialization(typeof(Nothing), instructions, progressTracker);
+            DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
+            return res;
         }
+
         /// <summary>
         /// Deserializes from the file that has the opcodes
         /// </summary>
@@ -364,78 +370,6 @@ namespace WinterRose.WinterForgeSerializing
         public static T? DeserializeFromFile<T>(string path, WinterForgeProgressTracker? progressTracker = null)
         {
             return (T?)DeserializeFromFile(path, progressTracker);
-        }
-
-        /// <summary>
-        /// Converts the human readable format into opcodes
-        /// </summary>
-        /// <param name="humanreadable"></param>
-        /// <param name="opcodeDestination"></param>
-        public static void ConvertHumanReadable(Stream humanreadable, Stream opcodeDestination)
-            => new HumanReadableParser().Parse(humanreadable, opcodeDestination);
-        /// <summary>
-        /// Converts a human-readable file to an opcode file.
-        /// </summary>
-        public static void ConvertFromFileToFile(string inputPath, string outputPath)
-        {
-            using var input = File.OpenRead(inputPath);
-            using var output = File.Create(outputPath);
-            ConvertHumanReadable(input, output);
-        }
-        /// <summary>
-        /// Converts a human-readable string to an opcode string.
-        /// </summary>
-        public static string ConvertFromStringToString(string input)
-        {
-            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
-            using var outputStream = new MemoryStream();
-            ConvertHumanReadable(inputStream, outputStream);
-            outputStream.Position = 0;
-            using var reader = new StreamReader(outputStream);
-            return reader.ReadToEnd();
-        }
-        /// <summary>
-        /// Converts a human-readable file to an opcode string.
-        /// </summary>
-        public static string ConvertFromFileToString(string inputPath)
-        {
-            using var inputStream = File.OpenRead(inputPath);
-            using var outputStream = new MemoryStream();
-            ConvertHumanReadable(inputStream, outputStream);
-            outputStream.Position = 0;
-            using var reader = new StreamReader(outputStream);
-            return reader.ReadToEnd();
-        }
-        /// <summary>
-        /// Converts a human-readable string to an opcode file.
-        /// </summary>
-        public static void ConvertFromStringToFile(string input, string outputPath)
-        {
-            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
-            using var outputStream = File.Create(outputPath);
-            ConvertHumanReadable(inputStream, outputStream);
-        }
-        /// <summary>
-        /// Converts a human-readable file to an opcode stream.
-        /// </summary>
-        public static MemoryStream ConvertFromFileToStream(string inputPath)
-        {
-            using var inputStream = File.OpenRead(inputPath);
-            var outputStream = new MemoryStream();
-            ConvertHumanReadable(inputStream, outputStream);
-            outputStream.Position = 0;
-            return outputStream;
-        }
-        /// <summary>
-        /// Converts a human-readable string to an opcode stream.
-        /// </summary>
-        public static MemoryStream ConvertFromStringToStream(string input)
-        {
-            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
-            var outputStream = new MemoryStream();
-            ConvertHumanReadable(inputStream, outputStream);
-            outputStream.Position = 0;
-            return outputStream;
         }
 
         /// <summary>
@@ -544,6 +478,80 @@ namespace WinterRose.WinterForgeSerializing
         public static WinterForgeDeserializationTask<T?> DeserializeFromHumanReadableFileAsync<T>(string path, WinterForgeProgressTracker? progressTracker = null) =>
             RunAsync(() => DeserializeFromHumanReadableFile<T>(path, progressTracker));
 
+        /// <summary>
+        /// Converts the human readable format into opcodes
+        /// </summary>
+        /// <param name="humanreadable"></param>
+        /// <param name="opcodeDestination"></param>
+        public static void ConvertFromStreamToStream(Stream humanreadable, Stream opcodeDestination)
+            => new HumanReadableParser().Parse(humanreadable, opcodeDestination);
+        /// <summary>
+        /// Converts a human-readable file to an opcode file.
+        /// </summary>
+        public static void ConvertFromFileToFile(string inputPath, string outputPath)
+        {
+            EnsurePathExists(outputPath);
+            using var input = File.OpenRead(inputPath);
+            using var output = File.Create(outputPath);
+            
+            ConvertFromStreamToStream(input, output);
+        }
+        /// <summary>
+        /// Converts a human-readable string to an opcode string.
+        /// </summary>
+        public static string ConvertFromStringToString(string input)
+        {
+            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
+            using var outputStream = new MemoryStream();
+            ConvertFromStreamToStream(inputStream, outputStream);
+            outputStream.Position = 0;
+            using var reader = new StreamReader(outputStream);
+            return reader.ReadToEnd();
+        }
+        /// <summary>
+        /// Converts a human-readable file to an opcode string.
+        /// </summary>
+        public static string ConvertFromFileToString(string inputPath)
+        {
+            using var inputStream = File.OpenRead(inputPath);
+            using var outputStream = new MemoryStream();
+            ConvertFromStreamToStream(inputStream, outputStream);
+            outputStream.Position = 0;
+            using var reader = new StreamReader(outputStream);
+            return reader.ReadToEnd();
+        }
+        /// <summary>
+        /// Converts a human-readable string to an opcode file.
+        /// </summary>
+        public static void ConvertFromStringToFile(string input, string outputPath)
+        {
+            EnsurePathExists(outputPath);
+            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
+            using var outputStream = File.Create(outputPath);
+            ConvertFromStreamToStream(inputStream, outputStream);
+        }
+        /// <summary>
+        /// Converts a human-readable file to an opcode stream.
+        /// </summary>
+        public static Stream ConvertFromFileToStream(string inputPath)
+        {
+            using var inputStream = File.OpenRead(inputPath);
+            var outputStream = new MemoryStream();
+            ConvertFromStreamToStream(inputStream, outputStream);
+            outputStream.Position = 0;
+            return outputStream;
+        }
+        /// <summary>
+        /// Converts a human-readable string to an opcode stream.
+        /// </summary>
+        public static Stream ConvertFromStringToStream(string input)
+        {
+            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
+            var outputStream = new MemoryStream();
+            ConvertFromStreamToStream(inputStream, outputStream);
+            outputStream.Position = 0;
+            return outputStream;
+        }
 
         private static void DoStaticSerialization(ObjectSerializer serializer, Type type, Stream serialized, Stream opcodes, TargetFormat target)
         {
@@ -569,7 +577,7 @@ namespace WinterRose.WinterForgeSerializing
             else
                 new HumanReadableParser().Parse(serialized, opcodes);
         }
-        private static object? DoDeserialization(Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
+        private static void DoDeserialization(out object? result, Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
         {
             using var executor = new InstructionExecutor();
             if (progressTracker is not null)
@@ -585,7 +593,7 @@ namespace WinterRose.WinterForgeSerializing
                     for (int i = 0; i < list.Count; i++)
                         array.SetValue(list[i], i);
 
-                    return array;
+                    result = array;
                 }
 
                 if (targetType.Name.Contains("List`1"))
@@ -595,13 +603,13 @@ namespace WinterRose.WinterForgeSerializing
                     for (int i = 0; i < list.Count; i++)
                         targetList.Add(list[i]);
 
-                    return targetList;
+                    result = targetList;
                 }
 
                 throw new Exception("invalid deserialization!");
             }
 
-            return res;
+            result = res;
         }
         internal static IList CreateList(Type t)
         {

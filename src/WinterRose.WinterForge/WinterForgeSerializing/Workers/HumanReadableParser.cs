@@ -96,6 +96,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if(line.Trim().StartsWith("//"))
                 return;
 
+            if(TryParseFirstParts())
+            {
+                return;
+            }    
             // Constructor Definition: Type(arguments) : ID {
             if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
             {
@@ -208,7 +212,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     trimoffEnd = 1;
                 string ID = line[6..new Index(trimoffEnd, true)].Trim();
                 if (string.IsNullOrWhiteSpace(ID) || !ID.All(char.IsDigit) && ID != "_stack()" && ID != "null")
-                    throw new Exception("Invalid ID parameter in RETURN statement");
+                    if (aliasMap.TryGetValue(ID, out int aliasID))
+                        ID = aliasID.ToString();
+                    else
+                        throw new Exception("Invalid ID parameter in RETURN statement");
                 string result = $"{opcodeMap["RET"]} {ID}";
                 WriteLine(result);
             }
@@ -243,6 +250,46 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
             else
                 throw new Exception($"Unexpected top-level line: {line}");
+        }
+
+        private bool TryParseFirstParts()
+        {
+            if (currentLine.StartsWith("#import", StringComparison.OrdinalIgnoreCase))
+            {
+                string line = currentLine[7..].Trim();
+                string importedFileName = ReadString(line)[1..^1];
+                line = line[(importedFileName.Length + 2)..].Trim();
+                if (!line.StartsWith("as"))
+                    throw new WinterForgeFormatException("Missing 'as' keyword in #import statement");
+
+                line = line[2..].Trim();
+
+                int aliasEndIndex = line.IndexOf(' ');
+                if (aliasEndIndex is -1)
+                    aliasEndIndex = line.IndexOf(';');
+                if (aliasEndIndex is -1)
+                    aliasEndIndex = line.Length;
+
+                string alias = line[..aliasEndIndex].Trim();
+                int id = GetAutoID();
+                aliasMap[alias] = id;
+                line = line[alias.Length..].Trim();
+
+                if(line.StartsWith("(compiles into "))
+                {
+                    if (!line.EndsWith(')'))
+                        throw new WinterForgeFormatException("Import compile statement not closed with )"); 
+                    // compile imported file
+                    line = line[15..^1];
+
+                    WinterForge.ConvertFromFileToFile(importedFileName, line);
+                    importedFileName = line;
+                }
+
+                WriteLine($"{opcodeMap["IMPORT"]} \"{importedFileName}\" {id}");
+                return true;
+            }
+            return false;
         }
 
         private static bool HasValidGenericFollowedByBracket(ReadOnlySpan<char> input)
@@ -437,12 +484,20 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         {
                             if (part.EndsWith(';'))
                                 part = part[..^1];
+   
                             WriteLine($"{opcodeMap["ACCESS"]} {part}");
                         }
                     }
                 }
                 else
                     throw new WinterForgeFormatException($"nothing to access on the right side...");
+            }
+
+            int asID = -1;
+            if(rhs.Contains("->"))
+            {
+                asID = GetAutoID();
+                WriteLine($"{opcodeMap["AS"]} {asID}");
             }
 
             // Step 3: Process LHS
@@ -487,16 +542,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     if (rhs != null && isLast)
                     {
-                        string val = rhs.Contains("->") ? "_stack()" : rhs;
+                        string val = rhs.Contains("->") ? $"_ref({asID})" : rhs;
                         if (val.EndsWith(';'))
                             val = val[..^1];
                         val = ValidateValue(val);
-                        if (val is "_stack()")
-                        {
-                            int asID = int.MaxValue - 1000 - autoAsIDs++;
-                            WriteLine($"{opcodeMap["AS"]} {asID}");
-                            val = $"_ref({asID})";
-                        }
                         WriteLine($"{opcodeMap["SETACCESS"]} {part} {val}");
                     }
                     else
@@ -529,6 +578,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 WriteLine($"{opcodeMap["CALL"]} {methodName} {args.Count}");
             }
         }
+
+        private int GetAutoID() => int.MaxValue - 1000 - autoAsIDs++;
 
         private int NextAvalible(List<int>? list)
         {

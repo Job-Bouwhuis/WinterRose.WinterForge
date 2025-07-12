@@ -13,6 +13,7 @@ namespace WinterRose.Reflection
     public unsafe class StructReference
     {
         private readonly void* ptr;
+
         /// <summary>
         /// Wrapper to hold a direct reference to a struct, and allows it to be stored like a class<br></br><br></br>
         /// 
@@ -20,6 +21,7 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <param name="ptr"></param>
         public StructReference(void* ptr) => this.ptr = ptr;
+
         /// <summary>
         /// Gets the referenced value
         /// </summary>
@@ -33,6 +35,5 @@ namespace WinterRose.Reflection
         /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T As<T>() => ref *(T*)ptr;
-        
     }
 }

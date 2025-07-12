@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
 using System.Data;
+using System.Runtime.InteropServices;
 using System.Text;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
@@ -171,12 +172,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             HandleEnd();
                             break;
                         case OpCode.RET:
-                            Validate();
-                            if (instruction.Args[0] == "_stack()")
-                                return context.ValueStack.Peek();
-                            if (instruction.Args[0] == "null")
-                                return null;
-                            return context.GetObject(int.Parse(instruction.Args[0])) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
+                            {
+                                Validate();
+                                if (instruction.Args[0] == "_stack()")
+                                    return context.ValueStack.Peek();
+                                if (instruction.Args[0] == "null")
+                                    return null;
+                                object val = context.GetObject(int.Parse(instruction.Args[0])) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
+                                return val;
+                            }
                         case OpCode.PROGRESS:
                             progressTracker?.Report((instructionIndex + 1) / (float)instructions.Count);
                             break;
@@ -224,10 +228,19 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.AS:
                             context.MoveStackTo(int.Parse(instruction.Args[0]));
                             break;
+                        case OpCode.IMPORT:
+                            {
+                                object? val = WinterForge.DeserializeFromFile(instruction.Args[0]);
+                                int id = TypeConverter.Convert<int>(instruction.Args[1]);
+                                context.AddObject(id, ref val);
+                            }
+                            break;
+                        default:
+                            throw new WinterForgeExecutionException($"Opcode: {instruction.OpCode} not supported");
                     }
                 }
 
-                return new Nothing(context.ObjectTable.ToDictionary());
+                return new Nothing(context.ObjectTable);
             }
             finally
             {

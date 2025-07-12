@@ -308,7 +308,7 @@ namespace WinterRose.Reflection
                 throw new Exception("Reflection helper was created type only.");
 
             if (obj is null)
-                fieldsource.SetValue(null, value);
+                fieldsource.SetValue(null, actualValue);
             else if (!obj.GetType().IsValueType)
                 fieldsource.SetValue(obj, actualValue);
             else

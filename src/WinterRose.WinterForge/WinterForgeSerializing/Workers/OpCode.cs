@@ -135,7 +135,12 @@
         /// This requres a value, to define a value with its default value for the given type, set the value to 'default'
         /// </remarks>
         ANONYMOUS_SET = 17,
-
+        /// <summary>
+        /// Imports another winterforge file. only accepts opcode files
+        /// 
+        /// 18 filename id
+        /// </summary>
+        IMPORT = 18,
 
 
 
