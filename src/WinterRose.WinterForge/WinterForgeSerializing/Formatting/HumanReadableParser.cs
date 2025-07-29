@@ -12,6 +12,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing.Formatting;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
@@ -50,7 +52,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         public void Parse(Stream input, Stream output)
         {
             reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-            writer = new StreamWriter(output, Encoding.UTF8, leaveOpen: true);
+            writer = new StreamWriter(output, Encoding.UTF8);
 
             string version = typeof(WinterForge)
                 .Assembly
@@ -60,7 +62,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             WriteLine($"// Parsed by WinterForge {version.Split('+')[0]}");
             WriteLine("");
             WriteLine("");
-        
+
             while ((currentLine = ReadNonEmptyLine()) != null)
                 ParseObjectOrAssignment();
 
@@ -69,37 +71,17 @@ namespace WinterRose.WinterForgeSerializing.Workers
             writer.Flush();
         }
 
-        private int NextAvalible()
-        {
-            if (foundIds.Count == 0)
-                return 0;
-
-            foundIds.Sort();
-
-            int lastNumber = 0;
-
-            for (int i = 0; i < foundIds.Count; i++)
-            {
-                if (foundIds[i] != i)
-                    return lastNumber + 1;
-                lastNumber = i;
-            }
-
-            return lastNumber + 1;
-
-        }
-
         private void ParseObjectOrAssignment()
         {
             string line = currentLine!.Trim();
 
-            if(line.Trim().StartsWith("//"))
+            if (line.Trim().StartsWith("//"))
                 return;
 
-            if(TryParseFirstParts())
+            if (TryParseFirstParts())
             {
                 return;
-            }    
+            }
             // Constructor Definition: Type(arguments) : ID {
             if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
             {
@@ -112,8 +94,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 string arguments = line.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
                 string id = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
-                if(id is "nextid")
-                    id = NextAvalible().ToString();
+                if (id is "nextid")
+                    id = GetAutoID().ToString();
                 foundIds.Add(int.Parse(id));
 
                 var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -133,11 +115,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 string type = line[..openParenIndex].Trim();
                 if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
+
                 string arguments = line.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
                 string id = line.Substring(colonIndex + 1, line.Length - colonIndex - 2).Trim();
 
                 if (id is "nextid")
-                    id = NextAvalible().ToString();
+                    id = GetAutoID().ToString();
                 foundIds.Add(int.Parse(id));
 
                 var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -152,19 +135,21 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 int colonIndex = line.IndexOf(':');
                 int braceIndex = line.IndexOf('{');
 
-                string type = line[..colonIndex].Trim(); 
+                string type = line[..colonIndex].Trim();
                 if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
+
                 string id = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
                 if (id is "nextid")
-                    id = NextAvalible().ToString();
+                    id = GetAutoID().ToString();
                 foundIds.Add(int.Parse(id));
 
                 WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
                 depth++;
                 ParseBlock(id);
             }
+            // Definition: Type : ID;
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.EndsWith(';'))
             {
                 string type;
@@ -177,12 +162,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 id = parts[1].Trim();
 
                 if (id is "nextid")
-                    id = NextAvalible().ToString();
+                    id = GetAutoID().ToString();
                 foundIds.Add(int.Parse(id));
 
                 WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
                 WriteLine($"{opcodeMap["END"]} {id}");
             }
+            // Definition: Type : ID
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1)
             {
                 string type;
@@ -195,7 +181,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 id = parts[1].Trim();
 
                 if (id is "nextid")
-                    id = NextAvalible().ToString();
+                    id = GetAutoID().ToString();
 
                 foundIds.Add(int.Parse(id));
                 ReadNextLineExpecting("{");
@@ -230,7 +216,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     id = id[..^1];
 
                 if (id is "nextid")
-                    id = NextAvalible().ToString();
+                    id = GetAutoID().ToString();
 
                 WriteLine($"{opcodeMap["AS"]} {id}");
                 foundIds.Add(int.Parse(id));
@@ -275,10 +261,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 aliasMap[alias] = id;
                 line = line[alias.Length..].Trim();
 
-                if(line.StartsWith("(compiles into "))
+                if (line.StartsWith("(compiles into "))
                 {
                     if (!line.EndsWith(')'))
-                        throw new WinterForgeFormatException("Import compile statement not closed with )"); 
+                        throw new WinterForgeFormatException("Import compile statement not closed with )");
                     // compile imported file
                     line = line[15..^1];
 
@@ -381,7 +367,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             if (!line.Contains('['))
             {
-                name = line; 
+                name = line;
                 return CollectionParseResult.NotACollection;
             }
             name = "_stack()";
@@ -484,7 +470,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         {
                             if (part.EndsWith(';'))
                                 part = part[..^1];
-   
+
                             WriteLine($"{opcodeMap["ACCESS"]} {part}");
                         }
                     }
@@ -494,7 +480,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
 
             int asID = -1;
-            if(rhs.Contains("->"))
+            if (rhs.Contains("->"))
             {
                 asID = GetAutoID();
                 WriteLine($"{opcodeMap["AS"]} {asID}");
@@ -684,7 +670,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         if (lines.Length >= 1 && lines[0].Contains(':'))
                         {
                             lineBuffers.Push(new OverridableStack<string>());
-                            
+
                             for (int i = 0; i < lines.Length; i++)
                                 lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
@@ -776,13 +762,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
             int handleChar(ref bool insideFunction, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref int listDepth, char? currentChar, ref char prefStringChar)
             {
                 char character = currentChar.Value;
-                
+
                 if (collectingString)
                 {
                     currentElement.Append(character);
                     if (character == '"' && prefStringChar != '\\')
                     {
-                            collectingString = false;
+                        collectingString = false;
                         prefStringChar = '\0';
                         return 1;
                     }
@@ -807,7 +793,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     return 1;
                 }
 
-                if(character == '<' && !collectingDefinition)
+                if (character == '<' && !collectingDefinition)
                 {
                     collectingDefinition = true;
                     currentElement.Append(character);
@@ -831,7 +817,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         emitElement(dvsp);
                         return 1;
                     }
-                        
+
                     return 1;
                 }
 
@@ -882,7 +868,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         if (collectingDefinition && listDepth is 0)
                             collectingDefinition = false;
                     }
-                    if(listDepth is 0)
+                    if (listDepth is 0)
                     {
                         emitElement();
                         WriteLine(opcodeMap["LIST_END"].ToString());
@@ -905,10 +891,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             line = line.TrimEnd(';');
             int eq = line.IndexOf('=');
-            string key = line[..eq].Trim();
+            string field = line[..eq].Trim();
             string value = ValidateValue(line[(eq + 1)..].Trim());
 
-            WriteLine($"{opcodeMap["SET"]} {key} {value}");
+            WriteLine($"{opcodeMap["SET"]} {field} {value}");
         }
 
         bool ContainsSequence(StringBuilder sb, string sequence)
@@ -968,7 +954,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         }
                     }
 
-                    if (found) 
+                    if (found)
                         return i;
                 }
             }
@@ -1074,15 +1060,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
             }
 
-            if(value.StartsWith("_type"))
+            if (value.StartsWith("_type"))
                 return value;
 
-            if(HasValidGenericFollowedByBracket(value))
+            if (HasValidGenericFollowedByBracket(value))
             {
                 TryParseCollection(value, out string name);
                 return name;
             }
-            if(value.Contains('.') && !IsValidNumericString(value) && !value.Contains('<'))
+            if (value.Contains('.') && !IsValidNumericString(value) && !value.Contains('<'))
             {
                 string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 string enumType;
@@ -1214,7 +1200,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     // check ahead to see if we hit the closing quote sequence
                     int remaining = start.Length - i;
-                    
+
                     if (isMultiline && remaining >= 5 && start.Substring(i, 5) == "\"\"\"\"\"")
                     {
                         return '\"' + content.ToString() + '\"';

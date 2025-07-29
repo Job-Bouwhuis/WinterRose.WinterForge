@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>25.2.25</Version>
+    <Version>25.2.26-alpha-0</Version>
     <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -15,7 +15,7 @@ It also allows accessing fields of already deserialzied objects, static classes.
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <PackageReleaseNotes>license change</PackageReleaseNotes>
+    <PackageReleaseNotes>Optimized format is being converted to be a true binary format</PackageReleaseNotes>
     <PackageIcon>WinterForge Logo.png</PackageIcon>
     <RepositoryUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</RepositoryUrl>
     <PackageTags>serialization;deserialization;runtime-serialization;dynamic-types;</PackageTags>

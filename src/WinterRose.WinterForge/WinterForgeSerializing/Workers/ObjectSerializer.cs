@@ -116,7 +116,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             if (CustomValueProviderCache.Get(objType, out var provider))
             {
-                WriteToStream(destinationStream, provider._CreateString(obj, this));
+                object val = provider._CreateString(obj, this);
+
+                WriteToStream(destinationStream, val.ToString());
                 return;
             }
 

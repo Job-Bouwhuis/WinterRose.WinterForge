@@ -14,17 +14,17 @@ namespace WinterRose.WinterForgeSerializing
     {
         internal override Type Type => typeof(T);
 
-        internal override string _CreateString(object? obj, ObjectSerializer serializer)
+        internal override object _CreateString(object? obj, ObjectSerializer serializer)
         {
             return CreateString((T)obj, serializer);
         }
 
-        internal override object? _CreateObject(string value, InstructionExecutor executor)
+        internal override object? _CreateObject(object value, InstructionExecutor executor)
         {
             return CreateObject(value, executor);
         }
 
-        public abstract string CreateString(T obj, ObjectSerializer serializer);
-        public abstract T? CreateObject(string value, InstructionExecutor executor);
+        public abstract object CreateString(T obj, ObjectSerializer serializer);
+        public abstract T? CreateObject(object value, InstructionExecutor executor);
     }
 }

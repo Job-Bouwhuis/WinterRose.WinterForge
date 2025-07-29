@@ -551,6 +551,9 @@ public static class TypeConverter
         Type src = source.GetType();
         Type tgt = targetType;
 
+        if (src == tgt)
+            return source;
+
         // closed‑converter fast path
         if (_cache.TryGetValue((src, tgt), out ITypeConverter conv))
             return conv.Convert(source);

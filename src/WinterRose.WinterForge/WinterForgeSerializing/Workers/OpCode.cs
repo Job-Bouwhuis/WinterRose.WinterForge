@@ -3,7 +3,7 @@
     /// <summary>
     /// Operation codes that the deserialization process for WinterForge understands
     /// </summary>
-    public enum OpCode
+    public enum OpCode : byte
     {
         /// <summary>
         /// Defines an object. <br></br><br></br>
@@ -140,6 +140,9 @@
         /// 
         /// 18 filename id
         /// </summary>
+        /// <example>
+        /// import "filename.wf"
+        /// </example>
         IMPORT = 18,
 
 
@@ -152,6 +155,11 @@
         /// Unused in this version
         /// </summary>
         TEMPLATE_END,
+
+        /// <summary>
+        /// represents the end of data in a winterforge byte stream, not used by the winterforge vm.
+        /// </summary>
+        END_OF_DATA = 255
     }
 
 }

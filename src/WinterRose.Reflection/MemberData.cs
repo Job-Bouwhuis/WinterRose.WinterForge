@@ -270,42 +270,67 @@ namespace WinterRose.Reflection
         }
         public virtual void SetPropertyValue<T>(ref object? obj, T value)
         {
-            object actualValue = value;
-            if (value != null)
-            {
-                if (TypeWorker.SupportedPrimitives.Contains(Type)
-                    && TypeWorker.SupportedPrimitives.Contains(value.GetType())
-                    && Type != value.GetType())
-                    actualValue = TypeWorker.CastPrimitive(value, Type);
-                else if (TypeWorker.FindImplicitConversionMethod(Type, value.GetType()) is MethodInfo conversionMethod)
-                    actualValue = conversionMethod.Invoke(null, [value])!;
-                else if (TypeConverter.CanConvert(value.GetType(), Type))
-                    actualValue = TypeConverter.Convert(value, Type);
-            }
-            
             if (obj is null && !propertysource.SetMethod.IsStatic && !(Type.IsAbstract && Type.IsSealed))
                 throw new Exception("Reflection helper was created type only.");
+
+            object actualValue = value;
+            if (Type.IsEnum)
+            {
+                if(value.GetType() != Type)
+                {
+                    if (value.GetType() != Enum.GetUnderlyingType(Type))
+                    {
+                        actualValue = CastValue(value, Enum.GetUnderlyingType(Type));
+                    }
+
+                    actualValue = Enum.ToObject(Type, actualValue);
+                }
+                
+            }
+            else if(value != null && value.GetType() != Type)
+            {
+                actualValue = CastValue(value, Type);
+            }
 
             propertysource.SetValue(obj, actualValue);
         }
 
+        private static object CastValue<T>(T value, Type target)
+        {
+            if (TypeWorker.SupportedPrimitives.Contains(target)
+                                && TypeWorker.SupportedPrimitives.Contains(value.GetType())
+                                && target != value.GetType())
+                return TypeWorker.CastPrimitive(value, target);
+            else if (TypeWorker.FindImplicitConversionMethod(target, value.GetType()) is MethodInfo conversionMethod)
+                return conversionMethod.Invoke(null, [value])!;
+            else if (TypeConverter.CanConvert(value.GetType(), target))
+                return TypeConverter.Convert(value, target);
+            return value;
+        }
+
         public virtual void SetFieldValue<T>(ref object? obj, T value)
         {
-            object actualValue = value;
-            if (value != null)
-            {
-                if (TypeWorker.SupportedPrimitives.Contains(Type) 
-                    && TypeWorker.SupportedPrimitives.Contains(value.GetType())
-                    && Type != value.GetType())
-                    actualValue = TypeWorker.CastPrimitive(value, Type);
-                else if (TypeWorker.FindImplicitConversionMethod(Type, value.GetType()) is MethodInfo conversionMethod)
-                        actualValue = conversionMethod.Invoke(null, [value])!;
-                else if (TypeConverter.CanConvert(value.GetType(), Type))
-                    actualValue = TypeConverter.Convert(value, Type);
-            }
-
             if (obj is null && !fieldsource.IsStatic && !(Type.IsAbstract && Type.IsSealed))
                 throw new Exception("Reflection helper was created type only.");
+
+            object actualValue = value;
+            if (Type.IsEnum)
+            {
+                if (value.GetType() != Type)
+                {
+                    if (value.GetType() != Enum.GetUnderlyingType(Type))
+                    {
+                        actualValue = CastValue(value, Enum.GetUnderlyingType(Type));
+                    }
+
+                    actualValue = Enum.ToObject(Type, actualValue);
+                }
+            }
+            else if (value != null && value.GetType() != Type)
+            {
+                actualValue = CastValue(value, Type);
+            }
+
 
             if (obj is null)
                 fieldsource.SetValue(null, actualValue);

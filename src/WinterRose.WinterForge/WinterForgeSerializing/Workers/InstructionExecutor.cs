@@ -90,9 +90,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// </summary>
         /// <param name="instructions"></param>
         /// <returns></returns>
-        public unsafe object? Execute(List<Instruction> instructions)
+        public unsafe object? Execute(List<Instruction> instructionCollection)
         {
             ObjectDisposedException.ThrowIf(IsDisposed, this);
+            var instructions = instructionCollection.ToList();
             instructionTotal = instructions.Count;
             try
             {
@@ -117,29 +118,30 @@ namespace WinterRose.WinterForgeSerializing.Workers
                                 if (context.GetObject(instanceIDStack.Peek()) is not AnonymousTypeReader obj)
                                     throw new InvalidOperationException("Anonymous type reader not found on stack for anonymous set operation");
 
-                                progressTracker?.OnField(instruction.Args[1], instructionIndex + 1, instructionTotal);
+                                progressTracker?.OnField((string)instruction.Args[1], instructionIndex + 1, instructionTotal);
 
-                                Type fieldType = ResolveType(instruction.Args[0]);
+                                Type fieldType = ResolveType((string)instruction.Args[0]);
 
                                 object val = GetArgumentValue(instruction.Args[2], 2, fieldType, val => { });
-                                obj.SetMember(instruction.Args[1], ref val);
+                                obj.SetMember((string)instruction.Args[1], ref val);
                                 break;
                             }
                         case OpCode.PUSH:
                             {
-                                string arg = instruction.Args[0];
-                                object val = GetArgumentValue(arg, 0, typeof(string), delegate { });
-                                if (val is Dispatched)
+                                object arg = instruction.Args[0];
+                                if(arg is string)
+                                    arg = GetArgumentValue(arg, 0, typeof(string), delegate { });
+                                if (arg is Dispatched)
                                     throw new Exception("Other opcodes rely on PUSH having pushed its value, cant differ reference till later");
 
-                                if (!val.GetType().IsClass && !val.GetType().IsPrimitive)
+                                if (!arg.GetType().IsClass && !arg.GetType().IsPrimitive)
                                 {
-                                    object* ptr = &val;
+                                    object* ptr = &arg;
                                     var v = new StructReference(ptr);
                                     context.ValueStack.Push(v);
                                 }
                                 else
-                                    context.ValueStack.Push(val);
+                                    context.ValueStack.Push(arg);
                             }
                             break;
                         case OpCode.START_STR:
@@ -148,7 +150,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.STR:
                             if (sb is null)
                                 throw new InvalidOperationException("Missing 'START_STR' instruction before 'STR' operation");
-                            sb.AppendLine(instruction.Args[0]);
+                            sb.AppendLine((string)instruction.Args[0]);
                             break;
                         case OpCode.END_STR:
                             if (sb is null)
@@ -157,7 +159,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             sb = null;
                             break;
                         case OpCode.CALL:
-                            HandleCall(instruction.Args[0], int.Parse(instruction.Args[1]));
+                            HandleCall((string)instruction.Args[0], (int)instruction.Args[1]);
                             break;
                         case OpCode.ELEMENT:
                             HandleAddElement(instruction.Args);
@@ -174,11 +176,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.RET:
                             {
                                 Validate();
-                                if (instruction.Args[0] == "_stack()")
+                                if (instruction.Args[0] is "_stack()")
                                     return context.ValueStack.Peek();
                                 if (instruction.Args[0] == "null")
                                     return null;
-                                object val = context.GetObject(int.Parse(instruction.Args[0])) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
+                                object val = context.GetObject((int)instruction.Args[0]) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
                                 return val;
                             }
                         case OpCode.PROGRESS:
@@ -187,14 +189,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.ACCESS:
                             {
                                 object o = context.ValueStack.Pop();
-                                AccessFilterCache.Validate(o is Type ? (Type)o : o.GetType(), AccessFilterKind.Blacklist, instruction.Args[0]);
+                                AccessFilterCache.Validate(o is Type ? (Type)o : o.GetType(), AccessFilterKind.Blacklist, (string)instruction.Args[0]);
                                 ReflectionHelper rh = CreateReflectionHelper(ref o, out _);
-                                context.ValueStack.Push(rh.GetValueFrom(instruction.Args[0]));
+                                context.ValueStack.Push(rh.GetValueFrom((string)instruction.Args[0]));
                                 break;
                             }
                         case OpCode.SETACCESS:
                             {
-                                var field = instruction.Args[0];
+                                var field = (string)instruction.Args[0];
                                 var rawValue = instruction.Args[1];
 
                                 var target = context.ValueStack.Pop();
@@ -226,11 +228,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             }
                             break;
                         case OpCode.AS:
-                            context.MoveStackTo(int.Parse(instruction.Args[0]));
+                            context.MoveStackTo(int.Parse((string)instruction.Args[0]));
                             break;
                         case OpCode.IMPORT:
                             {
-                                object? val = WinterForge.DeserializeFromFile(instruction.Args[0]);
+                                object? val = WinterForge.DeserializeFromFile((string)instruction.Args[0]);
                                 int id = TypeConverter.Convert<int>(instruction.Args[1]);
                                 context.AddObject(id, ref val);
                             }
@@ -309,16 +311,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
             ICollection list = listStack.Pop().Collection;
             context.ValueStack.Push(list);
         }
-        private void HandleCreateList(string[] args)
+        private void HandleCreateList(object[] args)
         {
             if (args.Length == 0)
                 throw new Exception("Expected type to initialize list");
-            Type itemType = ResolveType(args[0]);
+            Type itemType = ResolveType((string)args[0]);
 
             if (args.Length == 2)
             {
                 // its a dictionary
-                Type valueType = ResolveType(args[1]);
+                Type valueType = ResolveType((string)args[1]);
                 var newDict = WinterForge.CreateDictionary(itemType, valueType);
                 listStack.Push(new DictionaryDefinition(itemType, valueType, newDict));
                 return;
@@ -328,10 +330,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
             listStack.Push(new ListDefinition(itemType, newList));
         }
 
-        private unsafe void HandleDefine(string[] args)
+        private unsafe void HandleDefine(object[] args)
         {
-            var typeName = args[0];
-            var id = int.Parse(args[1]);
+            var typeName = (string)args[0];
+            var id = (int)args[1];
 
             if (typeName is "Anonymous" || typeName.StartsWith("Anonymous-as-"))
             {
@@ -356,7 +358,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 progressTracker?.OnInstance("Creating " + tn, tn, true, instructionIndex + 1, instructionTotal);
                 return;
             }
-            int numArgs = int.Parse(args[2]);
+
+
+            int numArgs = (int)args[2];
             Type type = ResolveType(typeName);
 
             List<object> constrArgs = [];
@@ -374,9 +378,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             progressTracker?.OnInstance("Creating " + type.Name, type.Name, type.IsClass, instructionIndex + 1, instructionTotal);
         }
-        private void HandleSet(string[] args)
+        private void HandleSet(object[] args)
         {
-            var field = args[0];
+            var field = (string)args[0];
             var rawValue = args[1];
 
             var instanceID = instanceIDStack.Peek();
@@ -401,7 +405,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             SetValue(rawValue, ref actualTarget, member);
         }
 
-        private void SetValue(string rawValue, ref object actualTarget, MemberData member)
+        private void SetValue(object rawValue, ref object actualTarget, MemberData member)
         {
             object o = actualTarget;
             object? value = GetArgumentValue(rawValue, 1, member.Type, val =>
@@ -459,7 +463,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 context.ValueStack.Push(val);
 
         }
-        private void HandleAddElement(string[] args)
+        private void HandleAddElement(object[] args)
         {
             var collection = listStack.Peek();
 
@@ -488,7 +492,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
 
         }
-        private object GetArgumentValue(string arg, int argIndex, Type desiredType, Action<object> onDispatch)
+        private object GetArgumentValue(object arg, int argIndex, Type desiredType, Action<object> onDispatch)
         {
             object? value;
             switch (arg)
@@ -517,14 +521,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 case string s when s.StartsWith("_str("):
                     value = ParseStringFunc(s);
                     break;
-                case string s when CustomValueProviderCache.Get(desiredType, out var provider):
-                    if (s is "null")
+                case object o when CustomValueProviderCache.Get(desiredType, out var provider):
+                    if (o is "null")
                         value = provider.OnNull();
                     else
                     {
-                        if (current.Args.Length > argIndex)
-                            s = string.Join(' ', current.Args.Skip(argIndex));
-                        value = provider._CreateObject(s, this);
+                        if (current.Args.Length - 1 > argIndex)
+                            o = string.Join(' ', current.Args.Skip(argIndex));
+                        value = provider._CreateObject(o, this);
                     }
                     break;
                 case string s when desiredType.IsEnum:
@@ -595,14 +599,23 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             instanceIDStack.Pop();
         }
-        private static object? ParseLiteral(string raw, Type target)
+        private static object? ParseLiteral(object o, Type target)
         {
-            if (raw is "null")
-                return null;
-            if (target == typeof(string))
-                return raw;
-            string r = raw.Replace('.', ',');
-            return TypeWorker.CastPrimitive(r, target);
+            if (o.GetType() == target)
+                return o;
+            if(o is string raw)
+            {
+                if (raw is "null")
+                    return null;
+                if (target == typeof(string))
+                    return raw;
+                string r = raw.Replace('.', ',');
+                return TypeWorker.CastPrimitive(r, target);
+            }
+            if (TypeConverter.TryConvert(o, target, out var converted))
+                return converted;
+            return o;
+            
         }
         private static int ParseRef(string raw)
         {

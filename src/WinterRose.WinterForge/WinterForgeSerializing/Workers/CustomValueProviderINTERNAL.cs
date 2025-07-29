@@ -9,8 +9,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
     public abstract class CustomValueProviderINTERNAL
     {
         internal abstract Type Type { get; }
-        internal abstract string _CreateString(object? obj, ObjectSerializer serializer);
-        internal abstract object? _CreateObject(string value, InstructionExecutor executor);
+        internal abstract object _CreateString(object? obj, ObjectSerializer serializer);
+        internal abstract object? _CreateObject(object value, InstructionExecutor executor);
         /// <summary>
         /// If the value from the serialized data represents null, this method is called.
         /// </summary>

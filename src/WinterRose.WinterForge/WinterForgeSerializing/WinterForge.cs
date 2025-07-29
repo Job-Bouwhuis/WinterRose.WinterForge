@@ -72,7 +72,6 @@ namespace WinterRose.WinterForgeSerializing
 
             using (Stream serialized = new MemoryStream())
             using (Stream opcodes = File.Open(path, FileMode.Create, FileAccess.ReadWrite))
-            //using (Stream formatted = File.OpenWrite("lasthumanreadable.txt"))
             {
                 ObjectSerializer serializer = new(progressTracker);
                 DoSerialization(serializer, o, serialized, opcodes, targetFormat);
@@ -325,13 +324,15 @@ namespace WinterRose.WinterForgeSerializing
         /// <returns></returns>
         public static object? DeserializeFromHumanReadableFile(string path, WinterForgeProgressTracker? progressTracker = null)
         {
-            using var opcodes = new MemoryStream();
+            using var mem = new MemoryStream();
             using var humanReadable = File.OpenRead(path);
 
-            new HumanReadableParser().Parse(humanReadable, opcodes);
-            opcodes.Seek(0, SeekOrigin.Begin);
-
-            var instructions = InstructionParser.ParseOpcodes(opcodes);
+            new HumanReadableParser().Parse(humanReadable, mem);
+            mem.Seek(0, SeekOrigin.Begin);
+            using var opcodes = new MemoryStream();
+            new OpcodeToByteCompiler().Compile(mem, opcodes);
+            opcodes.Position = 0;
+            var instructions = ByteToOpcodeParser.Parse(opcodes).ToList();
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -355,7 +356,8 @@ namespace WinterRose.WinterForgeSerializing
         public static object? DeserializeFromFile(string path, WinterForgeProgressTracker? progressTracker = null)
         {
             using Stream opcodes = File.OpenRead(path);
-            var instructions = InstructionParser.ParseOpcodes(opcodes);
+            //var instructions = InstructionParser.ParseOpcodes(opcodes);
+            var instructions = ByteToOpcodeParser.Parse(opcodes).ToList();
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -484,7 +486,15 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="humanreadable"></param>
         /// <param name="opcodeDestination"></param>
         public static void ConvertFromStreamToStream(Stream humanreadable, Stream opcodeDestination)
-            => new HumanReadableParser().Parse(humanreadable, opcodeDestination);
+        {
+            using MemoryStream mem = new();
+            new HumanReadableParser().Parse(humanreadable, mem);
+            mem.Position = 0;
+            new OpcodeToByteCompiler().Compile(mem, opcodeDestination);
+
+            long memlength = mem.Length;
+            long reslength = opcodeDestination.Length;
+        }
         /// <summary>
         /// Converts a human-readable file to an opcode file.
         /// </summary>
@@ -493,7 +503,7 @@ namespace WinterRose.WinterForgeSerializing
             EnsurePathExists(outputPath);
             using var input = File.OpenRead(inputPath);
             using var output = File.Create(outputPath);
-            
+
             ConvertFromStreamToStream(input, output);
         }
         /// <summary>
@@ -571,11 +581,20 @@ namespace WinterRose.WinterForgeSerializing
             serialized.Seek(0, SeekOrigin.Begin);
 
             if (target is TargetFormat.HumanReadable)
+            {
                 serialized.CopyTo(opcodes);
+                opcodes.Flush();
+            }
             else if (target is TargetFormat.FormattedHumanReadable)
                 new HumanReadableIndenter().Process(serialized, opcodes);
             else
-                new HumanReadableParser().Parse(serialized, opcodes);
+            {
+                using MemoryStream mem = new();
+                new HumanReadableParser().Parse(serialized, mem);
+                mem.Position = 0;
+                new OpcodeToByteCompiler().Compile(mem, opcodes);
+            }
+                
         }
         private static void DoDeserialization(out object? result, Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
         {
