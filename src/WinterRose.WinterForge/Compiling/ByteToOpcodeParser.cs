@@ -1,6 +1,7 @@
-﻿using WinterRose.WinterForgeSerializing.Workers;
+﻿using WinterRose.WinterForgeSerializing;
+using WinterRose.WinterForgeSerializing.Workers;
 
-namespace WinterRose.WinterForgeSerializing.Formatting;
+namespace WinterRose.WinterForgeSerializing.Compiling;
 
 public class ByteToOpcodeParser
 {
@@ -19,6 +20,21 @@ public class ByteToOpcodeParser
                     yield break;
 
                 case OpCode.DEFINE:
+                    if(reader.PeekChar() == '\0')
+                    {
+                        reader.ReadByte(); // consume marker
+                        uint compilerID = reader.ReadUInt32();
+                        if (CustomValueCompilerRegistry.TryGetById(compilerID, out var compiler))
+                        {
+                            int refID = reader.ReadInt32();
+                            object o = compiler.Decompile(reader);
+                            yield return new Instruction(OpCode.CREATE_REF, [refID, o]);
+                            continue;
+                        }
+                        else
+                            throw new InvalidOperationException($"Expected compiler with id {compilerID} to exist, but it didnt");
+                    }
+
                     args.Add(ReadString(reader)); // type name
 
                     args.Add(ReadInt(reader)); // object ID

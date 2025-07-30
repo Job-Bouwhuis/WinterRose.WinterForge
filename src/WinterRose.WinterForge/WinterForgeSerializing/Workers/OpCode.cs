@@ -145,7 +145,11 @@
         /// </example>
         IMPORT = 18,
 
-
+        /// <summary>
+        /// Creates the second argument as a ref value on the refid that is the first argument
+        /// Not used in saved files, exclusively used when reading binary compiled WinterForge files that use custom compilers
+        /// </summary>
+        CREATE_REF = 19,
 
         /// <summary>
         /// Unused in this version
@@ -159,7 +163,7 @@
         /// <summary>
         /// represents the end of data in a winterforge byte stream, not used by the winterforge vm.
         /// </summary>
-        END_OF_DATA = 255
+        END_OF_DATA = 255,
     }
 
 }

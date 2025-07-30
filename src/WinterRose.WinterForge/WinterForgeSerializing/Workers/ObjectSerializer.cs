@@ -42,6 +42,24 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
         }
 
+        private string GetNumericTypeName(object value) => value switch
+        {
+            byte => "byte",
+            sbyte => "sbyte",
+            short => "short",
+            ushort => "ushort",
+            int => "int",
+            uint => "uint",
+            long => "long",
+            ulong => "ulong",
+            float => "float",
+            double => "double",
+            decimal => "decimal",
+            char => "char",
+            null => "none",
+            _ => "none",
+        };
+
         internal void Serialize(ref object obj, Stream destinationStream, bool isRootCall, bool emitReturn = true)
         {
             if (obj == null)
@@ -65,7 +83,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 WriteToStream(destinationStream, "\n\n");
             }
 
-            if(obj.GetType().IsEnum)
+            if (obj.GetType().IsEnum)
             {
                 if (isRootCall)
                     throw new WinterForgeSerializeException(obj, "An enum isnt allowed to be serialized on its own!");
@@ -96,7 +114,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             if (WinterForge.SupportedPrimitives.Contains(objType))
             {
-                if(obj is string)
+                if (obj is string)
                     WriteToStream(destinationStream, $"\"{obj?.ToString()}\"" ?? "null");
                 else
                     WriteToStream(destinationStream, obj?.ToString() ?? "null");
@@ -118,7 +136,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 object val = provider._CreateString(obj, this);
 
-                WriteToStream(destinationStream, val.ToString());
+                string typePrefix = GetNumericTypeName(val);
+                string value;
+                if (typePrefix is "null")
+                    value = "null";
+                else
+                    value = typePrefix is "none" ? $"\"{val}\"" : $"|{typePrefix}|{val}";
+                WriteToStream(destinationStream, value);
                 return;
             }
 
@@ -528,7 +552,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 sb.Append($"<{ParseTypeName(kvTypes[0])}, {ParseTypeName(kvTypes[1])}>[\n");
 
                 IDictionaryEnumerator enu = dict.GetEnumerator();
-                while(enu.MoveNext())
+                while (enu.MoveNext())
                 {
                     string keySerialized = RecursiveSerialization(enu.Key).TrimEnd('\n');
                     string valueSerialized = RecursiveSerialization(enu.Value).TrimEnd('\n');
@@ -557,7 +581,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     return null;
             }
 
-            
+
             if (elementType is null)
                 sb.Append($"<System.Object>[\n");
             else

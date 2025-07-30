@@ -234,6 +234,63 @@ namespace WinterRose
             return [.. types];
         }
 
+        public static Type[] FindTypesWithBase(Type baseType)
+        {
+            List<Type> types = new();
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+            foreach (Assembly assembly in assemblies)
+            {
+                Type[] assemblyTypes;
+                try
+                {
+                    assemblyTypes = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    assemblyTypes = ex.Types.Where(t => t != null).ToArray()!;
+                }
+
+                foreach (Type type in assemblyTypes)
+                {
+                    if (type is null || type.IsAbstract || type.IsInterface)
+                        continue;
+
+                    // Check all base types and interfaces
+                    Type? current = type;
+                    while (current != null && current != typeof(object))
+                    {
+                        if (current.IsGenericType &&
+                            current.GetGenericTypeDefinition() == baseType)
+                        {
+                            types.Add(type);
+                            break;
+                        }
+
+                        current = current.BaseType;
+                    }
+
+                    // Check interfaces too
+                    if (!types.Contains(type))
+                    {
+                        foreach (Type iface in type.GetInterfaces())
+                        {
+                            if (iface.IsGenericType &&
+                                iface.GetGenericTypeDefinition() == baseType)
+                            {
+                                types.Add(type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return [.. types];
+        }
+
+
+
         public static Type[] FindTypesWithInterface<T>()
         {
             Type target = typeof(T);

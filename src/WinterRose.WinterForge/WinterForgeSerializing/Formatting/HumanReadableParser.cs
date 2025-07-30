@@ -13,9 +13,11 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Formatting;
+using WinterRose.WinterForgeSerializing.Workers;
 
-namespace WinterRose.WinterForgeSerializing.Workers
+namespace WinterRose.WinterForgeSerializing.Formatting
 {
     public class HumanReadableParser
     {
@@ -79,9 +81,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return;
 
             if (TryParseFirstParts())
-            {
                 return;
-            }
             // Constructor Definition: Type(arguments) : ID {
             if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
             {
@@ -291,9 +291,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 char c = input[i];
                 if (c == '<')
-                {
                     depth++;
-                }
                 else if (c == '>')
                 {
                     depth--;
@@ -463,9 +461,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             continue;
 
                         if (part.Contains('(') && part.Contains(')'))
-                        {
                             ParseMethodCall(id, part);
-                        }
                         else
                         {
                             if (part.EndsWith(';'))
@@ -580,9 +576,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             for (int i = 0; i < sorted.Count; i++)
             {
                 if (sorted[i] != i)
-                {
                     return last + 1;
-                }
                 last = i;
             }
             return last + 1;
@@ -590,7 +584,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private CollectionParseResult ParseCollection()
         {
-            int typeOpen = this.currentLine!.IndexOf("<");
+            int typeOpen = currentLine!.IndexOf("<");
             int blockOpen = currentLine.IndexOf("[");
             string start = currentLine[typeOpen..blockOpen];
 
@@ -599,7 +593,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             string types = start[1..^1];
             if (string.IsNullOrWhiteSpace(types))
-                throw new Exception("Failed to parse types: " + this.currentLine);
+                throw new Exception("Failed to parse types: " + currentLine);
 
             string[] typeParts = types.Split(',').Select(t => t.Trim()).ToArray();
             bool isDictionary = typeParts.Length == 2;
@@ -623,7 +617,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             int listDepth = 1;
             char? currentChar;
 
-            string cur = this.currentLine[(typeOpen + start.Length + 1)..];
+            string cur = currentLine[(typeOpen + start.Length + 1)..];
 
             bool lastCharWasClose = false;
             do
@@ -644,9 +638,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             void emitElement(int dictValueSplitterIndex = -1)
             {
                 if (currentElement.Length <= 0)
-                {
                     return;
-                }
 
                 string currentElementString = currentElement.ToString();
                 if (string.IsNullOrWhiteSpace(currentElementString))
@@ -674,13 +666,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             for (int i = 0; i < lines.Length; i++)
                                 lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
-                            this.currentLine = ReadNonEmptyLine();
-                            int colonIndex = this.currentLine.IndexOf(':');
-                            int braceIndex = this.currentLine.IndexOf('{');
+                            currentLine = ReadNonEmptyLine();
+                            int colonIndex = currentLine.IndexOf(':');
+                            int braceIndex = currentLine.IndexOf('{');
 
                             string id = braceIndex == -1
-                                ? this.currentLine[colonIndex..].Trim()
-                                : this.currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+                                ? currentLine[colonIndex..].Trim()
+                                : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
                             ParseObjectOrAssignment();
                             keyResult = $"_ref({id})";
@@ -700,13 +692,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             for (int i = 0; i < lines.Length; i++)
                                 lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
-                            this.currentLine = ReadNonEmptyLine();
-                            int colonIndex = this.currentLine.IndexOf(':');
-                            int braceIndex = this.currentLine.IndexOf('{');
+                            currentLine = ReadNonEmptyLine();
+                            int colonIndex = currentLine.IndexOf(':');
+                            int braceIndex = currentLine.IndexOf('{');
 
                             string id = braceIndex == -1
-                                ? this.currentLine[colonIndex..].Trim()
-                                : this.currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+                                ? currentLine[colonIndex..].Trim()
+                                : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
                             ParseObjectOrAssignment();
                             valueResult = $"_ref({id})";
@@ -726,13 +718,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         foreach (var line in lines)
                             lineBuffers.Peek().PushEnd(line.Trim() + '\n');
 
-                        this.currentLine = ReadNonEmptyLine();
-                        int colonIndex = this.currentLine.IndexOf(':');
-                        int braceIndex = this.currentLine.IndexOf('{');
+                        currentLine = ReadNonEmptyLine();
+                        int colonIndex = currentLine.IndexOf(':');
+                        int braceIndex = currentLine.IndexOf('{');
 
                         string id = braceIndex == -1
-                            ? this.currentLine[colonIndex..].Trim()
-                            : this.currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+                            ? currentLine[colonIndex..].Trim()
+                            : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
                         ParseObjectOrAssignment();
                         WriteLine($"{opcodeMap["ELEMENT"]} _ref({id})");
@@ -861,9 +853,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     if (listDepth is not <= 0 || collectingDefinition)
                     {
                         if (listDepth is not 0)
-                        {
                             currentElement.Append("\n]\n");
-                        }
 
                         if (collectingDefinition && listDepth is 0)
                             collectingDefinition = false;
@@ -1202,9 +1192,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     int remaining = start.Length - i;
 
                     if (isMultiline && remaining >= 5 && start.Substring(i, 5) == "\"\"\"\"\"")
-                    {
                         return '\"' + content.ToString() + '\"';
-                    }
                     else if (!isMultiline)
                     {
                         return '\"' + content.ToString() + '\"';
@@ -1254,9 +1242,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     {
                         // lookahead for 5x quote
                         if (i + 4 < nextLine.Length && nextLine.Substring(i, 5) == "\"\"\"\"\"")
-                        {
                             return '\"' + content.ToString() + '\"';
-                        }
                         else
                         {
                             content.Append('"');

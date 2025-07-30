@@ -237,6 +237,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
                                 context.AddObject(id, ref val);
                             }
                             break;
+                        case OpCode.CREATE_REF:
+                            {
+                                context.AddObject((int)instruction.Args[0], ref instruction.Args[1]);
+                            }
+                            break;
                         default:
                             throw new WinterForgeExecutionException($"Opcode: {instruction.OpCode} not supported");
                     }
@@ -531,7 +536,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         value = provider._CreateObject(o, this);
                     }
                     break;
-                case string s when desiredType.IsEnum:
+                case object s when desiredType.IsEnum:
                     Type enumNumType = Enum.GetUnderlyingType(desiredType);
                     object num = TypeWorker.CastPrimitive(s, enumNumType);
                     value = Enum.ToObject(desiredType, num);

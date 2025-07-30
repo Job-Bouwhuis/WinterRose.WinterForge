@@ -18,8 +18,9 @@ using WinterRose.AnonymousTypes;
 using WinterRose.FileManagement;
 using WinterRose.ForgeGuardChecks;
 using WinterRose.Reflection;
-using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing;
+using WinterRose.WinterForgeSerializing.Compiling;
+using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterForgeTests;
@@ -29,6 +30,13 @@ public enum Gender
     Male,
     Female,
     Other
+}
+
+public class Transform
+{
+    public Vector3 pos;
+    public Vector3 scale;
+    public Quaternion rotation;
 }
 
 internal class Program
@@ -49,14 +57,19 @@ internal class Program
             { "key", "val" }
         };
 
+        Transform t = new Transform();
+        t.pos = new Vector3(1, 2, 3);
+        t.scale = new Vector3(1, 1, 1);
+        t.rotation = Quaternion.CreateFromYawPitchRoll(0, 0, 90);
+
         List<demo> list = new() { demo.D(), demo.D(), demo.D(), demo.D(), demo.D() };
 
-        //WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
+        WinterForge.SerializeToFile(t, "human.txt", TargetFormat.HumanReadable);
 
         WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
 
         var vec = WinterForge.DeserializeFromFile("bytes.wfbin");
-
+        
         const int ITERATION_COUNT = 1000;
 
         long fastest = long.MaxValue;
@@ -79,33 +92,6 @@ internal class Program
         }
 
         double average = total / (double)ITERATION_COUNT;
-
-        Console.WriteLine($"Fastest: {fastest * (1_000_000_000.0 / Stopwatch.Frequency):F2} ns | {fastest * (1_000_000.0 / Stopwatch.Frequency):F4} ms | {fastest * (1_000.0 / Stopwatch.Frequency):F6} s");
-        Console.WriteLine($"Slowest: {slowest * (1_000_000_000.0 / Stopwatch.Frequency):F2} ns | {slowest * (1_000_000.0 / Stopwatch.Frequency):F4} ms | {slowest * (1_000.0 / Stopwatch.Frequency):F6} s");
-        Console.WriteLine($"Average: {average * (1_000_000_000.0 / Stopwatch.Frequency):F2} ns | {average * (1_000_000.0 / Stopwatch.Frequency):F4} ms | {average * (1_000.0 / Stopwatch.Frequency):F6} s");
-
-        Console.WriteLine("\n\n---ABOVE: bytecode reading over 1000 iterations---\nBELOW: reading the same as textual opcodes also over 1000 iters\n\n");
-
-        fastest = long.MaxValue;
-        slowest = 0;
-        total = 0;
-
-        for (int i = 0; i < ITERATION_COUNT; i++)
-        {
-            using FileStream bytes2 = File.OpenRead("opcodes.txt");
-
-            var stopwatch = Stopwatch.StartNew();
-            var instr = InstructionParser.ParseOpcodes(bytes2);
-            stopwatch.Stop();
-
-            long elapsed = stopwatch.ElapsedTicks;
-
-            if (elapsed < fastest) fastest = elapsed;
-            if (elapsed > slowest) slowest = elapsed;
-            total += elapsed;
-        }
-
-        average = total / (double)ITERATION_COUNT;
 
         Console.WriteLine($"Fastest: {fastest * (1_000_000_000.0 / Stopwatch.Frequency):F2} ns | {fastest * (1_000_000.0 / Stopwatch.Frequency):F4} ms | {fastest * (1_000.0 / Stopwatch.Frequency):F6} s");
         Console.WriteLine($"Slowest: {slowest * (1_000_000_000.0 / Stopwatch.Frequency):F2} ns | {slowest * (1_000_000.0 / Stopwatch.Frequency):F4} ms | {slowest * (1_000.0 / Stopwatch.Frequency):F6} s");

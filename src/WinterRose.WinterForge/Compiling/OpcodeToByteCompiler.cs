@@ -2,12 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using WinterRose.Reflection;
-using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Workers;
 
-namespace WinterRose.WinterForgeSerializing.Formatting;
+namespace WinterRose.WinterForgeSerializing.Compiling;
 
 public enum ValuePrefix : byte
 {
@@ -35,9 +35,20 @@ public enum ValuePrefix : byte
 
 
 
-public class OpcodeToByteCompiler
+public class OpcodeToByteCompiler()
 {
     private Stack<Type> instanceStack = new Stack<Type>();
+    List<string>? bufferedObject = null;
+    Type? bufferedType = null;
+    private ICustomValueCompiler customCompiler;
+    private int bufferedObjectRefID;
+    private int nesting;
+    private bool allowCustomCompilers = true;
+    
+    internal OpcodeToByteCompiler(bool allowCustomCompilers) : this()
+    {
+        this.allowCustomCompilers = allowCustomCompilers;
+    }
 
     private ValuePrefix GetNumericValuePrefix(Type value)
     {
@@ -63,11 +74,25 @@ public class OpcodeToByteCompiler
 
     }
 
+    object Rehydrate(List<string> lines, Type type)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new StreamWriter(stream);
+        foreach (string l in lines)
+            writer.WriteLine(l);
+        writer.WriteLine($"8 {lines[^1].Split(' ')[^1]}");
+        writer.Flush();
+        stream.Position = 0;
+
+        List<Instruction> instructions = InstructionParser.ParseOpcodes(stream);
+        return WinterForge.DeserializeFromInstructions(instructions);
+    }
+
 
     public void Compile(Stream textOpcodes, Stream bytesDestination)
     {
         using var reader = new StreamReader(textOpcodes, leaveOpen: true);
-        using var writer = new BinaryWriter(bytesDestination, System.Text.Encoding.UTF8, leaveOpen: true);
+        using var writer = new BinaryWriter(bytesDestination, Encoding.UTF8, leaveOpen: true);
 
         string? line;
         while ((line = reader.ReadLine()) != null)
@@ -76,9 +101,7 @@ public class OpcodeToByteCompiler
             if (line == "WF_ENDOFDATA")
                 writer.Write((byte)OpCode.END_OF_DATA);
             if (line.StartsWith("//")) // skip comments
-            {
                 continue;
-            }
             var parts = SplitOpcodeLine(line.Trim());
             if (parts.Length == 0) continue;
 
@@ -86,18 +109,59 @@ public class OpcodeToByteCompiler
                 throw new InvalidOperationException($"Invalid opcode: {parts[0]}");
 
             var opcode = (OpCode)opcodeInt;
-            writer.Write((byte)opcodeInt);
+
+            if (bufferedObject != null)
+            {
+                if (line.StartsWith("//")) continue;
+                if (opcode is not OpCode.SET and not OpCode.END) 
+                    throw new InvalidOperationException("Custom compiled class can only have straightforward set assignments");
+                if (line.StartsWith(((byte)OpCode.END).ToString())) nesting--;
+
+                bufferedObject.Add(line);
+
+                if (nesting == 0)
+                {
+                    // Full object block captured
+                    object result = Rehydrate(bufferedObject, bufferedType!); // you'll define this
+
+                    writer.Write((byte)0x00);
+                    writer.Write(customCompiler.CompilerId);
+                    writer.Write(bufferedObjectRefID);
+                    customCompiler!.Compile(writer, result);
+                    bufferedObject = null;
+                    bufferedType = null;
+                    bufferedObjectRefID = -1;
+                }
+
+                continue; // skip the normal line handling
+            }
+
+
+            writer.Write(opcodeInt);
 
             switch (opcode)
             {
                 case OpCode.DEFINE:
                     Type t = InstructionExecutor.ResolveType(parts[1]);
-                    instanceStack.Push(t);
 
+                    if(allowCustomCompilers)
+                        if (CustomValueCompilerRegistry.TryGetByType(t, out ICustomValueCompiler customCompiler))
+                        {
+                            bufferedObject = new();
+                            bufferedType = t;
+                            bufferedObject.Add(line);
+                            bufferedObjectRefID = int.Parse(parts[2]); // object id;
+                            nesting = 1;
+                            this.customCompiler = customCompiler;
+                            continue;
+                        }
+
+                    instanceStack.Push(t);
                     WriteString(writer, parts[1]); // type name
                     WriteInt(writer, int.Parse(parts[2])); // object id
                     WriteInt(writer, int.Parse(parts[3])); // arg count
                     break;
+
 
                 case OpCode.SET:
                 case OpCode.SETACCESS:
@@ -220,7 +284,7 @@ public class OpcodeToByteCompiler
     {
         writer.Write((byte)ValuePrefix.STRING);
         writer.Write(str.Length);
-        writer.Write(System.Text.Encoding.UTF8.GetBytes(str));
+        writer.Write(Encoding.UTF8.GetBytes(str));
     }
 
     private void WriteInt(BinaryWriter writer, int value)
@@ -306,11 +370,11 @@ public class OpcodeToByteCompiler
 
             if (input is string s)
             {
-                result = (T)System.Convert.ChangeType(s, typeof(T));
+                result = (T)Convert.ChangeType(s, typeof(T));
                 return true;
             }
 
-            result = (T)System.Convert.ChangeType(input, typeof(T));
+            result = (T)Convert.ChangeType(input, typeof(T));
             return true;
         }
         catch
@@ -323,9 +387,7 @@ public class OpcodeToByteCompiler
     private void WriteAny(BinaryWriter writer, string raw)
     {
         if (raw.StartsWith("\""))
-        {
             WriteString(writer, raw.Trim('"'));
-        }
         else if (raw.StartsWith("_ref(") && raw.EndsWith(")"))
         {
             writer.Write((byte)ValuePrefix.REF);
@@ -404,10 +466,49 @@ public class OpcodeToByteCompiler
             writer.Write((byte)ValuePrefix.CHAR);
             writer.Write(charVal);
         }
+        else if (TryExtractWrappedType(raw, out Type t, out string v))
+        {
+            WritePrefered(writer, v, GetNumericValuePrefix(t));
+        }
         else
         {
             WriteString(writer, raw);
         }
+    }
+
+    private static readonly Regex WRAPPED_TYPE_REGEX = new(@"\|(byte|sbyte|short|ushort|int|uint|long|ulong|float|double|decimal|char)\|", RegexOptions.Compiled);
+
+    public static bool TryExtractWrappedType(string input, out Type type, out string raw)
+    {
+        Match match = WRAPPED_TYPE_REGEX.Match(input);
+        if (match.Success)
+        {
+            string typeName = match.Groups[1].Value;
+            raw = input[(typeName.Length + 2)..];
+
+            type = typeName switch
+            {
+                "byte" => typeof(byte),
+                "sbyte" => typeof(sbyte),
+                "short" => typeof(short),
+                "ushort" => typeof(ushort),
+                "int" => typeof(int),
+                "uint" => typeof(uint),
+                "long" => typeof(long),
+                "ulong" => typeof(ulong),
+                "float" => typeof(float),
+                "double" => typeof(double),
+                "decimal" => typeof(decimal),
+                "char" => typeof(char),
+                _ => null
+            };
+
+            return type != null;
+        }
+
+        type = null;
+        raw = input;
+        return false;
     }
 
     private void WriteMultilineString(BinaryWriter writer, string fullLine)

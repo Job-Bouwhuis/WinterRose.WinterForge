@@ -10,6 +10,7 @@ using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Logging;
 using WinterRose.WinterForgeSerializing.Workers;
@@ -680,5 +681,10 @@ namespace WinterRose.WinterForgeSerializing
             return (IDictionary)Activator.CreateInstance(constructedDictType)!;
         }
 
+        internal static object DeserializeFromInstructions(List<Instruction> instructions)
+        {
+            DoDeserialization(out object? r, typeof(object), instructions, null);
+            return r;
+        }
     }
 }
