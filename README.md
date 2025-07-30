@@ -186,5 +186,8 @@ Opcode format may change in the future. Backwards compatibility between this for
 2 0
 ```
 
+#### **Binary Opcodes**
+This feature is work in progress. Backwards compatibility to the textual opcodes as shown above will forever remain.
+
 ## **License**
 This project is licensed under the terms described [here](LICENSE.md).
