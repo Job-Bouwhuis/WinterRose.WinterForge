@@ -218,7 +218,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <returns></returns>
         public static object? DeserializeFromStream(Stream stream, WinterForgeProgressTracker? progressTracker = null)
         {
-            var instr = InstructionParser.ParseOpcodes(stream);
+            var instr = ByteToOpcodeParser.Parse(stream).ToList();
             object? result = null;
             DoDeserialization(out result, typeof(Nothing), instr, progressTracker);
             return result;

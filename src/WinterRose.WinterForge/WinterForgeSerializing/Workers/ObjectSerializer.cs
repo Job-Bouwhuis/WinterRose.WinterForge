@@ -552,13 +552,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 sb.Append($"<{ParseTypeName(kvTypes[0])}, {ParseTypeName(kvTypes[1])}>[\n");
 
                 IDictionaryEnumerator enu = dict.GetEnumerator();
+                int lengthRemove = 1;
                 while (enu.MoveNext())
                 {
+                    lengthRemove = 2;
                     string keySerialized = RecursiveSerialization(enu.Key).TrimEnd('\n');
                     string valueSerialized = RecursiveSerialization(enu.Value).TrimEnd('\n');
                     sb.Append($"{keySerialized} => {valueSerialized}\n,\n");
                 }
-                sb.Remove(sb.Length - 2, 2).Append("\n]\n");
+                sb.Remove(sb.Length - lengthRemove, lengthRemove).Append("\n]\n");
                 return sb.ToString();
             }
 

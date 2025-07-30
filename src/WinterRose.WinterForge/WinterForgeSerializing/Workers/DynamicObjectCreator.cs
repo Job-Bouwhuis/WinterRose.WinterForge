@@ -47,7 +47,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 first = false;
             }
-            throw new Exception(s);
+            throw new WinterForgeSerializeException(targetType, s);
         }
 
         // This method will resolve argument types to their correct types
