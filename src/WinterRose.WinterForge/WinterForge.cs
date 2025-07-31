@@ -10,6 +10,8 @@ using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+using WinterRose.WinterForgeSerializing.Instructions;
+using WinterRose.WinterForgeSerializing.Util;
 using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Logging;

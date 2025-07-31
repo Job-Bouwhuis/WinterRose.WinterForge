@@ -1,4 +1,6 @@
-﻿namespace WinterRose.WinterForgeSerializing.Workers
+﻿using WinterRose.WinterForgeSerializing.Workers;
+
+namespace WinterRose.WinterForgeSerializing.Instructions
 {
     /// <summary>
     /// Operation codes that the deserialization process for WinterForge understands
@@ -150,6 +152,27 @@
         /// Not used in saved files, exclusively used when reading binary compiled WinterForge files that use custom compilers
         /// </summary>
         CREATE_REF = 19,
+
+        ADD,    // +
+        SUB,    // -
+        MUL,    // *
+        DIV,    // /
+        MOD,    // %
+
+        POW,    // ^ or **, depending on your syntax
+        NEG,    // unary -
+
+        EQ,     // ==
+        NEQ,    // !=
+        GT,     // >
+        LT,     // <
+        GTE,    // >=
+        LTE,    // <=
+
+        AND,
+        NOT,
+        OR,
+        XOR,
 
         /// <summary>
         /// Unused in this version

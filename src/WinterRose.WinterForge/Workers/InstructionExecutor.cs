@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing.Instructions;
 using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterRose.WinterForgeSerializing.Workers
@@ -129,7 +130,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.PUSH:
                             {
                                 object arg = instruction.Args[0];
-                                if(arg is string)
+                                if (arg is string)
                                     arg = GetArgumentValue(arg, 0, typeof(string), delegate { });
                                 if (arg is Dispatched)
                                     throw new Exception("Other opcodes rely on PUSH having pushed its value, cant differ reference till later");
@@ -228,7 +229,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             }
                             break;
                         case OpCode.AS:
-                            context.MoveStackTo(int.Parse((string)instruction.Args[0]));
+                            context.MoveStackTo((int)instruction.Args[0]);
                             break;
                         case OpCode.IMPORT:
                             {
@@ -242,6 +243,93 @@ namespace WinterRose.WinterForgeSerializing.Workers
                                 context.AddObject((int)instruction.Args[0], ref instruction.Args[1]);
                             }
                             break;
+
+                        case OpCode.ADD:
+                        case OpCode.SUB:
+                        case OpCode.MUL:
+                        case OpCode.DIV:
+                        case OpCode.MOD:
+                        case OpCode.POW:
+                            {
+                                (decimal a, decimal b) = PopTwoDecimals();
+
+                                decimal result = instruction.OpCode switch
+                                {
+                                    OpCode.ADD => a + b,
+                                    OpCode.SUB => a - b,
+                                    OpCode.MUL => a * b,
+                                    OpCode.DIV => b == 0 ? throw new WinterForgeExecutionException("Division by zero") : a / b,
+                                    OpCode.MOD => b == 0 ? throw new WinterForgeExecutionException("Modulo by zero") : a % b,
+                                    OpCode.POW => (decimal)Math.Pow((double)a, (double)b),
+                                    _ => throw new InvalidOperationException($"Unsupported arithmetic opcode: {instruction.OpCode}")
+                                };
+
+                                context.ValueStack.Push(result);
+                                break;
+                            }
+
+                        case OpCode.NEG:
+                            {
+                                object value = context.ValueStack.Pop();
+                                value = GetArgumentValue(value, 0, typeof(decimal), null);
+                                if (value is Dispatched)
+                                    throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
+
+                                context.ValueStack.Push(-(decimal)value);
+                                break;
+                            }
+
+                        case OpCode.EQ:
+                        case OpCode.NEQ:
+                        case OpCode.GT:
+                        case OpCode.LT:
+                        case OpCode.GTE:
+                        case OpCode.LTE:
+                            {
+                                object b = context.ValueStack.Pop();
+                                object a = context.ValueStack.Pop();
+
+                                bool result = instruction.OpCode switch
+                                {
+                                    OpCode.EQ => Equals(a, b),
+                                    OpCode.NEQ => !Equals(a, b),
+                                    OpCode.GT => Compare(a, b) > 0,
+                                    OpCode.LT => Compare(a, b) < 0,
+                                    OpCode.GTE => Compare(a, b) >= 0,
+                                    OpCode.LTE => Compare(a, b) <= 0,
+                                    _ => throw new InvalidOperationException($"Unsupported comparison opcode: {instruction.OpCode}")
+                                };
+
+                                context.ValueStack.Push(result);
+                                break;
+                            }
+
+                        case OpCode.AND:
+                        case OpCode.OR:
+                        case OpCode.XOR:
+                            {
+                                bool b = PopBool();
+                                bool a = PopBool();
+
+                                bool result = instruction.OpCode switch
+                                {
+                                    OpCode.AND => a && b,
+                                    OpCode.OR => a || b,
+                                    OpCode.XOR => a ^ b,
+                                    _ => throw new InvalidOperationException($"Unsupported boolean opcode: {instruction.OpCode}")
+                                };
+
+                                context.ValueStack.Push(result);
+                                break;
+                            }
+
+                        case OpCode.NOT:
+                            {
+                                bool value = PopBool();
+                                context.ValueStack.Push(!value);
+                                break;
+                            }
+
                         default:
                             throw new WinterForgeExecutionException($"Opcode: {instruction.OpCode} not supported");
                     }
@@ -259,6 +347,42 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 listStack.Clear();
                 instanceIDStack.Clear();
             }
+        }
+
+        (decimal, decimal) PopTwoDecimals()
+        {
+            object b = context.ValueStack.Pop();
+            object a = context.ValueStack.Pop();
+
+            a = GetArgumentValue(a, 0, typeof(decimal), null);
+            if (a is Dispatched) throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
+
+            b = GetArgumentValue(b, 0, typeof(decimal), null);
+            if (b is Dispatched) throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
+
+            return ((decimal)a, (decimal)b);
+        }
+
+        bool PopBool()
+        {
+            object value = context.ValueStack.Pop();
+            value = GetArgumentValue(value, 0, typeof(bool), null);
+            if (value is Dispatched) throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
+
+            return (bool)value;
+        }
+
+        int Compare(object a, object b)
+        {
+            a = GetArgumentValue(a, 0, typeof(IComparable), null);
+            b = GetArgumentValue(b, 0, typeof(IComparable), null);
+            if (a is Dispatched || b is Dispatched)
+                throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
+
+            if (a is IComparable compA && b != null)
+                return compA.CompareTo(b);
+
+            throw new WinterForgeExecutionException("Operands are not comparable");
         }
 
         private static ReflectionHelper CreateReflectionHelper(ref object o, out object? actualTarget)

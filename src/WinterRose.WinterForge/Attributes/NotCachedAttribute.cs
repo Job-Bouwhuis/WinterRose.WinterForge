@@ -4,10 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace WinterRose.WinterForgeSerializing.Workers
+namespace WinterRose
 {
     /// <summary>
-    /// Notifies <see cref="WinterForge"/> not to cache this object duing serialization
+    /// Notifies <see cref="WinterRose.WinterForgeSerializing.WinterForge"/> not to cache this object duing serialization
     /// </summary>
     /// <remarks>
     /// NOTE: this may lead to a stack overflow if a type using this 

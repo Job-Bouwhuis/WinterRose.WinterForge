@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing.Instructions;
 using WinterRose.WinterForgeSerializing.Workers;
 
 namespace WinterRose.WinterForgeSerializing.Compiling;
@@ -105,10 +106,10 @@ public class OpcodeToByteCompiler()
             var parts = SplitOpcodeLine(line.Trim());
             if (parts.Length == 0) continue;
 
-            if (!byte.TryParse(parts[0], out byte opcodeInt) || !Enum.IsDefined(typeof(OpCode), opcodeInt))
+            if (!byte.TryParse(parts[0], out byte opcodeByte) || !Enum.IsDefined(typeof(OpCode), opcodeByte))
                 throw new InvalidOperationException($"Invalid opcode: {parts[0]}");
 
-            var opcode = (OpCode)opcodeInt;
+            var opcode = (OpCode)opcodeByte;
 
             if (bufferedObject != null)
             {
@@ -137,14 +138,14 @@ public class OpcodeToByteCompiler()
             }
 
 
-            writer.Write(opcodeInt);
+            writer.Write(opcodeByte);
 
             switch (opcode)
             {
                 case OpCode.DEFINE:
                     Type t = InstructionExecutor.ResolveType(parts[1]);
 
-                    if(allowCustomCompilers)
+                    if (allowCustomCompilers)
                         if (CustomValueCompilerRegistry.TryGetByType(t, out ICustomValueCompiler customCompiler))
                         {
                             bufferedObject = new();
@@ -168,7 +169,7 @@ public class OpcodeToByteCompiler()
                     {
                         WriteString(writer, parts[1]);
 
-                        if (instanceStack.TryPeek(out Type targetType))
+                        if (instanceStack.TryPeek(out Type targetType) && opcode is not OpCode.SETACCESS)
                         {
                             ReflectionHelper rh = new(targetType);
                             MemberData mem = rh.GetMember(parts[1]);
@@ -180,7 +181,7 @@ public class OpcodeToByteCompiler()
                                 WritePrefered(writer, parts[2], prefix);
                         }
                         else
-                            WriteAny(writer, parts[2]);
+                            WritePrefered(writer, parts[2], ValuePrefix.STRING);
                     }
                     break;
 
@@ -208,11 +209,6 @@ public class OpcodeToByteCompiler()
                     if (parts.Length == 3)
                         WriteString(writer, parts[2]);
                     break;
-
-                case OpCode.LIST_END:
-                case OpCode.PROGRESS:
-                case OpCode.END_STR:
-                    break; // no args
 
                 case OpCode.ACCESS:
                     WriteString(writer, parts[1]);
@@ -249,6 +245,31 @@ public class OpcodeToByteCompiler()
                     WriteString(writer, parts[1]);
                     WriteInt(writer, int.Parse(parts[2]));
                     break;
+
+
+                case OpCode.LIST_END:
+                case OpCode.PROGRESS:
+                case OpCode.END_STR:
+                case OpCode.ADD:
+                case OpCode.SUB:
+                case OpCode.MUL:
+                case OpCode.DIV:
+                case OpCode.MOD:
+                case OpCode.POW:
+                case OpCode.NEG:
+                case OpCode.EQ:
+                case OpCode.NEQ:
+                case OpCode.GT:
+                case OpCode.LT:
+                case OpCode.GTE:
+                case OpCode.LTE:
+                case OpCode.AND:
+                case OpCode.NOT:
+                case OpCode.OR:
+                case OpCode.XOR:
+                    // no args
+                    break;
+
 
                 default:
                     throw new InvalidOperationException($"Opcode not implemented: {opcode}");
@@ -297,9 +318,6 @@ public class OpcodeToByteCompiler()
     {
         switch (prefered)
         {
-            case ValuePrefix.STRING:
-                WriteString(writer, value.ToString());
-                break;
             case ValuePrefix.BOOL when TryConvert(value, out bool boolVal):
                 writer.Write((byte)ValuePrefix.BOOL);
                 writer.Write(boolVal);
@@ -352,8 +370,29 @@ public class OpcodeToByteCompiler()
                 writer.Write((byte)ValuePrefix.CHAR);
                 writer.Write(charVal);
                 break;
+
+            case ValuePrefix.STRING:
             default:
-                WriteString(writer, value.ToString());
+                if (value is string raw)
+                {
+                    if (raw.StartsWith("_ref(") && raw.EndsWith(")"))
+                    {
+                        writer.Write((byte)ValuePrefix.REF);
+                        writer.Write(int.Parse(raw[5..^1]));
+                    }
+                    else if (raw.StartsWith("_stack(") && raw.EndsWith(")"))
+                    {
+                        writer.Write((byte)ValuePrefix.STACK);
+                    }
+                    else if (raw == "default")
+                    {
+                        writer.Write((byte)ValuePrefix.DEFAULT);
+                    }
+                    else
+                        WriteString(writer, raw);
+                }
+                else
+                    WriteString(writer, value.ToString());
                 break;
         }
     }

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace WinterRose.WinterForgeSerializing.Workers
+namespace WinterRose.WinterForgeSerializing.Util
 {
     internal class OverridableStack<T> : IEnumerable<T>
     {

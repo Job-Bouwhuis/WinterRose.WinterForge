@@ -8,7 +8,30 @@ using WinterRose.WinterForgeSerializing;
 [GuardClass("WinterForge Syntax Tests")]
 public class WinterForgeSyntaxTests
 {
-    [Guard]
+    [GuardSetup]
+    public static void GuardWideSetup()
+    {
+
+    }
+
+    [BeforeEach]
+    public void SetupBeforeEachGuard()
+    {
+
+    }
+
+    [AfterEach]
+    public void TeardownAfterEachGuard()
+    {
+
+    }
+
+    [GuardTeardown]
+    public static void GuardWideTeardown()
+    {
+    }
+
+    [Guard(Severity.Minor)]
     public void InstanceCreation_DefaultCtor()
     {
         string wfCode = @"
@@ -19,6 +42,13 @@ public class WinterForgeSyntaxTests
         var result = WinterForge.DeserializeFromHumanReadableString<Vector2>(wfCode);
         Forge.Expect(result).Not.Null();
         Forge.Expect(result).OfType(typeof(Vector2));
+
+        void temp()
+        {
+            throw new NotImplementedException();
+        }
+
+        Forge.Expect(temp).WhenCalled().ToThrow<NotImplementedException>();
     }
 
     [Guard]

@@ -1,5 +1,4 @@
-﻿using WinterRose.WinterForgeSerializing;
-using WinterRose.WinterForgeSerializing.Workers;
+﻿using WinterRose.WinterForgeSerializing.Instructions;
 
 namespace WinterRose.WinterForgeSerializing.Compiling;
 
@@ -73,6 +72,23 @@ public class ByteToOpcodeParser
                 case OpCode.LIST_END:
                 case OpCode.PROGRESS:
                 case OpCode.END_STR:
+                case OpCode.ADD:
+                case OpCode.SUB:
+                case OpCode.MUL:
+                case OpCode.DIV:
+                case OpCode.MOD:
+                case OpCode.POW:
+                case OpCode.NEG:
+                case OpCode.EQ:
+                case OpCode.NEQ:
+                case OpCode.GT:
+                case OpCode.LT:
+                case OpCode.GTE:
+                case OpCode.LTE:
+                case OpCode.AND:
+                case OpCode.NOT:
+                case OpCode.OR:
+                case OpCode.XOR:
                     // no args
                     break;
 

@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using WinterRose.WinterForgeSerializing.Logging;
 
-namespace WinterRose.WinterForgeSerialization.WinterForgeSerializing.Logging;
+namespace WinterRose.WinterForgeSerializing.Logging;
 
 /// <summary>
 /// Holds reference to several <see cref="WinterForgeProgressTracker"/> subclasses so logging can go to more than one place

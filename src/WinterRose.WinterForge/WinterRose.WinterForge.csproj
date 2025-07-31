@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Version>25.2.26-alpha-0</Version>
-    <RootNamespace>WinterRose.WinterForgeSerialization</RootNamespace>
+    <RootNamespace>WinterRose.WinterForgeSerializing</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
 WinterForge goes beyond standard ideas of serializers. Supporting type inheritence, circle references, and differed references out of the box.
@@ -45,6 +45,10 @@ It also allows accessing fields of already deserialzied objects, static classes.
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="WinterForgeSerializing\" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using WinterRose.WinterForgeSerializing.Instructions;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {

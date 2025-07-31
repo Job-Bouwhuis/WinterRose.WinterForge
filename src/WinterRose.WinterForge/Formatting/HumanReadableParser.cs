@@ -13,9 +13,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing.Instructions;
+using WinterRose.WinterForgeSerializing.Util;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Workers;
+using WinterRose.WinterForgeSerializing.Expressions;
 
 namespace WinterRose.WinterForgeSerializing.Formatting
 {
@@ -424,64 +427,83 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             WriteLine($"{opcodeMap["ANONYMOUS_SET"]} {type} {name} {value}");
         }
 
+        private int ParseRHSAccess(string rhs, string? id)
+        {
+            var rhsParts = rhs.Split("->", StringSplitOptions.RemoveEmptyEntries);
+
+            if (rhsParts.Length > 0)
+            {
+                string firstRhs = rhsParts[0];
+
+                if (firstRhs == "this")
+                {
+                    if (id is null)
+                        throw new WinterForgeFormatException("'this' reference outside the bounds of an object");
+
+                    WriteLine($"{opcodeMap["PUSH"]} _ref({id})");
+                }
+                else if (firstRhs.StartsWith("_ref("))
+                    WriteLine($"{opcodeMap["PUSH"]} {firstRhs}");
+                else if (aliasMap.TryGetValue(firstRhs, out int aliasID))
+                    WriteLine($"{opcodeMap["PUSH"]} _ref({aliasID})");
+                else // assume value is a type literal
+                    WriteLine($"{opcodeMap["PUSH"]} _type({firstRhs})");
+
+                for (int i = 1; i < rhsParts.Length; i++)
+                {
+                    string part = rhsParts[i];
+                    if (string.IsNullOrWhiteSpace(part))
+                        continue;
+
+                    if (part.Contains('(') && part.Contains(')'))
+                        ParseMethodCall(id, part);
+                    else
+                    {
+                        if (part.EndsWith(';'))
+                            part = part[..^1];
+
+                        WriteLine($"{opcodeMap["ACCESS"]} {part}");
+                    }
+                }
+            }
+            else
+                throw new WinterForgeFormatException($"nothing to access on the right side...");
+
+            //if (rhs.Contains("->"))
+            //{
+            //    int asID = GetAutoID();
+            //    WriteLine($"{opcodeMap["AS"]} {asID}");
+            //    return asID;
+            //}
+            return -1;
+        }
+
         private void HandleAccessing(string? id)
         {
-            // Step 1: Split on '=' to separate LHS and RHS
             string[] assignmentParts = currentLine.Split('=', 2, StringSplitOptions.TrimEntries);
             string accessPart = assignmentParts[0];
             string? rhs = assignmentParts.Length > 1 ? assignmentParts[1] : null;
 
-            // Step 2: If there's a RHS, evaluate it first
+            //int asID = -1;
+            string val = "";
             if (rhs != null && rhs.Contains("->"))
+                ParseRHSAccess(rhs, id);
+            else
             {
-                var rhsParts = rhs.Split("->", StringSplitOptions.RemoveEmptyEntries);
-
-                if (rhsParts.Length > 0)
+                if (rhs.EndsWith(';'))
+                    rhs = rhs[..^1];
+                val = ValidateValue(rhs);
+                if (val is "_stack()")
                 {
-                    string firstRhs = rhsParts[0];
+                    //if (ContainsExpressionOutsideQuotes(rhs))
+                    //{
+                        //asID = GetAutoID();
+                        //WriteLine($"{opcodeMap["AS"]} {asID}");
+                    //}
 
-                    if (firstRhs == "this")
-                    {
-                        if (id is null)
-                            throw new WinterForgeFormatException("'this' reference outside the bounds of an object");
-
-                        WriteLine($"{opcodeMap["PUSH"]} _ref({id})");
-                    }
-                    else if (firstRhs.StartsWith("_ref("))
-                        WriteLine($"{opcodeMap["PUSH"]} {firstRhs}");
-                    else if (aliasMap.TryGetValue(firstRhs, out int aliasID))
-                        WriteLine($"{opcodeMap["PUSH"]} _ref({aliasID})");
-                    else // assume value is a type literal
-                        WriteLine($"{opcodeMap["PUSH"]} _type({firstRhs})");
-
-                    for (int i = 1; i < rhsParts.Length; i++)
-                    {
-                        string part = rhsParts[i];
-                        if (string.IsNullOrWhiteSpace(part))
-                            continue;
-
-                        if (part.Contains('(') && part.Contains(')'))
-                            ParseMethodCall(id, part);
-                        else
-                        {
-                            if (part.EndsWith(';'))
-                                part = part[..^1];
-
-                            WriteLine($"{opcodeMap["ACCESS"]} {part}");
-                        }
-                    }
+                    //val = $"_ref({asID})";
                 }
-                else
-                    throw new WinterForgeFormatException($"nothing to access on the right side...");
             }
-
-            int asID = -1;
-            if (rhs.Contains("->"))
-            {
-                asID = GetAutoID();
-                WriteLine($"{opcodeMap["AS"]} {asID}");
-            }
-
             // Step 3: Process LHS
             var lhsParts = accessPart.Split("->", StringSplitOptions.RemoveEmptyEntries);
 
@@ -524,10 +546,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     if (rhs != null && isLast)
                     {
-                        string val = rhs.Contains("->") ? $"_ref({asID})" : rhs;
-                        if (val.EndsWith(';'))
-                            val = val[..^1];
-                        val = ValidateValue(val);
                         WriteLine($"{opcodeMap["SETACCESS"]} {part} {val}");
                     }
                     else
@@ -535,52 +553,35 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 }
             }
 
-            void ParseMethodCall(string? id, string part)
+
+        }
+
+        private void ParseMethodCall(string? id, string part)
+        {
+            var openParen = part.IndexOf('(');
+            var closeParen = part.LastIndexOf(')');
+
+            var methodName = part[..openParen].Trim();
+            var argList = part.Substring(openParen + 1, closeParen - openParen - 1);
+            var args = argList.Split(',').Select(x => x.Trim()).ToList();
+
+            for (int j = args.Count - 1; j >= 0; j--)
             {
-                var openParen = part.IndexOf('(');
-                var closeParen = part.LastIndexOf(')');
+                string arg = args[j];
 
-                var methodName = part[..openParen].Trim();
-                var argList = part.Substring(openParen + 1, closeParen - openParen - 1);
-                var args = argList.Split(',').Select(x => x.Trim()).ToList();
+                if (arg is "..")
+                    continue; // assumed stack value exists from elsewhere
 
-                for (int j = args.Count - 1; j >= 0; j--)
-                {
-                    string arg = args[j];
-
-                    if (arg is "..")
-                        continue; // assumed stack value exists from elsewhere
-
-                    if (arg.Contains("->"))
-                        HandleAccessing(id);
-                    else
-                        WriteLine($"{opcodeMap["PUSH"]} {arg}");
-                }
-
-                WriteLine($"{opcodeMap["CALL"]} {methodName} {args.Count}");
+                if (arg.Contains("->"))
+                    HandleAccessing(id);
+                else
+                    WriteLine($"{opcodeMap["PUSH"]} {arg}");
             }
+
+            WriteLine($"{opcodeMap["CALL"]} {methodName} {args.Count}");
         }
 
         private int GetAutoID() => int.MaxValue - 1000 - autoAsIDs++;
-
-        private int NextAvalible(List<int>? list)
-        {
-            if (list is null)
-                return -1;
-            if (list.Count == 0)
-                return 0;
-
-            var sorted = list.OrderBy(x => x).ToList();
-
-            int last = 0;
-            for (int i = 0; i < sorted.Count; i++)
-            {
-                if (sorted[i] != i)
-                    return last + 1;
-                last = i;
-            }
-            return last + 1;
-        }
 
         private CollectionParseResult ParseCollection()
         {
@@ -887,28 +888,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             WriteLine($"{opcodeMap["SET"]} {field} {value}");
         }
 
-        bool ContainsSequence(StringBuilder sb, string sequence)
-        {
-            if (sequence.Length == 0) return true;
-            if (sb.Length < sequence.Length) return false;
-
-            for (int i = 0; i <= sb.Length - sequence.Length; i++)
-            {
-                bool found = true;
-                for (int j = 0; j < sequence.Length; j++)
-                {
-                    if (sb[i + j] != sequence[j])
-                    {
-                        found = false;
-                        break;
-                    }
-                }
-                if (found) return true;
-            }
-
-            return false;
-        }
-
         int ContainsSequenceOutsideBraces(StringBuilder sb, string sequence)
         {
             if (sequence.Length == 0) return 0;          // empty sequence is “found” at 0
@@ -990,46 +969,51 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             return -1;
         }
 
-
-        int ContainsSequenceOutsideQuotes(StringBuilder sb, string sequence)
+        public static bool ContainsExpressionOutsideQuotes(string input)
         {
-            if (sequence.Length == 0) return 0;          // empty sequence is “found” at 0
-            if (sb.Length < sequence.Length) return -1;  // obviously too short
-
             bool insideQuotes = false;
+            string operators = "+-*/%><=!&|^";
+            bool foundOperandOrOperator = false;
 
-            for (int i = 0; i <= sb.Length - sequence.Length; i++)
+            for (int i = 0; i < input.Length; i++)
             {
-                char current = sb[i];
+                char current = input[i];
 
                 if (current == '"')
                 {
-                    bool escaped = i > 0 && sb[i - 1] == '\\';
-                    if (!escaped) insideQuotes = !insideQuotes;
+                    bool escaped = i > 0 && input[i - 1] == '\\';
+                    if (!escaped)
+                        insideQuotes = !insideQuotes;
                     continue;
                 }
 
-                if (!insideQuotes)
-                {
-                    bool found = true;
-                    for (int j = 0; j < sequence.Length; j++)
-                    {
-                        if (sb[i + j] != sequence[j])
-                        {
-                            found = false;
-                            break;
-                        }
-                    }
+                if (insideQuotes)
+                    continue;
 
-                    if (found)
-                        return i;
+                // Check if current char is part of a possible expression:
+                // - digit (start of number)
+                // - identifier char (letter or underscore)
+                // - operator char
+                // - parentheses
+
+                if (char.IsDigit(current) || char.IsLetter(current) || current == '_')
+                {
+                    foundOperandOrOperator = true;
                 }
+                else if (operators.Contains(current) || current == '(' || current == ')')
+                {
+                    foundOperandOrOperator = true;
+                }
+
+                // Early exit - if we already found something expression-like outside quotes,
+                // we can just say true
+
+                if (foundOperandOrOperator)
+                    return true;
             }
 
-            return -1;
+            return false;
         }
-
-
 
         private string ValidateValue(string value)
         {
@@ -1048,6 +1032,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                     return "_stack()";
                 }
+            }
+
+            if (ContainsExpressionOutsideQuotes(value))
+            {
+                ParseExpression(value);
+                return "_stack()";
             }
 
             if (value.StartsWith("_type"))
@@ -1098,6 +1088,61 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 return Convert.ChangeType(result, Enum.GetUnderlyingType(e)).ToString()!;
             }
             return value;
+        }
+
+        private void ParseExpression(string value)
+        {
+            var tokens = ExpressionTokenizer.Tokenize(value);
+
+            foreach (var token in tokens)
+            {
+                switch (token.Type)
+                {
+                    case TokenType.Number:
+                    case TokenType.String:
+                    case TokenType.Identifier:
+                        if (ContainsSequenceOutsideQuotes(token.Text, "->") != -1)
+                        {
+                            ParseRHSAccess(token.Text, null);
+                            break;
+                        }
+                        WriteLine($"{opcodeMap["PUSH"]} {token.Text}");
+                        break;
+                    case TokenType.Operator:
+                        OpCode operatorCode = token.Text switch
+                        {
+                            "+" => OpCode.ADD,
+                            "-" => OpCode.SUB,
+                            "*" => OpCode.MUL,
+                            "/" => OpCode.DIV,
+                            "%" => OpCode.MOD,
+                            "^" => OpCode.POW,
+
+                            "==" => OpCode.EQ,
+                            "!=" => OpCode.NEQ,
+                            ">" => OpCode.GT,
+                            "<" => OpCode.LT,
+                            ">=" => OpCode.GTE,
+                            "<=" => OpCode.LTE,
+
+                            "&&" => OpCode.AND,
+                            "||" => OpCode.OR,
+                            "!" => OpCode.NOT,
+                            "^|" => OpCode.XOR,
+
+                            _ => throw new InvalidOperationException($"Unknown operator: {token.Text}")
+                        };
+
+                        WriteLine(opcodeMap[operatorCode.ToString()].ToString());
+                        break;
+                    case TokenType.LParen:
+                        break;
+                    case TokenType.RParen:
+                        break;
+                    default:
+                        break;
+                }
+            }
         }
 
         public static bool IsValidNumericString(string input)
