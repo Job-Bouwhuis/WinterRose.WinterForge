@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -45,7 +46,37 @@ public class OpcodeToByteCompiler()
     private int bufferedObjectRefID;
     private int nesting;
     private bool allowCustomCompilers = true;
-    
+    private bool allowedRehydrate = true;
+
+    readonly HashSet<OpCode> mathAndLogicOpcodes =
+    [
+        OpCode.ADD,
+        OpCode.SUB,
+        OpCode.MUL,
+        OpCode.DIV,
+        OpCode.MOD,
+
+        OpCode.POW,
+        OpCode.NEG,
+
+        OpCode.EQ,
+        OpCode.NEQ,
+        OpCode.GT,
+        OpCode.LT,
+        OpCode.GTE,
+        OpCode.LTE,
+
+        OpCode.AND,
+        OpCode.NOT,
+        OpCode.OR,
+        OpCode.XOR,
+
+        OpCode.SET,
+        OpCode.PUSH,
+        OpCode.ACCESS,
+        OpCode.CALL
+    ];
+
     internal OpcodeToByteCompiler(bool allowCustomCompilers) : this()
     {
         this.allowCustomCompilers = allowCustomCompilers;
@@ -96,184 +127,261 @@ public class OpcodeToByteCompiler()
         using var writer = new BinaryWriter(bytesDestination, Encoding.UTF8, leaveOpen: true);
 
         string? line;
+        bool bufferingActive = bufferedObject != null; // Is optimized buffering active?
+
         while ((line = reader.ReadLine()) != null)
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            if (line == "WF_ENDOFDATA")
-                writer.Write((byte)OpCode.END_OF_DATA);
-            if (line.StartsWith("//")) // skip comments
+            if (!ValidateLine(writer, line, out var parts, out var opcodeByte))
                 continue;
-            var parts = SplitOpcodeLine(line.Trim());
-            if (parts.Length == 0) continue;
-
-            if (!byte.TryParse(parts[0], out byte opcodeByte) || !Enum.IsDefined(typeof(OpCode), opcodeByte))
-                throw new InvalidOperationException($"Invalid opcode: {parts[0]}");
 
             var opcode = (OpCode)opcodeByte;
 
-            if (bufferedObject != null)
+            if (bufferingActive)
             {
-                if (line.StartsWith("//")) continue;
-                if (opcode is not OpCode.SET and not OpCode.END) 
-                    throw new InvalidOperationException("Custom compiled class can only have straightforward set assignments");
-                if (line.StartsWith(((byte)OpCode.END).ToString())) nesting--;
-
-                bufferedObject.Add(line);
-
-                if (nesting == 0)
-                {
-                    // Full object block captured
-                    object result = Rehydrate(bufferedObject, bufferedType!); // you'll define this
-
-                    writer.Write((byte)0x00);
-                    writer.Write(customCompiler.CompilerId);
-                    writer.Write(bufferedObjectRefID);
-                    customCompiler!.Compile(writer, result);
-                    bufferedObject = null;
-                    bufferedType = null;
-                    bufferedObjectRefID = -1;
-                }
-
-                continue; // skip the normal line handling
+                // Pass bufferingActive by ref, so ParseOptimizedCompile can disable it early
+                ParseOptimizedCompile(writer, line, ref opcodeByte, opcode, ref bufferingActive);
+                if (bufferingActive)
+                    continue;
             }
 
+            EmitOpcode(writer, line, parts, opcodeByte, opcode);
+            bufferingActive = bufferedObject != null;
+        }
+    }
 
-            writer.Write(opcodeByte);
 
-            switch (opcode)
+    private void ParseOptimizedCompile(BinaryWriter writer, string line, ref byte opcodeByte, OpCode opcode, ref bool bufferingActive)
+    {
+        if (opcode is not OpCode.SET and not OpCode.END)
+        {
+            // Illegal opcode detected for optimized rehydration
+
+            allowCustomCompilers = false;
+            Type t = InstructionExecutor.ResolveType(bufferedObject[0].Split(' ')[1]);
+            instanceStack.Push(t);
+
+            foreach (string bufferedLine in bufferedObject)
             {
-                case OpCode.DEFINE:
-                    Type t = InstructionExecutor.ResolveType(parts[1]);
+                ValidateLine(writer, bufferedLine, out var bufferedParts, out var bufferedOpcodeByte);
+                EmitOpcode(writer, bufferedLine, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
+            }
 
-                    if (allowCustomCompilers)
-                        if (CustomValueCompilerRegistry.TryGetByType(t, out ICustomValueCompiler customCompiler))
-                        {
-                            bufferedObject = new();
-                            bufferedType = t;
-                            bufferedObject.Add(line);
-                            bufferedObjectRefID = int.Parse(parts[2]); // object id;
-                            nesting = 1;
-                            this.customCompiler = customCompiler;
-                            continue;
-                        }
+            allowCustomCompilers = true;
 
-                    instanceStack.Push(t);
-                    WriteString(writer, parts[1]); // type name
-                    WriteInt(writer, int.Parse(parts[2])); // object id
-                    WriteInt(writer, int.Parse(parts[3])); // arg count
-                    break;
+            bufferingActive = false;
+
+            // Clear buffered state since we're done flushing
+            bufferedObject = null;
+            bufferedType = null;
+            bufferedObjectRefID = -1;
+            allowedRehydrate = true;
+
+            return;
+        }
+
+        // Normal buffering logic if opcode allowed
+        if (line.StartsWith(((byte)OpCode.END).ToString() + " "))
+            nesting--;
+
+        bufferedObject.Add(line);
+
+        if (nesting == 0)
+        {
+            if (allowedRehydrate)
+            {
+                object instance = Rehydrate(bufferedObject, bufferedType!); // you'll define this
+
+                writer.Write((byte)0x00);
+                writer.Write(customCompiler.CompilerId);
+                writer.Write(bufferedObjectRefID);
+                customCompiler!.Compile(writer, instance);
+            }
+            else
+            {
+                throw new UnreachableException("if you did anyway. get this info to the author via discord 'thesnowowl':\n\n" +
+                    $"{nameof(OpcodeToByteCompiler)}.{nameof(ParseOptimizedCompile)}-impossible else statement reached.\n\nMany thanks in advance!");
+            }
+
+            bufferedObject = null;
+            bufferedType = null;
+            bufferedObjectRefID = -1;
+            allowedRehydrate = true;
+
+            bufferingActive = false; // end of object, stop buffering
+        }
+    }
 
 
-                case OpCode.SET:
-                case OpCode.SETACCESS:
-                    {
-                        WriteString(writer, parts[1]);
+    private bool ValidateLine(BinaryWriter writer, string line, out string[] parts, out byte opcodeByte)
+    {
+        parts = Array.Empty<string>();
+        opcodeByte = 0;
 
-                        if (instanceStack.TryPeek(out Type targetType) && opcode is not OpCode.SETACCESS)
-                        {
-                            ReflectionHelper rh = new(targetType);
-                            MemberData mem = rh.GetMember(parts[1]);
-                            Type fieldType = mem.Type;
-                            ValuePrefix prefix = GetNumericValuePrefix(fieldType);
-                            if (prefix is ValuePrefix.NONE)
-                                WriteAny(writer, parts[2]);
-                            else
-                                WritePrefered(writer, parts[2], prefix);
-                        }
-                        else
-                            WritePrefered(writer, parts[2], ValuePrefix.STRING);
-                    }
-                    break;
+        if (string.IsNullOrWhiteSpace(line))
+            return false;
 
-                case OpCode.END:
-                    instanceStack.Pop();
-                    goto case OpCode.RET;
-                case OpCode.RET:
-                case OpCode.AS:
-                    WritePrefered(writer, parts[1], ValuePrefix.INT);
-                    break;
+        if (line == "WF_ENDOFDATA")
+        {
+            writer.Write((byte)OpCode.END_OF_DATA);
+            return false; // no further processing needed
+        }
 
-                case OpCode.PUSH:
-                    WritePrefered(writer, parts[1], ValuePrefix.STRING);
-                    break;
+        if (line.StartsWith("//")) // skip comments
+            return false;
 
-                case OpCode.ELEMENT:
-                    writer.Write((byte)(parts.Length - 1));
-                    WriteAny(writer, parts[1]);
-                    if (parts.Length > 2)
-                        WriteAny(writer, parts[2]);
-                    break;
+        parts = SplitOpcodeLine(line.Trim());
+        if (parts.Length == 0)
+            return false;
 
-                case OpCode.LIST_START:
+        if (!byte.TryParse(parts[0], out opcodeByte) || !Enum.IsDefined(typeof(OpCode), opcodeByte))
+            throw new InvalidOperationException($"Invalid opcode: {parts[0]}");
+
+        return true;
+    }
+
+
+    private void EmitOpcode(BinaryWriter writer, string line, string[] parts, byte opcodeByte, OpCode opcode)
+    {
+        if(opcode is OpCode.DEFINE)
+        {
+            Type t = InstructionExecutor.ResolveType(parts[1]);
+
+            if (allowCustomCompilers)
+                if (CustomValueCompilerRegistry.TryGetByType(t, out ICustomValueCompiler customCompiler))
+                {
+                    bufferedObject = new();
+                    bufferedType = t;
+                    bufferedObject.Add(line);
+                    bufferedObjectRefID = int.Parse(parts[2]); // object id;
+                    nesting = 1;
+                    this.customCompiler = customCompiler;
+                    
+                    return;
+                }
+
+            instanceStack.Push(t);
+            writer.Write(opcodeByte);
+            WriteString(writer, parts[1]); // type name
+            WriteInt(writer, int.Parse(parts[2])); // object id
+            WriteInt(writer, int.Parse(parts[3])); // arg count
+            return;
+        }
+
+        writer.Write(opcodeByte);
+
+        switch (opcode)
+        {
+            case OpCode.SET:
+            case OpCode.SETACCESS:
+                {
                     WriteString(writer, parts[1]);
-                    if (parts.Length == 3)
-                        WriteString(writer, parts[2]);
-                    break;
 
-                case OpCode.ACCESS:
-                    WriteString(writer, parts[1]);
-                    break;
-
-                case OpCode.START_STR:
-                case OpCode.STR:
-                    WriteMultilineString(writer, line);
-                    break;
-
-                case OpCode.ALIAS:
-                    WriteInt(writer, int.Parse(parts[1]));
-                    WriteString(writer, parts[2]);
-                    break;
-
-                case OpCode.ANONYMOUS_SET:
+                    if (instanceStack.TryPeek(out Type targetType) && opcode is not OpCode.SETACCESS)
                     {
-                        WriteString(writer, parts[1]); // type
-                        WriteString(writer, parts[2]); // field
-
-                        Type fieldDeclarerType = InstructionExecutor.ResolveType(parts[1]);
-                        ReflectionHelper rh = new(fieldDeclarerType);
+                        ReflectionHelper rh = new(targetType);
                         MemberData mem = rh.GetMember(parts[1]);
                         Type fieldType = mem.Type;
                         ValuePrefix prefix = GetNumericValuePrefix(fieldType);
                         if (prefix is ValuePrefix.NONE)
-                            WriteAny(writer, parts[3]);
+                            WriteAny(writer, parts[2]);
                         else
-                            WritePrefered(writer, parts[3], prefix);
+                            WritePrefered(writer, parts[2], prefix);
                     }
-                    break;
+                    else
+                        WritePrefered(writer, parts[2], ValuePrefix.STRING);
+                }
+                break;
 
-                case OpCode.IMPORT:
-                    WriteString(writer, parts[1]);
-                    WriteInt(writer, int.Parse(parts[2]));
-                    break;
+            case OpCode.END:
+                instanceStack.Pop();
+                goto case OpCode.RET;
+            case OpCode.RET:
+            case OpCode.AS:
+                WritePrefered(writer, parts[1], ValuePrefix.INT);
+                break;
+
+            case OpCode.PUSH:
+                WritePrefered(writer, parts[1], ValuePrefix.STRING);
+                break;
+
+            case OpCode.ELEMENT:
+                writer.Write((byte)(parts.Length - 1));
+                WriteAny(writer, parts[1]);
+                if (parts.Length > 2)
+                    WriteAny(writer, parts[2]);
+                break;
+
+            case OpCode.LIST_START:
+                WriteString(writer, parts[1]);
+                if (parts.Length == 3)
+                    WriteString(writer, parts[2]);
+                break;
+
+            case OpCode.ACCESS:
+                WriteString(writer, parts[1]);
+                break;
+
+            case OpCode.START_STR:
+            case OpCode.STR:
+                WriteMultilineString(writer, line);
+                break;
+
+            case OpCode.ALIAS:
+                WriteInt(writer, int.Parse(parts[1]));
+                WriteString(writer, parts[2]);
+                break;
+
+            case OpCode.ANONYMOUS_SET:
+                {
+                    WriteString(writer, parts[1]); // type
+                    WriteString(writer, parts[2]); // field
+
+                    Type fieldDeclarerType = InstructionExecutor.ResolveType(parts[1]);
+                    ReflectionHelper rh = new(fieldDeclarerType);
+                    MemberData mem = rh.GetMember(parts[1]);
+                    Type fieldType = mem.Type;
+                    ValuePrefix prefix = GetNumericValuePrefix(fieldType);
+                    if (prefix is ValuePrefix.NONE)
+                        WriteAny(writer, parts[3]);
+                    else
+                        WritePrefered(writer, parts[3], prefix);
+                }
+                break;
+
+            case OpCode.IMPORT:
+                WriteString(writer, parts[1]);
+                WriteInt(writer, int.Parse(parts[2]));
+                break;
 
 
-                case OpCode.LIST_END:
-                case OpCode.PROGRESS:
-                case OpCode.END_STR:
-                case OpCode.ADD:
-                case OpCode.SUB:
-                case OpCode.MUL:
-                case OpCode.DIV:
-                case OpCode.MOD:
-                case OpCode.POW:
-                case OpCode.NEG:
-                case OpCode.EQ:
-                case OpCode.NEQ:
-                case OpCode.GT:
-                case OpCode.LT:
-                case OpCode.GTE:
-                case OpCode.LTE:
-                case OpCode.AND:
-                case OpCode.NOT:
-                case OpCode.OR:
-                case OpCode.XOR:
-                    // no args
-                    break;
+            case OpCode.LIST_END:
+            case OpCode.PROGRESS:
+            case OpCode.END_STR:
+            case OpCode.ADD:
+            case OpCode.SUB:
+            case OpCode.MUL:
+            case OpCode.DIV:
+            case OpCode.MOD:
+            case OpCode.POW:
+            case OpCode.NEG:
+            case OpCode.EQ:
+            case OpCode.NEQ:
+            case OpCode.GT:
+            case OpCode.LT:
+            case OpCode.GTE:
+            case OpCode.LTE:
+            case OpCode.AND:
+            case OpCode.NOT:
+            case OpCode.OR:
+            case OpCode.XOR:
+            case OpCode.DEFINE:
+                // no args
+                break;
 
+            
 
-                default:
-                    throw new InvalidOperationException($"Opcode not implemented: {opcode}");
-            }
+            default:
+                throw new InvalidOperationException($"Opcode not implemented: {opcode}");
         }
     }
 

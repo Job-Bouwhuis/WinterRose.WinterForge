@@ -325,16 +325,19 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     WriteLine($"{opcodeMap["END"]} {id}");
                     return;
                 }
-                if (line.Contains("->"))
+                if(ContainsExpressionOutsideQuotes(line) &&
+                    line.Contains(" = ") && line.EndsWith(';'))
+                    ParseAssignment(line, id);
+                else if (line.Contains("->"))
                     HandleAccessing(id);
                 else if (line.IndexOf(':') is int colinx && line.IndexOf('=') is int eqinx
                     && colinx is not -1 && eqinx is not -1
                     && colinx < eqinx)
                     ParseAnonymousAssignment(line);
                 else if (line.Contains('=') && line.EndsWith(';'))
-                    ParseAssignment(line);
+                    ParseAssignment(line, id);
                 else if (line.Contains('=') && line.Contains('\"'))
-                    ParseAssignment(line);
+                    ParseAssignment(line, id);
                 else if (line.Contains(':'))
                 {
                     currentLine = line;
@@ -878,12 +881,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
         }
 
-        private void ParseAssignment(string line)
+        private void ParseAssignment(string line, string? id)
         {
             line = line.TrimEnd(';');
             int eq = line.IndexOf('=');
             string field = line[..eq].Trim();
-            string value = ValidateValue(line[(eq + 1)..].Trim());
+            string value = ValidateValue(line[(eq + 1)..].Trim(), id);
 
             WriteLine($"{opcodeMap["SET"]} {field} {value}");
         }
@@ -1015,7 +1018,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             return false;
         }
 
-        private string ValidateValue(string value)
+        private string ValidateValue(string value, string? id = null)
         {
             if (value.StartsWith('\"') && value.StartsWith('\"'))
             {
@@ -1036,7 +1039,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             if (ContainsExpressionOutsideQuotes(value))
             {
-                ParseExpression(value);
+                ParseExpression(value, id);
                 return "_stack()";
             }
 
@@ -1090,7 +1093,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             return value;
         }
 
-        private void ParseExpression(string value)
+        private void ParseExpression(string value, string? id)
         {
             var tokens = ExpressionTokenizer.Tokenize(value);
 
@@ -1103,7 +1106,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     case TokenType.Identifier:
                         if (ContainsSequenceOutsideQuotes(token.Text, "->") != -1)
                         {
-                            ParseRHSAccess(token.Text, null);
+                            ParseRHSAccess(token.Text, id);
                             break;
                         }
                         WriteLine($"{opcodeMap["PUSH"]} {token.Text}");
