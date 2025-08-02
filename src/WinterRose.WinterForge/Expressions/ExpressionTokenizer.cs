@@ -8,6 +8,7 @@ namespace WinterRose.WinterForgeSerializing.Expressions;
 
 public enum TokenType
 {
+    None,
     Number,
     String,
     Identifier,

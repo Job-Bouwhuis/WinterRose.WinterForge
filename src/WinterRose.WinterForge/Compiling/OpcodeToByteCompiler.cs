@@ -123,6 +123,12 @@ public class OpcodeToByteCompiler()
 
     public void Compile(Stream textOpcodes, Stream bytesDestination)
     {
+        if(textOpcodes is MemoryStream mems)
+        {
+            string textops = Encoding.UTF8.GetString(mems.ToArray());
+            mems.Position = 0;
+        }
+
         using var reader = new StreamReader(textOpcodes, leaveOpen: true);
         using var writer = new BinaryWriter(bytesDestination, Encoding.UTF8, leaveOpen: true);
 
@@ -141,6 +147,8 @@ public class OpcodeToByteCompiler()
                 // Pass bufferingActive by ref, so ParseOptimizedCompile can disable it early
                 ParseOptimizedCompile(writer, line, ref opcodeByte, opcode, ref bufferingActive);
                 if (bufferingActive)
+                    continue;
+                if (opcode is OpCode.END)
                     continue;
             }
 
@@ -191,6 +199,7 @@ public class OpcodeToByteCompiler()
             {
                 object instance = Rehydrate(bufferedObject, bufferedType!); // you'll define this
 
+                writer.Write((byte)0x00);
                 writer.Write((byte)0x00);
                 writer.Write(customCompiler.CompilerId);
                 writer.Write(bufferedObjectRefID);

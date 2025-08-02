@@ -4,9 +4,10 @@ namespace WinterRose.WinterForgeSerializing.Compiling;
 
 public class ByteToOpcodeParser
 {
-    public static IEnumerable<Instruction> Parse(Stream byteStream)
+    public static List<Instruction> Parse(Stream byteStream)
     {
         using var reader = new BinaryReader(byteStream, System.Text.Encoding.UTF8, leaveOpen: true);
+        List<Instruction> result = [];
 
         while (reader.BaseStream.Position < reader.BaseStream.Length)
         {
@@ -16,7 +17,7 @@ public class ByteToOpcodeParser
             switch (opcode)
             {
                 case OpCode.END_OF_DATA:
-                    yield break;
+                    return result;
 
                 case OpCode.DEFINE:
                     if(reader.PeekChar() == '\0')
@@ -27,7 +28,7 @@ public class ByteToOpcodeParser
                         {
                             int refID = reader.ReadInt32();
                             object o = compiler.Decompile(reader);
-                            yield return new Instruction(OpCode.CREATE_REF, [refID, o]);
+                            result.Add(new Instruction(OpCode.CREATE_REF, [refID, o]));
                             continue;
                         }
                         else
@@ -116,8 +117,9 @@ public class ByteToOpcodeParser
                     throw new InvalidOperationException($"Opcode {opcode} not supported in deserializer.");
             }
 
-            yield return new Instruction(opcode, args.ToArray());
+            result.Add(new Instruction(opcode, args.ToArray()));
         }
+        return result;
     }
 
     private static string ReadString(BinaryReader reader, bool consumedPrefix = false)

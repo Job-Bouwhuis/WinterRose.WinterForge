@@ -325,7 +325,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     WriteLine($"{opcodeMap["END"]} {id}");
                     return;
                 }
-                if(ContainsExpressionOutsideQuotes(line) &&
+                if (ContainsExpressionOutsideQuotes(line) &&
                     line.Contains(" = ") && line.EndsWith(';'))
                     ParseAssignment(line, id);
                 else if (line.Contains("->"))
@@ -500,8 +500,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     //if (ContainsExpressionOutsideQuotes(rhs))
                     //{
-                        //asID = GetAutoID();
-                        //WriteLine($"{opcodeMap["AS"]} {asID}");
+                    //asID = GetAutoID();
+                    //WriteLine($"{opcodeMap["AS"]} {asID}");
                     //}
 
                     //val = $"_ref({asID})";
@@ -972,17 +972,39 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             return -1;
         }
 
+        public static bool HasMoreThanOneOf(string input, char target)
+        {
+            int count = 0;
+
+            foreach (char c in input)
+            {
+                if (c == target)
+                {
+                    if (++count > 1)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         public static bool ContainsExpressionOutsideQuotes(string input)
         {
             bool insideQuotes = false;
-            string operators = "+-*/%><=!&|^";
-            bool foundOperandOrOperator = false;
+            bool insideGeneric = false;
+
+            // Operators considered for math/boolean expressions
+            string mathBoolOperators = "+-*/%==!=><>=<=&&||!^";
+            TokenType lastToken = TokenType.None;
+
+            // Simple helper to check if char is operator char used in math/boolean operators
+            bool IsOperatorChar(char c) => "+-*/%><=!&|^".Contains(c);
 
             for (int i = 0; i < input.Length; i++)
             {
-                char current = input[i];
+                char c = input[i];
 
-                if (current == '"')
+                if (c == '"')
                 {
                     bool escaped = i > 0 && input[i - 1] == '\\';
                     if (!escaped)
@@ -993,30 +1015,69 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 if (insideQuotes)
                     continue;
 
-                // Check if current char is part of a possible expression:
-                // - digit (start of number)
-                // - identifier char (letter or underscore)
-                // - operator char
-                // - parentheses
-
-                if (char.IsDigit(current) || char.IsLetter(current) || current == '_')
+                if (c == '<' && lastToken == TokenType.Identifier)
                 {
-                    foundOperandOrOperator = true;
-                }
-                else if (operators.Contains(current) || current == '(' || current == ')')
-                {
-                    foundOperandOrOperator = true;
+                    // Entering generic syntax - skip until matching '>'
+                    insideGeneric = true;
+                    continue;
                 }
 
-                // Early exit - if we already found something expression-like outside quotes,
-                // we can just say true
+                if (c == '>' && insideGeneric)
+                {
+                    insideGeneric = false;
+                    continue;
+                }
 
-                if (foundOperandOrOperator)
-                    return true;
+                if (insideGeneric)
+                    continue;
+
+                if (char.IsWhiteSpace(c) || c == ',' || c == ';')
+                {
+                    // Reset last token on separators, but only if expression isn't found yet
+                    continue;
+                }
+
+                if (char.IsLetterOrDigit(c) || c == '_')
+                {
+                    lastToken = TokenType.Identifier;
+                    continue;
+                }
+
+                if (IsOperatorChar(c))
+                {
+                    // If operator is '=' alone and previous token is None or operator, treat as assignment or invalid - ignore
+                    if (c == '=')
+                    {
+                        bool isDoubleEqual = i + 1 < input.Length && input[i + 1] == '=';
+                        if (!isDoubleEqual)
+                        {
+                            // Single = likely assignment, skip
+                            lastToken = TokenType.None;
+                            continue;
+                        }
+                    }
+
+                    // Check if last token was operand and operator is valid math/boolean operator
+                    if (lastToken == TokenType.Identifier)
+                    {
+                        lastToken = TokenType.Operator;
+                        continue;
+                    }
+
+                    // Operator without operand before = no expression yet
+                    lastToken = TokenType.None;
+                    continue;
+                }
+
+                // Anything else resets state
+                lastToken = TokenType.None;
             }
 
-            return false;
+            // Valid expression requires operand-operator-operand sequence
+            // So if last token was operator, invalid (e.g. "5 +")
+            return lastToken == TokenType.Operator;
         }
+
 
         private string ValidateValue(string value, string? id = null)
         {
