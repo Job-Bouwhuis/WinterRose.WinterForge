@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
 using System.Data;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using WinterRose.AnonymousTypes;
@@ -85,17 +86,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
             instanceIDStack.Clear();
         }
 
-        /// <summary>
-        /// Deserializes the given instructions and gives either a <see cref="List{object}"/> of objects back, 
-        /// or the object on which the return instruction was given
-        /// </summary>
-        /// <param name="instructions"></param>
-        /// <returns></returns>
+        //private readonly Dictionary<OpCode, (long totalTicks, int count)> opcodeTimings = new();
+
         public unsafe object? Execute(List<Instruction> instructionCollection)
         {
             ObjectDisposedException.ThrowIf(IsDisposed, this);
-            var instructions = instructionCollection.ToList();
-            instructionTotal = instructions.Count;
+            int instructionTotal = instructionCollection.Count;
+
+            //opcodeTimings.Clear();
+
             try
             {
                 progressTracker?.Report(0);
@@ -103,9 +102,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 context = new();
 
-                for (instructionIndex = 0; instructionIndex < instructions.Count; instructionIndex++)
+                foreach(var instruction in instructionCollection) 
                 {
-                    Instruction instruction = current = instructions[instructionIndex];
+                    //long startTicks = Stopwatch.GetTimestamp();
+
                     switch (instruction.OpCode)
                     {
                         case OpCode.DEFINE:
@@ -115,35 +115,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             HandleSet(instruction.Args);
                             break;
                         case OpCode.ANONYMOUS_SET:
-                            {
-                                if (context.GetObject(instanceIDStack.Peek()) is not AnonymousTypeReader obj)
-                                    throw new InvalidOperationException("Anonymous type reader not found on stack for anonymous set operation");
-
-                                progressTracker?.OnField((string)instruction.Args[1], instructionIndex + 1, instructionTotal);
-
-                                Type fieldType = ResolveType((string)instruction.Args[0]);
-
-                                object val = GetArgumentValue(instruction.Args[2], 2, fieldType, val => { });
-                                obj.SetMember((string)instruction.Args[1], ref val);
-                                break;
-                            }
+                            HandleAnonymousSet(instruction);
+                            break;
                         case OpCode.PUSH:
-                            {
-                                object arg = instruction.Args[0];
-                                if (arg is string)
-                                    arg = GetArgumentValue(arg, 0, typeof(string), delegate { });
-                                if (arg is Dispatched)
-                                    throw new Exception("Other opcodes rely on PUSH having pushed its value, cant differ reference till later");
-
-                                if (!arg.GetType().IsClass && !arg.GetType().IsPrimitive)
-                                {
-                                    object* ptr = &arg;
-                                    var v = new StructReference(ptr);
-                                    context.ValueStack.Push(v);
-                                }
-                                else
-                                    context.ValueStack.Push(arg);
-                            }
+                            HandlePush(instruction);
                             break;
                         case OpCode.START_STR:
                             sb = new StringBuilder();
@@ -175,17 +150,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             HandleEnd();
                             break;
                         case OpCode.RET:
-                            {
-                                Validate();
-                                if (instruction.Args[0] is "_stack()")
-                                    return context.ValueStack.Peek();
-                                if (instruction.Args[0] == "null")
-                                    return null;
-                                object val = context.GetObject((int)instruction.Args[0]) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
-                                return val;
-                            }
+                            Validate();
+                            if (instruction.Args[0] is "_stack()")
+                                return context.ValueStack.Peek();
+                            if (instruction.Args[0] == "null")
+                                return null;
+                            object val = context.GetObject((int)instruction.Args[0]) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
+                            return val;
                         case OpCode.PROGRESS:
-                            progressTracker?.Report((instructionIndex + 1) / (float)instructions.Count);
+                            progressTracker?.Report((instructionIndex + 1) / (float)instructionTotal);
                             break;
                         case OpCode.ACCESS:
                             {
@@ -196,52 +169,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
                                 break;
                             }
                         case OpCode.SETACCESS:
-                            {
-                                var field = (string)instruction.Args[0];
-                                var rawValue = instruction.Args[1];
-
-                                var target = context.ValueStack.Pop();
-
-                                AccessFilterCache.Validate(target is Type ? (Type)target : target.GetType(), AccessFilterKind.Blacklist, field);
-
-                                var helper = CreateReflectionHelper(ref target, out object actual);
-
-                                MemberData member = helper.GetMember(field);
-
-                                object? value = GetArgumentValue(rawValue, 1, member.Type, val =>
-                                {
-                                    if (member.Type.IsArray)
-                                    {
-                                        if (member.Type.IsArray)
-                                            val = ((IList)val).GetInternalArray();
-                                    }
-
-                                    member.SetValue(ref actual, val);
-                                });
-                                if (value is Dispatched)
-                                    continue; // value has been dispatched to be set later
-                                if (value is StructReference sr)
-                                    value = sr.Get();
-                                if (member.Type.IsArray)
-                                    value = ((IList)value).GetInternalArray();
-
-                                member.SetValue(ref actual, value);
-                            }
+                            HandleSetAccess(instruction);
                             break;
                         case OpCode.AS:
                             context.MoveStackTo((int)instruction.Args[0]);
                             break;
                         case OpCode.IMPORT:
-                            {
-                                object? val = WinterForge.DeserializeFromFile((string)instruction.Args[0]);
-                                int id = TypeConverter.Convert<int>(instruction.Args[1]);
-                                context.AddObject(id, ref val);
-                            }
+                            HandleImport(instruction);
                             break;
                         case OpCode.CREATE_REF:
-                            {
-                                context.AddObject((int)instruction.Args[0], ref instruction.Args[1]);
-                            }
+                            context.AddObject((int)instruction.Args[0], ref instruction.Args[1]);
                             break;
 
                         case OpCode.ADD:
@@ -250,34 +187,12 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.DIV:
                         case OpCode.MOD:
                         case OpCode.POW:
-                            {
-                                (decimal a, decimal b) = PopTwoDecimals();
-
-                                decimal result = instruction.OpCode switch
-                                {
-                                    OpCode.ADD => a + b,
-                                    OpCode.SUB => a - b,
-                                    OpCode.MUL => a * b,
-                                    OpCode.DIV => b == 0 ? throw new WinterForgeExecutionException("Division by zero") : a / b,
-                                    OpCode.MOD => b == 0 ? throw new WinterForgeExecutionException("Modulo by zero") : a % b,
-                                    OpCode.POW => (decimal)Math.Pow((double)a, (double)b),
-                                    _ => throw new InvalidOperationException($"Unsupported arithmetic opcode: {instruction.OpCode}")
-                                };
-
-                                context.ValueStack.Push(result);
-                                break;
-                            }
+                            HandleMathOp(instruction);
+                            break;
 
                         case OpCode.NEG:
-                            {
-                                object value = context.ValueStack.Pop();
-                                value = GetArgumentValue(value, 0, typeof(decimal), null);
-                                if (value is Dispatched)
-                                    throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
-
-                                context.ValueStack.Push(-(decimal)value);
-                                break;
-                            }
+                            HandleNegatorOp();
+                            break;
 
                         case OpCode.EQ:
                         case OpCode.NEQ:
@@ -285,43 +200,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         case OpCode.LT:
                         case OpCode.GTE:
                         case OpCode.LTE:
-                            {
-                                object b = context.ValueStack.Pop();
-                                object a = context.ValueStack.Pop();
-
-                                bool result = instruction.OpCode switch
-                                {
-                                    OpCode.EQ => Equals(a, b),
-                                    OpCode.NEQ => !Equals(a, b),
-                                    OpCode.GT => Compare(a, b) > 0,
-                                    OpCode.LT => Compare(a, b) < 0,
-                                    OpCode.GTE => Compare(a, b) >= 0,
-                                    OpCode.LTE => Compare(a, b) <= 0,
-                                    _ => throw new InvalidOperationException($"Unsupported comparison opcode: {instruction.OpCode}")
-                                };
-
-                                context.ValueStack.Push(result);
-                                break;
-                            }
+                            HandleCrossValueBooleanOp(instruction);
+                            break;
 
                         case OpCode.AND:
                         case OpCode.OR:
                         case OpCode.XOR:
-                            {
-                                bool b = PopBool();
-                                bool a = PopBool();
-
-                                bool result = instruction.OpCode switch
-                                {
-                                    OpCode.AND => a && b,
-                                    OpCode.OR => a || b,
-                                    OpCode.XOR => a ^ b,
-                                    _ => throw new InvalidOperationException($"Unsupported boolean opcode: {instruction.OpCode}")
-                                };
-
-                                context.ValueStack.Push(result);
-                                break;
-                            }
+                            HandleBasicBoolToBoolOp(instruction);
+                            break;
 
                         case OpCode.NOT:
                             {
@@ -333,6 +219,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         default:
                             throw new WinterForgeExecutionException($"Opcode: {instruction.OpCode} not supported");
                     }
+
+                    instructionIndex++;
+
+                    //long endTicks = Stopwatch.GetTimestamp();
+                    //long elapsedTicks = endTicks - startTicks;
+
+                    //if (!opcodeTimings.TryGetValue(instruction.OpCode, out var timing))
+                    //timing = (0, 0);
+
+                    //opcodeTimings[instruction.OpCode] = (timing.totalTicks + elapsedTicks, timing.count + 1);
                 }
 
                 return new Nothing(context.ObjectTable);
@@ -346,7 +242,184 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 dispatchedReferences.Clear();
                 listStack.Clear();
                 instanceIDStack.Clear();
+
+                //PrintOpcodeTimings();
             }
+        }
+
+        private unsafe void HandleImport(Instruction instruction)
+        {
+            object? val = WinterForge.DeserializeFromFile((string)instruction.Args[0]);
+            int id = TypeConverter.Convert<int>(instruction.Args[1]);
+            context.AddObject(id, ref val);
+        }
+
+        #region benchmark methods
+        //public void PrintOpcodeTimings()
+        //{
+        //    var averages = GetAverageOpcodeTimes(); // Dictionary<OpCode, double>
+
+        //    if (averages.Count == 0)
+        //    {
+        //        Console.WriteLine("No opcode timing data available.");
+        //        return;
+        //    }
+
+        //    Console.WriteLine("Opcode Execution Counts and Average Times (ms):");
+        //    Console.WriteLine("------------------------------------------------");
+
+        //    foreach (var opcode in averages.Keys)
+        //    {
+        //        string opcodeName = opcode.ToString();
+        //        int count = opcodeTimings[opcode].count;
+        //        double avgMs = averages[opcode];
+        //        Console.WriteLine($"{opcodeName,-15} : {count,7} executions, {avgMs,8:F4} ms avg");
+        //    }
+
+        //    Console.WriteLine("------------------------------------------------");
+        //    Console.WriteLine($"Distinct opcodes timed: {averages.Count}");
+        //}
+        //public Dictionary<OpCode, double> GetAverageOpcodeTimes()
+        //{
+        //    var result = new Dictionary<OpCode, double>();
+        //    double tickFrequency = Stopwatch.Frequency; // ticks per second
+
+        //    foreach (var kvp in opcodeTimings)
+        //    {
+        //        double avgTicks = (double)kvp.Value.totalTicks / kvp.Value.count;
+        //        double avgMs = (avgTicks / tickFrequency) * 1000;
+        //        result[kvp.Key] = avgMs;
+        //    }
+
+        //    return result;
+        //}
+        #endregion
+
+        private unsafe void HandleMathOp(Instruction instruction)
+        {
+            (decimal a, decimal b) = PopTwoDecimals();
+
+            decimal result = instruction.OpCode switch
+            {
+                OpCode.ADD => a + b,
+                OpCode.SUB => a - b,
+                OpCode.MUL => a * b,
+                OpCode.DIV => b == 0 ? throw new WinterForgeExecutionException("Division by zero") : a / b,
+                OpCode.MOD => b == 0 ? throw new WinterForgeExecutionException("Modulo by zero") : a % b,
+                OpCode.POW => (decimal)Math.Pow((double)a, (double)b),
+                _ => throw new InvalidOperationException($"Unsupported arithmetic opcode: {instruction.OpCode}")
+            };
+
+            context.ValueStack.Push(result);
+        }
+
+        private unsafe void HandleNegatorOp()
+        {
+            object value = context.ValueStack.Pop();
+            value = GetArgumentValue(value, 0, typeof(decimal), null);
+            if (value is Dispatched)
+                throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
+
+            context.ValueStack.Push(-(decimal)value);
+        }
+
+        private unsafe void HandleCrossValueBooleanOp(Instruction instruction)
+        {
+            object b = context.ValueStack.Pop();
+            object a = context.ValueStack.Pop();
+
+            bool result = instruction.OpCode switch
+            {
+                OpCode.EQ => Equals(a, b),
+                OpCode.NEQ => !Equals(a, b),
+                OpCode.GT => Compare(a, b) > 0,
+                OpCode.LT => Compare(a, b) < 0,
+                OpCode.GTE => Compare(a, b) >= 0,
+                OpCode.LTE => Compare(a, b) <= 0,
+                _ => throw new InvalidOperationException($"Unsupported comparison opcode: {instruction.OpCode}")
+            };
+
+            context.ValueStack.Push(result);
+        }
+
+        private unsafe void HandleBasicBoolToBoolOp(Instruction instruction)
+        {
+            bool b = PopBool();
+            bool a = PopBool();
+
+            bool result = instruction.OpCode switch
+            {
+                OpCode.AND => a && b,
+                OpCode.OR => a || b,
+                OpCode.XOR => a ^ b,
+                _ => throw new InvalidOperationException($"Unsupported boolean opcode: {instruction.OpCode}")
+            };
+
+            context.ValueStack.Push(result);
+        }
+
+        private unsafe void HandleSetAccess(Instruction instruction)
+        {
+            var field = (string)instruction.Args[0];
+            var rawValue = instruction.Args[1];
+
+            var target = context.ValueStack.Pop();
+
+            AccessFilterCache.Validate(target is Type ? (Type)target : target.GetType(), AccessFilterKind.Blacklist, field);
+
+            var helper = CreateReflectionHelper(ref target, out object actual);
+
+            MemberData member = helper.GetMember(field);
+
+            object? value = GetArgumentValue(rawValue, 1, member.Type, val =>
+            {
+                if (member.Type.IsArray)
+                {
+                    if (member.Type.IsArray)
+                        val = ((IList)val).GetInternalArray();
+                }
+
+                member.SetValue(ref actual, val);
+            });
+            if (value is Dispatched)
+                return; // value has been dispatched to be set later
+            if (value is StructReference sr)
+                value = sr.Get();
+            if (member.Type.IsArray)
+                value = ((IList)value).GetInternalArray();
+
+            member.SetValue(ref actual, value);
+        }
+
+        private unsafe void HandlePush(Instruction instruction)
+        {
+            object arg = instruction.Args[0];
+            if (arg is string)
+                arg = GetArgumentValue(arg, 0, typeof(string), delegate { });
+            if (arg is Dispatched)
+                throw new Exception("Other opcodes rely on PUSH having pushed its value, cant differ reference till later");
+
+            if (!arg.GetType().IsClass && !arg.GetType().IsPrimitive)
+            {
+                object* ptr = &arg;
+                var v = new StructReference(ptr);
+                context.ValueStack.Push(v);
+            }
+            else
+                context.ValueStack.Push(arg);
+        }
+
+        private unsafe void HandleAnonymousSet(Instruction instruction)
+        {
+            if (context.GetObject(instanceIDStack.Peek()) is not AnonymousTypeReader obj)
+                throw new InvalidOperationException("Anonymous type reader not found on stack for anonymous set operation");
+
+            progressTracker?.OnField((string)instruction.Args[1], instructionIndex + 1, instructionTotal);
+
+            Type fieldType = ResolveType((string)instruction.Args[0]);
+
+            object val = GetArgumentValue(instruction.Args[2], 2, fieldType, val => { });
+            obj.SetMember((string)instruction.Args[1], ref val);
         }
 
         (decimal, decimal) PopTwoDecimals()
@@ -655,7 +728,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         value = provider.OnNull();
                     else
                     {
-                        if (current.Args.Length - 1 > argIndex)
+                        if (current.Args != null && current.Args.Length - 1 > argIndex)
                             o = string.Join(' ', current.Args.Skip(argIndex));
                         value = provider._CreateObject(o, this);
                     }

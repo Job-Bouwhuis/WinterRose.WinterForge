@@ -187,7 +187,74 @@ Opcode format may change in the future. Backwards compatibility between this for
 ```
 
 #### **Binary Opcodes**
-This feature is work in progress. Backwards compatibility to the textual opcodes as shown above will forever remain.
+    This feature is work in progress. Backwards compatibility to the textual opcodes as shown above will forever remain.
+
+
+## Default Field/Property Inclusion Rules
+
+    Here’s how Winterforge decides what to include by default during serialization:
+
+    ```csharp
+    public class Example
+    {
+        public int publicField = 1; // included
+        private int privateField = 2; // excluded
+
+        public int PublicProperty { get; set; } = 3; // included
+        private int PrivateProperty { get; set; } = 4; // excluded
+
+        public static int staticPublicField = 5; // excluded
+        private static int staticPrivateField = 6; // excluded
+
+        public static int StaticPublicProperty { get; set; } = 7; // excluded
+        private static int StaticPrivateProperty { get; set; } = 8; // excluded
+
+        [WFInclude]
+        public int includedField = 9; // included
+
+        [WFInclude]
+        public static int staticIncludedField = 10; // included (yes really)
+
+        [WFInclude]
+        public int IncludedProperty { get; set; } = 11; // included
+
+        [WFInclude]
+        public static int StaticIncludedProperty { get; set; } = 12; // included
+
+        [field: WFInclude]
+        private int IncludedBackingfield { get; set; } = 13; // backing field included, property excluded
+
+        private int logicField = 5; // excluded
+        public int SimpleCustomLogic // included
+        {
+            get => logicField;
+            set => logicField = value;
+        }
+
+        private int logicField2 = 6; // excluded
+        public int CustomLogic2 // excluded
+        {
+            get => logicField2 + 1;
+            set => logicField2 = value;
+        }
+
+        private int logicField3 = 6; // excluded
+        [WFInclude]
+        public int CustomLogic3 // included
+        {
+            get => logicField3 + 1;
+            set => logicField3 = value;
+        }
+    }
+    ```
+
+    Public fields and auto-properties are included by default.
+    Private fields and properties are excluded unless explicitly included.
+    Static members are excluded by default but can be included with [WFInclude].
+    Backing fields can be explicitly included using [field: WFInclude].
+    Properties with custom logic are excluded by default unless opted-in.
+    To exclude any field or property included by default, apply [WFExclude] attribute to them
+    Fields or properties that are not writable are skipped and can in no way be included
 
 ## **License**
-This project is licensed under the terms described [here](LICENSE.md).
+    This project is licensed under the terms described [here](LICENSE.md).

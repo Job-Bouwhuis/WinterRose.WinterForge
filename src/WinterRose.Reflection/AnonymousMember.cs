@@ -8,7 +8,10 @@ using WinterRose.AnonymousTypes;
 
 namespace WinterRose.Reflection
 {
-    internal class AnonymousMember : MemberData
+    /// <summary>
+    /// represents a runtime variable on <see cref="Anonymous"/>
+    /// </summary>
+    public class AnonymousMember : MemberData
     {
         public AnonymousMember(string memberName, Anonymous anonymous)
         {

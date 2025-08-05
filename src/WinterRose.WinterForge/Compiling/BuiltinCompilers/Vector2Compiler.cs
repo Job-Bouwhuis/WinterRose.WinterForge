@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -105,6 +106,31 @@ public sealed class Matrix4x4Compiler : CustomValueCompiler<Matrix4x4>
             m41, m42, m43, m44
         );
     }
+}
+
+public class ColorCompiler : CustomValueCompiler<Color>
+{
+    public override void Compile(BinaryWriter writer, Color value)
+    {
+        int packed = 0;
+        packed |= value.R << 24;
+        packed |= value.G << 16;
+        packed |= value.B << 8;
+        packed |= value.A;
+        writer.Write(packed);
+    }
+
+    public override Color Decompile(BinaryReader reader)
+    {
+        int packed = reader.ReadInt32();
+        byte r = (byte)((packed >> 24) & 0xFF);
+        byte g = (byte)((packed >> 16) & 0xFF);
+        byte b = (byte)((packed >> 8) & 0xFF);
+        byte a = (byte)(packed & 0xFF);
+
+        return Color.FromArgb(a, r, g, b);
+    }
+
 }
 
 

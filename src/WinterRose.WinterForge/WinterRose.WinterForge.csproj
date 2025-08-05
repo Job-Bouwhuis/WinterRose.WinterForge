@@ -25,8 +25,11 @@ It also allows accessing fields of already deserialzied objects, static classes.
 
   <ItemGroup>
     <Compile Remove="Usage Docs\**" />
+    <Compile Remove="WinterForgeSerializing\**" />
     <EmbeddedResource Remove="Usage Docs\**" />
+    <EmbeddedResource Remove="WinterForgeSerializing\**" />
     <None Remove="Usage Docs\**" />
+    <None Remove="WinterForgeSerializing\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,10 +48,6 @@ It also allows accessing fields of already deserialzied objects, static classes.
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="WinterForgeSerializing\" />
   </ItemGroup>
 
 </Project>

@@ -22,6 +22,7 @@ using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Expressions;
 using WinterRose.WinterForgeSerializing.Formatting;
+using WinterRose.WinterForgeSerializing.InclusionRules;
 using WinterRose.WinterForgeSerializing.Logging;
 
 namespace WinterForgeTests;
@@ -37,6 +38,7 @@ internal class Program
 {
     public static int data = 15;
 
+    
     private unsafe static void Main()
     {
         if (!File.Exists("human.txt"))
@@ -46,23 +48,86 @@ internal class Program
 
         File.Create("bytes.wfbin").Close();
 
-        //var tokens = ExpressionTokenizer.Tokenize("5 + 5 * 5"); //Input->GetKeysDown()->Count > 5
-
-        //foreach (var token in tokens)
-        //    Console.WriteLine($"{token.Type}: {token.Text}");
-
-
         //Dictionary<string, string> kv = new()
         //{
         //    { "key", "val" }
         //};
-        //List<demo> list = new() { demo.D(), demo.D(), demo.D(), demo.D(), demo.D() };
+        List<demo> list = new() { demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D() };
 
-        //WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
+        WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
 
         WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
 
         var vec = WinterForge.DeserializeFromFile("bytes.wfbin");
+    }
+
+    private class TestClass
+    {
+        public int publicField = 1; // included
+        private int privateField = 2; // excluded
+
+        public int PublicProperty { get; set; } = 3; // included
+        private int PrivateProperty { get; set; } = 4; // excluded
+
+        public static int staticPublicField = 5; // excluded
+        private static int staticPrivateField = 6; // excluded
+
+        public static int StaticPublicProperty { get; set; } = 7; // excluded
+        private static int StaticPrivateProperty { get; set; } = 8; // excluded
+
+        [WFInclude]
+        public int includedField = 9; // included
+
+        [WFInclude]
+        public static int staticIncludedField = 10; // included (yes really)
+
+        [WFInclude]
+        public int IncludedProperty { get; set; } = 11; // included
+
+        [WFInclude]
+        public static int StaticIncludedProperty { get; set; } = 12; // included
+
+        [field: WFInclude]
+        private int IncludedBackingfield { get; set; } = 13; // backing field is included, property is not
+
+        private int logicField = 5; // excluded
+        public int SimpleCustomLogic // included 
+        {
+            get => logicField; 
+            set => logicField = value;
+        }
+
+        private int logicField2 = 6; // excluded
+        public int CustomLogic2 // excluded
+        {
+            get => logicField2 + 1; set => logicField2 = value;
+        }
+
+        private int logicField3 = 6; // excluded
+        [WFInclude]
+        public int CustomLogic3 // included
+        {
+            get => logicField3 + 1; set => logicField3 = value;
+        }
+    }
+
+    public static void Run()
+    {
+        Console.WriteLine("=== WinterForge Inclusion Rule Test ===");
+
+        var obj = new TestClass();
+        var rh = new ReflectionHelper(typeof(TestClass));
+        var members = rh.GetMembers();
+
+        foreach (var member in members)
+        {
+            bool isStatic = member.IsStatic;
+            bool included = isStatic
+                ? InclusionRuleset.CheckStaticMember(member)
+                : InclusionRuleset.CheckMember(member);
+
+            Console.WriteLine($"[{(isStatic ? "STATIC" : "INST")}] {(included ? "✓ Included " : "Φ Excluded ")} - {member.Type,-8} - {member.Name}");
+        }
     }
 }
 
@@ -87,7 +152,7 @@ public enum LoveState : byte
 
 public class test
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public LoveState state { get; set; } = LoveState.Single | LoveState.HeadOverHeels;
 
     public override string ToString() => $"state: {state}";
@@ -168,91 +233,91 @@ public static class Constants
 [JsonDerivedType(typeof(NpcCharacter), "npc")]
 public abstract class Actor
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public string Id { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public string DisplayName { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public int Level { get; set; }
 }
 
 public class PlayerCharacter : Actor
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public Inventory Inventory { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public string Faction { get; set; }
 }
 
 public class NpcCharacter : Actor
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public string Disposition { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public DialogueScript Script { get; set; }
 }
 
 // ---------- Supporting types ----------
 public class Inventory
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public int Gold { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public List<ItemStack> Items { get; set; }
 }
 
 public class ItemStack
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public string ItemId { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public int Quantity { get; set; }
 }
 
 public class DialogueScript
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public string Greeting { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public Dictionary<string, string> Branches { get; set; }
 }
 
 // ---------- The world model ----------
 public class Region
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public string RegionId { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public TerrainType Terrain { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public List<Actor> Occupants { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public Dictionary<string, object> Metadata { get; set; }
 
     // catch-all bag for unknown fields the engine might add later
     [JsonExtensionData]
-    [IncludeWithSerialization]
+    [WFInclude]
     public Dictionary<string, object> Extra { get; set; }
 }
 
 public class GameEvent
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public string EventId { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public DateTimeOffset Timestamp { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public List<string> Tags { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public Dictionary<string, object> Payload { get; set; }
 }
 
 public class GameWorld
 {
-    [IncludeWithSerialization]
+    [WFInclude]
     public string WorldName { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public Dictionary<string, Region> Regions { get; set; }
-    [IncludeWithSerialization]
+    [WFInclude]
     public List<GameEvent> EventQueue { get; set; }
 }

@@ -10,13 +10,13 @@ namespace WinterForgeTests
 {
     public class AssetHeader : IEquatable<AssetHeader>
     {
-        [IncludeWithSerialization]
+        [WFInclude]
         public string Name { get; internal set; }
-        [IncludeWithSerialization]
+        [WFInclude]
         public string Path { get; internal set; }
-        [IncludeWithSerialization]
+        [WFInclude]
         public List<string> Tag { get; internal set; }
-        [IncludeWithSerialization]
+        [WFInclude]
         public Anonymous? Metadata { get; internal set; } = new Anonymous();
 
         public AssetHeader(string name, string path)

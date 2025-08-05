@@ -44,6 +44,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             .GetValues<OpCode>()
             .ToDictionary(op => op.ToString(), op => (int)op);
 
+        int ldI = 0;
+        int ldD = 0;
+
+
+
         //private static readonly Dictionary<string, string> opcodeMap = Enum
         //  .GetValues<OpCode>()
         //  .ToDictionary(op => op.ToString(), op => op.ToString());
@@ -283,16 +288,20 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
         private static bool HasValidGenericFollowedByBracket(ReadOnlySpan<char> input)
         {
-            int length = input.Length;
+            int newlineIndex = input.IndexOf('\n');
+            ReadOnlySpan<char> firstLine = newlineIndex == -1 ? input : input[..newlineIndex];
+
+            int length = firstLine.Length;
             int i = 0;
 
-            while (i < length && input[i] != '<') i++;
+            // Find first '<' in the first line
+            while (i < length && firstLine[i] != '<') i++;
             if (i == length) return false;
 
             int depth = 0;
             for (; i < length; i++)
             {
-                char c = input[i];
+                char c = firstLine[i];
                 if (c == '<')
                     depth++;
                 else if (c == '>')
@@ -309,8 +318,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             return false;
         }
 
+
         private void ParseBlock(string id)
         {
+            if (id is "1")
+                ;
             while ((currentLine = ReadNonEmptyLine()) != null)
             {
                 string line = currentLine.Trim();
@@ -356,7 +368,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     int aliasid = int.Parse(parts[0]);
                     WriteLine($"{opcodeMap["ALIAS"]} {aliasid} {parts[1]}");
                 }
-                else if (TryParseCollection(line, out _) is var colres && colres is not CollectionParseResult.Failed or CollectionParseResult.NotACollection)
+                else if (TryParseCollection(line, out _) is var colres && colres is not CollectionParseResult.Failed and not CollectionParseResult.NotACollection)
                 {
                     continue;
                 }
@@ -588,8 +600,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
         private CollectionParseResult ParseCollection()
         {
-            int typeOpen = currentLine!.IndexOf("<");
-            int blockOpen = currentLine.IndexOf("[");
+            int typeOpen = currentLine!.IndexOf('<');
+            int blockOpen = currentLine.IndexOf('[');
             string start = currentLine[typeOpen..blockOpen];
 
             if (typeOpen == -1 || blockOpen == -1 || blockOpen < typeOpen)
@@ -624,103 +636,221 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             string cur = currentLine[(typeOpen + start.Length + 1)..];
 
             bool lastCharWasClose = false;
+            var debugOutput = new StringBuilder();
+
             do
             {
                 foreach (char c in cur)
                 {
-                    int res = handleChar(ref insideFunction, currentElement, ref collectingDefinition, ref depth, ref listDepth, c, ref prefStringChar);
+                    if (cur == "Name = \"Level 1\";")
+                        ;
+                    debugOutput.Append(c); // capture every character processed
+
+                    int res = HandleChar(
+                        ref insideFunction,
+                        ref collectingString,
+                        currentElement,
+                        ref collectingDefinition,
+                        ref depth,
+                        ref isDictionary,
+                        ref listDepth,
+                        c,
+                        ref prefStringChar);
+
                     if (res == -1)
                         return isDictionary ? CollectionParseResult.Dictionary : CollectionParseResult.ListOrArray;
                 }
+
                 if (collectingDefinition)
                     currentElement.Append('\n');
+                debugOutput.AppendLine();
             } while ((cur = ReadNonEmptyLine()) != null);
 
-            writer.Flush();
-            throw new Exception("Expected ']' to close list.");
+            // Dump debug output to file and open Notepad
+            string tempFile = Path.Combine(Path.GetTempPath(), "WinterForgeDebugOutput.txt");
 
-            void emitElement(int dictValueSplitterIndex = -1)
+            debugOutput.AppendLine($"\n\n\nListDepth details:\nIncremented: {ldI}\nDecremeted: {ldD}");
+
+            File.WriteAllText(tempFile, debugOutput.ToString());
+            Process.Start(new ProcessStartInfo("notepad.exe", tempFile) { UseShellExecute = true });
+
+            throw new WinterForgeFormatException("Expected ']' to close list.");
+        }
+
+        int HandleChar(ref bool insideFunction, ref bool collectingString, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref bool isDictionary, ref int listDepth, char? currentChar, ref char prefStringChar)
+        {
+            char character = currentChar.Value;
+
+            if (collectingString)
             {
-                if (currentElement.Length <= 0)
-                    return;
-
-                string currentElementString = currentElement.ToString();
-                if (string.IsNullOrWhiteSpace(currentElementString))
-                    return;
-                if (currentElementString.Contains(':'))
+                currentElement.Append(character);
+                if (character == '"' && prefStringChar != '\\')
                 {
-                    if (isDictionary)
+                    collectingString = false;
+                    prefStringChar = '\0';
+                    return 1;
+                }
+
+                prefStringChar = character;
+                return 1;
+            }
+
+            if (character == '"' && !collectingString)
+            {
+                collectingString = true;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (character == '{')
+            {
+                collectingDefinition = true;
+                depth++;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (character == '<' && !collectingDefinition)
+            {
+                collectingDefinition = true;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (character == '}')
+            {
+                depth--;
+
+                currentElement.Append(character);
+
+                if (listDepth is 0 or 1 && depth <= 0)
+                {
+                    string s = currentElement.ToString();
+                    int dvsp = -1;
+                    if (isDictionary && (dvsp = ContainsSequenceOutsideBraces(currentElement, "=>")) == -1)
+                        return 1; // skip emiting the element when not complete yet
+
+                    collectingDefinition = false;
+                    EmitElement(currentElement, isDictionary, dvsp);
+                    return 1;
+                }
+
+                return 1;
+            }
+
+            if (character == '(')
+            {
+                insideFunction = true;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (character == ')')
+            {
+                insideFunction = false;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (!insideFunction && !collectingString && character == ',')
+            {
+                if (prefStringChar == '}')
+                    collectingDefinition = false;
+                int d = depth;
+                if (listDepth is 1 or 0 && !collectingDefinition)
+                {
+                    EmitElement(currentElement, isDictionary, -1);
+                }
+                else
+                    currentElement.Append(character);
+
+                return 1;
+            }
+
+            if (!insideFunction && character == '[')
+            {
+                ldI++;
+                listDepth++;
+                collectingDefinition = true;
+
+                if (listDepth is 5)
+                    ;
+            }
+
+            if (!insideFunction && character == ']')
+            {
+                // Now actually close one list level if possible.
+                if (listDepth > 0)
+                {
+                    listDepth--;
+                    ldD++;
+                    if(collectingDefinition)
+                        currentElement.Append(character);
+                }
+                else
+                {
+                    // Defensive: unexpected close bracket (log and recover)
+                    Console.WriteLine("WARNING: unexpected ']' while listDepth == 0");
+                }
+
+                // If there's a pending element and we are not currently collecting an in-object definition,
+                // flush it before closing the list.
+                if (!collectingDefinition && listDepth > 0)
+                {
+                    EmitElement(currentElement, isDictionary, -1);
+                }
+
+                // If after decrementing we reached the root list, finish parsing collection.
+                if (listDepth == 0)
+                {
+                    // Emit any trailing content (safe-guard)
+                    EmitElement(currentElement, isDictionary, -1);
+                    currentElement.Clear();
+                    collectingDefinition = false;
+                    WriteLine(opcodeMap["LIST_END"].ToString());
+                    return -1;
+                }
+
+                return 1;
+            }
+
+            //if (!collectingDefinition || listDepth is 0 or 1 && char.IsWhiteSpace(character))
+            //    return 1;
+            currentElement.Append(character);
+            return 0;
+        }
+
+        void EmitElement(StringBuilder elementSB, bool isDictionary, int dictValueSplitterIndex)
+        {
+            if (elementSB.Length == 0)
+                return;
+
+            string currentElement = elementSB.ToString();
+            elementSB.Clear();
+            if (string.IsNullOrWhiteSpace(currentElement))
+                return;
+            if (currentElement.Contains(':'))
+            {
+                if (isDictionary)
+                {
+                    int dictKVsplit = dictValueSplitterIndex == -1 ? currentElement.IndexOf("=>") : dictValueSplitterIndex;
+                    if (dictKVsplit == -1)
+                        throw new WinterForgeFormatException(currentElement, "Dictionary key-value not properly written. Expected 'key => value'");
+
+                    string rawKey = currentElement[..dictKVsplit].Trim();
+                    string rawValue = currentElement[(dictKVsplit + 2)..].Trim();
+
+                    string keyResult;
+                    string valueResult;
+
+                    // KEY PARSING
+                    var lines = rawKey.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length >= 1 && lines[0].Contains(':'))
                     {
-                        int dictKVsplit = dictValueSplitterIndex == -1 ? currentElementString.IndexOf("=>") : dictValueSplitterIndex;
-                        if (dictKVsplit == -1)
-                            throw new WinterForgeFormatException(currentElementString, "Dictionary key-value not properly written. Expected 'key => value'");
-
-                        string rawKey = currentElementString[..dictKVsplit].Trim();
-                        string rawValue = currentElementString[(dictKVsplit + 2)..].Trim();
-
-                        string keyResult;
-                        string valueResult;
-
-                        // KEY PARSING
-                        var lines = rawKey.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                        if (lines.Length >= 1 && lines[0].Contains(':'))
-                        {
-                            lineBuffers.Push(new OverridableStack<string>());
-
-                            for (int i = 0; i < lines.Length; i++)
-                                lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
-
-                            currentLine = ReadNonEmptyLine();
-                            int colonIndex = currentLine.IndexOf(':');
-                            int braceIndex = currentLine.IndexOf('{');
-
-                            string id = braceIndex == -1
-                                ? currentLine[colonIndex..].Trim()
-                                : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
-
-                            ParseObjectOrAssignment();
-                            keyResult = $"_ref({id})";
-                        }
-                        else
-                        {
-                            keyResult = ValidateValue(rawKey);
-                        }
-
-                        // VALUE PARSING
-                        lines = rawValue.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                        if (lines.Length >= 1 && lines[0].Contains(':'))
-                        {
-                            // Push full remaining lines
-                            lineBuffers.Push(new OverridableStack<string>());
-                            ;
-                            for (int i = 0; i < lines.Length; i++)
-                                lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
-
-                            currentLine = ReadNonEmptyLine();
-                            int colonIndex = currentLine.IndexOf(':');
-                            int braceIndex = currentLine.IndexOf('{');
-
-                            string id = braceIndex == -1
-                                ? currentLine[colonIndex..].Trim()
-                                : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
-
-                            ParseObjectOrAssignment();
-                            valueResult = $"_ref({id})";
-                        }
-                        else
-                        {
-                            valueResult = ValidateValue(rawValue);
-                        }
-
-                        WriteLine($"{opcodeMap["ELEMENT"]} {keyResult} {valueResult}");
-                    }
-                    else
-                    {
-                        // existing object parsing logic
                         lineBuffers.Push(new OverridableStack<string>());
-                        var lines = currentElementString.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                        foreach (var line in lines)
-                            lineBuffers.Peek().PushEnd(line.Trim() + '\n');
+
+                        for (int i = 0; i < lines.Length; i++)
+                            lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
                         currentLine = ReadNonEmptyLine();
                         int colonIndex = currentLine.IndexOf(':');
@@ -731,155 +861,81 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                             : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
                         ParseObjectOrAssignment();
-                        WriteLine($"{opcodeMap["ELEMENT"]} _ref({id})");
+                        keyResult = $"_ref({id})";
                     }
-                }
-                else if (isDictionary && !currentElementString.Contains("=<"))
-                {
-                    string[] parts = currentElementString.Split("=>", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    if (parts.Length == 0)
-                        throw new WinterForgeFormatException(currentElementString, "No dictionary key-value given");
-                    if (parts.Length == 1)
-                        throw new WinterForgeFormatException(currentElementString, "Only a key was given for the dictionary");
+                    else
+                    {
+                        keyResult = ValidateValue(rawKey);
+                    }
 
-                    parts[0] = ValidateValue(parts[0]);
-                    parts[1] = ValidateValue(parts[1]);
+                    // VALUE PARSING
+                    lines = rawValue.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length >= 1 && lines[0].Contains(':'))
+                    {
+                        // Push full remaining lines
+                        lineBuffers.Push(new OverridableStack<string>());
+                        ;
+                        for (int i = 0; i < lines.Length; i++)
+                            lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
-                    WriteLine($"{opcodeMap["ELEMENT"]} {parts[0]} {parts[1]}");
+                        currentLine = ReadNonEmptyLine();
+                        int colonIndex = currentLine.IndexOf(':');
+                        int braceIndex = currentLine.IndexOf('{');
+
+                        string id = braceIndex == -1
+                            ? currentLine[colonIndex..].Trim()
+                            : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                        ParseObjectOrAssignment();
+                        valueResult = $"_ref({id})";
+                    }
+                    else
+                    {
+                        valueResult = ValidateValue(rawValue);
+                    }
+
+                    WriteLine($"{opcodeMap["ELEMENT"]} {keyResult} {valueResult}");
                 }
                 else
                 {
-                    currentElementString = ValidateValue(currentElementString);
-                    WriteLine($"{opcodeMap["ELEMENT"]} " + currentElementString);
-                }
-                currentElement.Clear();
-            }
+                    // existing object parsing logic
+                    lineBuffers.Push(new OverridableStack<string>());
+                    var lines = currentElement.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var line in lines)
+                        lineBuffers.Peek().PushEnd(line.Trim() + '\n');
 
-            int handleChar(ref bool insideFunction, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref int listDepth, char? currentChar, ref char prefStringChar)
+                    currentLine = ReadNonEmptyLine();
+                    int colonIndex = currentLine.IndexOf(':');
+                    int braceIndex = currentLine.IndexOf('{');
+
+                    string id = braceIndex == -1
+                        ? currentLine[colonIndex..].Trim()
+                        : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                    ParseObjectOrAssignment();
+                    WriteLine($"{opcodeMap["ELEMENT"]} _ref({id})");
+                }
+            }
+            else if (isDictionary && !currentElement.Contains("=<"))
             {
-                char character = currentChar.Value;
+                string[] parts = currentElement.Split("=>", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length == 0)
+                    throw new WinterForgeFormatException(currentElement, "No dictionary key-value given");
+                if (parts.Length == 1)
+                    throw new WinterForgeFormatException(currentElement, "Only a key was given for the dictionary");
 
-                if (collectingString)
-                {
-                    currentElement.Append(character);
-                    if (character == '"' && prefStringChar != '\\')
-                    {
-                        collectingString = false;
-                        prefStringChar = '\0';
-                        return 1;
-                    }
+                parts[0] = ValidateValue(parts[0]);
+                parts[1] = ValidateValue(parts[1]);
 
-                    prefStringChar = character;
-                    return 1;
-                }
-
-                if (character == '"' && !collectingString)
-                {
-                    collectingString = true;
-                    stringDepth = 1;
-                    currentElement.Append(character);
-                    return 1;
-                }
-
-                if (character == '{')
-                {
-                    collectingDefinition = true;
-                    depth++;
-                    currentElement.Append(character);
-                    return 1;
-                }
-
-                if (character == '<' && !collectingDefinition)
-                {
-                    collectingDefinition = true;
-                    currentElement.Append(character);
-                    return 1;
-                }
-
-                if (character == '}')
-                {
-                    depth--;
-
-                    currentElement.Append(character);
-
-                    if (listDepth is 0 or 1 && depth <= 0)
-                    {
-                        string s = currentElement.ToString();
-                        int dvsp = -1;
-                        if (isDictionary && (dvsp = ContainsSequenceOutsideBraces(currentElement, "=>")) == -1)
-                            return 1; // skip emiting the element when not complete yet
-
-                        collectingDefinition = false;
-                        emitElement(dvsp);
-                        return 1;
-                    }
-
-                    return 1;
-                }
-
-                if (character == '(')
-                {
-                    insideFunction = true;
-                    currentElement.Append(character);
-                    return 1;
-                }
-
-                if (character == ')')
-                {
-                    insideFunction = false;
-                    currentElement.Append(character);
-                    return 1;
-                }
-
-                if (!insideFunction && character == ',')
-                {
-                    if (listDepth is 1 && !collectingDefinition)
-                        emitElement();
-                    else
-                        currentElement.Append(character);
-
-                    return 1;
-                }
-
-                if (!insideFunction && character == '[')
-                {
-                    listDepth++;
-                    collectingDefinition = true;
-                }
-
-                if (!insideFunction && character == ']')
-                {
-                    if (listDepth is not 0)
-                        listDepth--;
-                    else
-                        ;
-
-                    if (listDepth is not <= 0 || collectingDefinition)
-                    {
-                        if (listDepth is not 0)
-                            currentElement.Append("\n]\n");
-
-                        if (collectingDefinition && listDepth is 0)
-                            collectingDefinition = false;
-                    }
-                    if (listDepth is 0)
-                    {
-                        emitElement();
-                        WriteLine(opcodeMap["LIST_END"].ToString());
-                    }
-
-                    if (listDepth == 0)
-                        return -1;
-                    else return 1;
-                }
-
-                //if (!collectingDefinition || listDepth is 0 or 1 && char.IsWhiteSpace(character))
-                //    return 1;
-                currentElement.Append(character);
-                return 0;
+                WriteLine($"{opcodeMap["ELEMENT"]} {parts[0]} {parts[1]}");
             }
-
+            else
+            {
+                currentElement = ValidateValue(currentElement);
+                WriteLine($"{opcodeMap["ELEMENT"]} " + currentElement);
+            }
         }
+
 
         private void ParseAssignment(string line, string? id)
         {
@@ -1389,6 +1445,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     if (reader.EndOfStream)
                         return null;
                     line = reader.ReadLine();
+                    if (c++ == 65)
+                        ;
                 }
 
                 if (allowEmptyLines)
@@ -1398,6 +1456,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return line;
         }
+
+        int c = 0;
 
         private void ReadNextLineExpecting(string expected)
         {

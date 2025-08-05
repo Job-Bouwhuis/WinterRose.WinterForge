@@ -8,8 +8,10 @@ using WinterRose.Reflection;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
-    public class DynamicObjectCreator
+    public static class DynamicObjectCreator
     {
+        static Dictionary<Type, ConstructorInfo[]> constructorCache = [];
+
         public static object CreateInstanceWithArguments(Type targetType, List<object> argumentStrings)
         {
             if (argumentStrings.Count == 0 && targetType.IsValueType)
@@ -21,9 +23,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return TypeWorker.CastPrimitive(argumentStrings[0], targetType);
             }
 
-            ConstructorInfo[] constructors = targetType.GetConstructors(
-             BindingFlags.Instance | BindingFlags.Public |
-             BindingFlags.NonPublic | BindingFlags.CreateInstance);
+            if(!constructorCache.TryGetValue(targetType, out ConstructorInfo[] constructors))
+                    constructorCache[targetType] = constructors = targetType.GetConstructors(
+                        BindingFlags.Instance | BindingFlags.Public |
+                        BindingFlags.NonPublic | BindingFlags.CreateInstance);
+
+            if(argumentStrings.Count == 0)
+                foreach(var c in constructors)
+                    if (c.GetParameters().Length == 0)
+                        return c.Invoke([]);
 
             foreach (var constructor in constructors)
             {

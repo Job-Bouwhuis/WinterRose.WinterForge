@@ -275,7 +275,7 @@ namespace WinterRose.WinterForgeSerializing
             new HumanReadableParser().Parse(serialized, opcodes);
             opcodes.Seek(0, SeekOrigin.Begin);
 
-            var instructions = InstructionParser.ParseOpcodes(opcodes);
+            var instructions = ByteToOpcodeParser.Parse(serialized).ToList();
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -304,7 +304,7 @@ namespace WinterRose.WinterForgeSerializing
             new HumanReadableParser().Parse(humanReadable, opcodes);
             opcodes.Seek(0, SeekOrigin.Begin);
 
-            var instructions = InstructionParser.ParseOpcodes(opcodes);
+            var instructions = ByteToOpcodeParser.Parse(opcodes).ToList();
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -354,12 +354,10 @@ namespace WinterRose.WinterForgeSerializing
         /// Deserializes from the file that has the opcodes
         /// </summary>
         /// <param name="path"></param>
-        /// <param name="progress"></param>
         /// <returns></returns>
         public static object? DeserializeFromFile(string path, WinterForgeProgressTracker? progressTracker = null)
         {
             using Stream opcodes = File.OpenRead(path);
-            //var instructions = InstructionParser.ParseOpcodes(opcodes);
             var instructions = ByteToOpcodeParser.Parse(opcodes).ToList();
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
@@ -370,7 +368,6 @@ namespace WinterRose.WinterForgeSerializing
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="path"></param>
-        /// <param name="progress"></param>
         /// <returns></returns>
         public static T? DeserializeFromFile<T>(string path, WinterForgeProgressTracker? progressTracker = null)
         {
@@ -599,6 +596,7 @@ namespace WinterRose.WinterForgeSerializing
             }
                 
         }
+
         private static void DoDeserialization(out object? result, Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
         {
             using var executor = new InstructionExecutor();

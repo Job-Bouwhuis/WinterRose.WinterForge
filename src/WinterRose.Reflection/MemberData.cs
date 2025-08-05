@@ -11,6 +11,9 @@ using System.Threading.Tasks;
 
 namespace WinterRose.Reflection
 {
+    /// <summary>
+    /// Represents a field or property under a unified API
+    /// </summary>
     [DebuggerDisplay("{ToDebuggerString()}")]
     public class MemberData
     {
@@ -110,13 +113,11 @@ namespace WinterRose.Reflection
             {
                 if (fieldsource != null)
                 {
-                    // Check if field is static
                     return fieldsource.IsStatic;
                 }
 
                 if (propertysource != null)
                 {
-                    // Check if the property getter method is static
                     var getMethod = propertysource.GetGetMethod(true);
                     if (getMethod != null)
                     {
@@ -124,19 +125,18 @@ namespace WinterRose.Reflection
                     }
                 }
 
-                // If neither field nor property found, throw an exception
-                throw new InvalidOperationException("No field or property found.");
+                throw new InvalidOperationException("This MemberData object is invalid");
             }
         }
 
         /// <summary>
         /// Indicates if the field is readonly. eg const or readonly
         /// </summary>
-        public virtual bool IsInitOnly => fieldsource?.IsInitOnly ?? throw new InvalidOperationException("No field or property found.");
+        public virtual bool IsInitOnly => fieldsource?.IsInitOnly ?? throw new InvalidOperationException("This Memberdata object represents a property");
         /// <summary>
         /// Indicates if the field is a literal. eg const or static readonly
         /// </summary>
-        public virtual bool IsLiteral => fieldsource?.IsLiteral ?? throw new InvalidOperationException("No field or property found.");
+        public virtual bool IsLiteral => fieldsource?.IsLiteral ?? throw new InvalidOperationException("This MemberData object represents a property.");
         /// <summary>
         /// Indicates if the field or property can be written to.
         /// </summary>
@@ -154,7 +154,7 @@ namespace WinterRose.Reflection
                 }
                 else
                 {
-                    throw new InvalidOperationException("No field or property found.");
+                    throw new InvalidOperationException("This MemberData object is invalid");
                 }
             }
         }
@@ -177,7 +177,7 @@ namespace WinterRose.Reflection
                 }
                 else
                 {
-                    throw new InvalidOperationException("No field or property found.");
+                    throw new InvalidOperationException("This MemberData object is invalid");
                 }
             }
         }
@@ -202,6 +202,21 @@ namespace WinterRose.Reflection
         }
 
         /// <summary>
+        /// The type that declares the member
+        /// </summary>
+        public Type? DeclaringType
+        {
+            get
+            {
+                if (fieldsource is not null)
+                    return fieldsource.DeclaringType;
+                if (propertysource is not null)
+                    return propertysource.DeclaringType;
+                throw new InvalidOperationException("This MemberData object is invalid");
+            }
+        }
+
+        /// <summary>
         /// Gets the value stored at this field or property
         /// </summary>
         /// <returns>The object stored in the field or property</returns>
@@ -216,7 +231,7 @@ namespace WinterRose.Reflection
         public virtual unsafe object? GetValue(ref object? obj)
         {
             if (propertysource is null && fieldsource is null)
-                throw new InvalidOperationException("No property or field found.");
+                throw new InvalidOperationException("This MemberData object is invalid");
 
             if (obj.GetType().IsValueType && fieldsource is not null)
             {
@@ -238,7 +253,7 @@ namespace WinterRose.Reflection
         public unsafe object? GetValue()
         {
             if (propertysource is null && fieldsource is null)
-                throw new InvalidOperationException("No property or field found.");
+                throw new InvalidOperationException("This MemberData object is invalid");
 
             if (fieldsource is not null)
                 return fieldsource.GetValue(null);
@@ -256,7 +271,7 @@ namespace WinterRose.Reflection
             else if (propertysource is not null)
                 SetPropertyValue(ref obj, value);
             else
-                throw new Exception("Field or property does not exist with name: " + Name);
+                throw new Exception("This MemberData object is invalid");
         }
 
         /// <summary>

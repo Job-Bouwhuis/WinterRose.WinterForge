@@ -29,7 +29,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <summary>
         /// all the filters
         /// </summary>
-        [IncludeWithSerialization]
+        [WFInclude]
         public static ConcurrentDictionary<string, AccessFilter> Filters { get; private set; } = [];
 
         static AccessFilterCache()
@@ -218,13 +218,13 @@ namespace WinterRose.WinterForgeSerializing
         /// <summary>
         /// Fully‑qualified name (e.g. <c>"System.Collections.Generic.List`1"</c>) of the target type.
         /// </summary>
-        [IncludeWithSerialization]
+        [WFInclude]
         public string TypeName { get; private set; }
 
         /// <summary>
         /// Runtime <see cref="Type"/> resolved from <see cref="TypeName"/>
         /// </summary>
-        [IncludeWithSerialization]
+        [WFInclude]
         public Type Type { get; private set; }
 
         /// <summary>
@@ -232,19 +232,19 @@ namespace WinterRose.WinterForgeSerializing
         /// Whitelist mode > members allowed  <br></br>
         /// Blacklist mode > members blocked
         /// </summary>
-        [IncludeWithSerialization]
+        [WFInclude]
         public HashSet<string> GovernedMembers { get; private set; } = [];
 
         /// <summary>
         /// These members are explicitly exemt from the filter.
         /// </summary>
-        [IncludeWithSerialization]
+        [WFInclude]
         public HashSet<string> ExceptThese { get; private set; } = [];
 
         /// <summary>
         /// The kind of filter this is
         /// </summary>
-        [IncludeWithSerialization]
+        [WFInclude]
         public AccessFilterKind FilterKind { get; set; }
 
         /// <summary>

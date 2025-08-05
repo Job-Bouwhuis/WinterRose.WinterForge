@@ -347,8 +347,7 @@ public class OpcodeToByteCompiler()
 
                     Type fieldDeclarerType = InstructionExecutor.ResolveType(parts[1]);
                     ReflectionHelper rh = new(fieldDeclarerType);
-                    MemberData mem = rh.GetMember(parts[1]);
-                    Type fieldType = mem.Type;
+                    Type fieldType = InstructionExecutor.ResolveType(parts[1]);
                     ValuePrefix prefix = GetNumericValuePrefix(fieldType);
                     if (prefix is ValuePrefix.NONE)
                         WriteAny(writer, parts[3]);

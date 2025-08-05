@@ -15,6 +15,7 @@ using WinterRose;
 using System.Text.RegularExpressions;
 using System.Runtime.Serialization.DataContracts;
 using System.Runtime.Serialization;
+using WinterRose.WinterForgeSerializing.InclusionRules;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
@@ -251,26 +252,18 @@ namespace WinterRose.WinterForgeSerializing.Workers
             Type[] genericArgs = t.GetGenericArguments();
             string[] genericNames = new string[genericArgs.Length];
             for (int i = 0; i < genericArgs.Length; i++)
-            {
                 genericNames[i] = GetTypeName(genericArgs[i]); // recursively resolve nested generic types
-            }
 
             return $"{mainTypeName}<{string.Join(", ", genericNames)}>";
         }
-
 
         private void SerializePropertiesAndFields(ref object obj, ReflectionHelper rh, Stream destinationStream, WinterForgeProgressTracker? progressTracker)
         {
             Type objType = obj.GetType();
 
-            bool hasIncludeAllProperties =
-                objType.GetCustomAttributes<IncludeAllPropertiesAttribute>().FirstOrDefault() is not null;
-            bool hasIncludeAllPrivateFields =
-                objType.GetCustomAttributes<IncludePrivateFieldsAttribute>().FirstOrDefault() is not null;
-
             // Serialize properties
             var members = rh.GetMembers()
-                .OrderByDescending(m => m.GetAttribute<IncludeWithSerializationAttribute>()?.Priority ?? 0);
+                .OrderByDescending(m => m.GetAttribute<WFIncludeAttribute>()?.Priority ?? 0);
             foreach (var member in members)
             {
                 if (member.IsStatic)
@@ -279,7 +272,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     continue;
                 }
 
-                if (IsMemberSerializable(member, hasIncludeAllPrivateFields, hasIncludeAllProperties))
+                if (InclusionRuleset.CheckMember(member))
                 {
                     progressTracker?.OnField(member.Name, 0, 0);
                     CommitValue(ref obj, destinationStream, member);
@@ -287,44 +280,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
         }
 
-        private bool IsMemberSerializable(MemberData member, bool hasIncludeAllPrivateFields, bool hasIncludeAllProperties)
-        {
-            if (!member.CanWrite)
-                return false; // ignore unwritable members
-
-            bool hasIncludeAttr = member.Attributes.Any(x => x is IncludeWithSerializationAttribute or DataMemberAttribute);
-
-            if (!member.IsPublic)
-            {
-                if (!hasIncludeAttr && !hasIncludeAllPrivateFields)
-                    return false;
-
-                // Skip property backing fields regardless of private field setting unless explicitly included
-                if (member.Name.Contains('<') && !hasIncludeAttr)
-                    return false;
-            }
-
-            if (member.Attributes.Any(x => x is ExcludeFromSerializationAttribute or NonSerializedAttribute or IgnoreDataMemberAttribute))
-                return false;
-
-            if (member.MemberType == MemberTypes.Property)
-            {
-                if (!hasIncludeAttr && !hasIncludeAllProperties)
-                    return false;
-            }
-
-            return true;
-        }
-
-
         private void HandleStaticMember(MemberData member, Type type, ReflectionHelper rh,
             Stream destinationStream, WinterForgeProgressTracker? progressTracker, bool asStaticClass)
         {
             if (!asStaticClass)
-                if (member.IsPublic && member.GetAttribute<IncludeWithSerializationAttribute>() is null)
+                if (member.IsPublic && member.GetAttribute<WFIncludeAttribute>() is null)
                     return;
             progressTracker?.OnField(type.Name + '.' + member.Name, 0, 0);
-            if (IsMemberSerializable(member, false, false))
+            if (InclusionRuleset.CheckStaticMember(member))
             {
                 CommitStaticValue(type, destinationStream, member);
             }
