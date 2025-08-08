@@ -123,12 +123,6 @@ public class OpcodeToByteCompiler()
 
     public void Compile(Stream textOpcodes, Stream bytesDestination)
     {
-        if(textOpcodes is MemoryStream mems)
-        {
-            string textops = Encoding.UTF8.GetString(mems.ToArray());
-            mems.Position = 0;
-        }
-
         using var reader = new StreamReader(textOpcodes, leaveOpen: true);
         using var writer = new BinaryWriter(bytesDestination, Encoding.UTF8, leaveOpen: true);
 
@@ -155,6 +149,8 @@ public class OpcodeToByteCompiler()
             EmitOpcode(writer, line, parts, opcodeByte, opcode);
             bufferingActive = bufferedObject != null;
         }
+
+        writer.Flush();
     }
 
 
@@ -555,6 +551,10 @@ public class OpcodeToByteCompiler()
         else if (raw == "default")
         {
             writer.Write((byte)ValuePrefix.DEFAULT);
+        }
+        else if (raw.Count(c => c == '.') > 1)
+        {
+            WriteString(writer, raw);
         }
         else if (bool.TryParse(raw, out bool boolVal))
         {

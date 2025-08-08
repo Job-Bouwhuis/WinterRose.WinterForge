@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>25.2.11</Version>
+    <Version>25.2.12</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>WinterRose.Reflection</Title>
     <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>

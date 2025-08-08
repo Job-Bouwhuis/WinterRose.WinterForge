@@ -37,7 +37,7 @@ public enum Gender
 internal class Program
 {
     public static int data = 15;
-
+    public static bool flag = false;
     
     private unsafe static void Main()
     {
@@ -48,13 +48,15 @@ internal class Program
 
         File.Create("bytes.wfbin").Close();
 
+        var tokens = ExpressionTokenizer.Tokenize("_ref(0)->X == 15");
+
         //Dictionary<string, string> kv = new()
         //{
         //    { "key", "val" }
         //};
         List<demo> list = new() { demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D() };
 
-        WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
+        //WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
 
         WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
 
