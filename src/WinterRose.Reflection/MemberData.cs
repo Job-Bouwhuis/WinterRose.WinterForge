@@ -385,6 +385,21 @@ namespace WinterRose.Reflection
             return null;
         }
 
+        /// <summary>
+        /// Gets the attribute of the specified type
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns>The first found attribute of type. if there is no such attribute, <c>null</c> is returned</returns>
+        public virtual Attribute? GetAttribute(Type attrType)
+        {
+            foreach (var attr in Attributes)
+            {
+                if (attr.GetType().IsAssignableTo(attrType))
+                    return attr;
+            }
+            return null;
+        }
+
         protected virtual string ToDebuggerString()
         {
             string publicOrPrivate = IsPublic ? "Public" : "Private";

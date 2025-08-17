@@ -1,150 +1,170 @@
 ﻿using System.IO;
 using System.Threading.Channels;
+using WinterRose.NetworkServer;
 using WinterRose.WinterForgeSerializing.Instructions;
 
 namespace WinterRose.WinterForgeSerializing.Compiling;
 
 public class ByteToOpcodeParser
 {
-    public static bool WaitIndefinitelyForData { get; set; }= false;
+    public static bool WaitIndefinitelyForData { get; set; } = false;
 
-public static List<Instruction> Parse(Stream byteStream)
-{
-    using var reader = new BinaryReader(byteStream, System.Text.Encoding.UTF8, leaveOpen: true);
-    return InternalParse(reader);
-}
-
-private static List<Instruction> InternalParse(BinaryReader reader)
-{
-    List<Instruction> instructions = [];
-
-    while (true)
+    public static List<Instruction> Parse(Stream byteStream)
     {
-        int peek = reader.PeekChar();
-        if (peek == -1)
+        using CacheReader cacheStream = new(byteStream, new MemoryStream());
+        try
         {
-            if (WaitIndefinitelyForData)
-                continue;
-            else
-                break;
+            using var reader = new BinaryReader(cacheStream, System.Text.Encoding.UTF8, leaveOpen: true);
+            return InternalParse(reader);
         }
-
-        OpCode opcode = (OpCode)reader.ReadByte();
-        var args = new List<object>();
-
-        switch (opcode)
+        catch (InvalidOperationException e)
         {
-            case OpCode.END_OF_DATA:
-                break;
+            using DualStreamReader cache = cacheStream.CreateFallbackReader();
+            return InstructionParser.ParseOpcodes(cache);
+        }
+    }
 
-            case OpCode.DEFINE:
-                if (reader.PeekChar() == '\0')
+    private static List<Instruction> InternalParse(BinaryReader reader)
+    {
+        List<Instruction> instructions = [];
+
+        try
+        {
+            while (true)
+            {
+                byte peek = reader.ReadByte();
+                if (peek == -1)
                 {
-                    reader.ReadByte(); // consume marker
-                    uint compilerID = reader.ReadUInt32();
-                    if (CustomValueCompilerRegistry.TryGetById(compilerID, out var compiler))
+                    if (WaitIndefinitelyForData)
                     {
-                        int refID = reader.ReadInt32();
-                        object o = compiler.Decompile(reader);
-                        instructions.Add(new Instruction(OpCode.CREATE_REF, [refID, o]));
+                        Task.Yield();
                         continue;
                     }
                     else
-                        throw new InvalidOperationException($"Expected compiler with id {compilerID} to exist, but it didn't");
+                        break;
                 }
 
-                args.Add(ReadString(reader)); // type name
-                args.Add(ReadInt(reader));    // object ID
-                args.Add(ReadInt(reader));    // arg count
-                break;
+                OpCode opcode = (OpCode)peek;
+                var args = new List<object>();
 
-            case OpCode.SET:
-            case OpCode.SETACCESS:
-                args.Add(ReadString(reader));
-                args.Add(ReadAny(reader));
-                break;
+                switch (opcode)
+                {
+                    case OpCode.END_OF_DATA:
+                        break;
 
-            case OpCode.END:
-            case OpCode.RET:
-            case OpCode.AS:
-            case OpCode.PUSH:
-                args.Add(ReadAny(reader));
-                break;
+                    case OpCode.DEFINE:
+                        if (reader.PeekChar() == '\0')
+                        {
+                            reader.ReadByte(); // consume marker
+                            uint compilerID = reader.ReadUInt32();
+                            if (CustomValueCompilerRegistry.TryGetById(compilerID, out var compiler))
+                            {
+                                int refID = reader.ReadInt32();
+                                object o = compiler.Decompile(reader);
+                                instructions.Add(new Instruction(OpCode.CREATE_REF, [refID, o]));
+                                continue;
+                            }
+                            else
+                                throw new InvalidOperationException($"Expected compiler with id {compilerID} to exist, but it didn't");
+                        }
 
-            case OpCode.ELEMENT:
-                int elements = reader.ReadByte();
-                args.Add(ReadAny(reader));
-                if (elements == 2)
-                    args.Add(ReadAny(reader));
-                break;
+                        args.Add(ReadString(reader)); // type name
+                        args.Add(ReadInt(reader));    // object ID
+                        args.Add(ReadInt(reader));    // arg count
+                        break;
 
-            case OpCode.LIST_START:
-                args.Add(ReadString(reader));
-                if (reader.PeekChar() == 0x01)
-                    args.Add(ReadString(reader));
-                break;
+                    case OpCode.SET:
+                    case OpCode.SETACCESS:
+                        args.Add(ReadString(reader));
+                        args.Add(ReadAny(reader));
+                        break;
 
-            case OpCode.ACCESS:
-                args.Add(ReadString(reader));
-                break;
+                    case OpCode.END:
+                    case OpCode.RET:
+                    case OpCode.AS:
+                    case OpCode.PUSH:
+                        args.Add(ReadAny(reader));
+                        break;
 
-            case OpCode.START_STR:
-            case OpCode.STR:
-                args.Add(ReadMultilineString(reader));
-                break;
+                    case OpCode.ELEMENT:
+                        int elements = reader.ReadByte();
+                        args.Add(ReadAny(reader));
+                        if (elements == 2)
+                            args.Add(ReadAny(reader));
+                        break;
 
-            case OpCode.ANONYMOUS_SET:
-                args.Add(ReadString(reader));
-                args.Add(ReadString(reader));
-                args.Add(ReadAny(reader));
-                break;
+                    case OpCode.LIST_START:
+                        args.Add(ReadString(reader));
+                        if (reader.PeekChar() == 0x01)
+                            args.Add(ReadString(reader));
+                        break;
 
-            case OpCode.IMPORT:
-                args.Add(ReadString(reader));
-                args.Add(ReadInt(reader));
-                break;
+                    case OpCode.ACCESS:
+                        args.Add(ReadString(reader));
+                        break;
 
-            // No-arg instructions
-            case OpCode.LIST_END:
-            case OpCode.PROGRESS:
-            case OpCode.END_STR:
-            case OpCode.ADD:
-            case OpCode.SUB:
-            case OpCode.MUL:
-            case OpCode.DIV:
-            case OpCode.MOD:
-            case OpCode.POW:
-            case OpCode.NEG:
-            case OpCode.EQ:
-            case OpCode.NEQ:
-            case OpCode.GT:
-            case OpCode.LT:
-            case OpCode.GTE:
-            case OpCode.LTE:
-            case OpCode.AND:
-            case OpCode.NOT:
-            case OpCode.OR:
-            case OpCode.XOR:
-                // no args
-                break;
+                    case OpCode.START_STR:
+                    case OpCode.STR:
+                        args.Add(ReadMultilineString(reader));
+                        break;
 
-            default:
-                throw new InvalidOperationException($"Opcode {opcode} not supported in deserializer.");
+                    case OpCode.ANONYMOUS_SET:
+                        args.Add(ReadString(reader));
+                        args.Add(ReadString(reader));
+                        args.Add(ReadAny(reader));
+                        break;
+
+                    case OpCode.IMPORT:
+                        args.Add(ReadString(reader));
+                        args.Add(ReadInt(reader));
+                        break;
+
+                    // No-arg instructions
+                    case OpCode.LIST_END:
+                    case OpCode.PROGRESS:
+                    case OpCode.END_STR:
+                    case OpCode.ADD:
+                    case OpCode.SUB:
+                    case OpCode.MUL:
+                    case OpCode.DIV:
+                    case OpCode.MOD:
+                    case OpCode.POW:
+                    case OpCode.NEG:
+                    case OpCode.EQ:
+                    case OpCode.NEQ:
+                    case OpCode.GT:
+                    case OpCode.LT:
+                    case OpCode.GTE:
+                    case OpCode.LTE:
+                    case OpCode.AND:
+                    case OpCode.NOT:
+                    case OpCode.OR:
+                    case OpCode.XOR:
+                        // no args
+                        break;
+
+                    default:
+                        throw new InvalidOperationException($"Opcode {opcode} not supported in deserializer.");
+                }
+
+                instructions.Add(new Instruction(opcode, args.ToArray()));
+
+                if (opcode == OpCode.END_OF_DATA)
+                    break;
+            }
+        }
+        catch (EndOfStreamException)
+        {
+            // assume end of instructions giving valid data because who gives a fuck
         }
 
-        instructions.Add(new Instruction(opcode, args.ToArray()));
-
-        if (opcode == OpCode.END_OF_DATA)
-            break;
+        return instructions;
     }
-
-    return instructions;
-}
 
 
     private static string ReadString(BinaryReader reader, bool consumedPrefix = false)
     {
-        if(!consumedPrefix)
+        if (!consumedPrefix)
         {
             byte prefix = reader.ReadByte();
             if (prefix != 0x01)

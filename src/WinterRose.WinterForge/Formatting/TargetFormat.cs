@@ -23,7 +23,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         FormattedHumanReadable,
 
         /// <summary>
-        /// Format optimized for speed.
+        /// Textual opcode format. think IL for .NET, but for WinterForge.
+        /// </summary>
+        IntermediateRepresentation,
+
+        /// <summary>
+        /// Bytecode format optimized for speed.
         /// </summary>
         Optimized
     }

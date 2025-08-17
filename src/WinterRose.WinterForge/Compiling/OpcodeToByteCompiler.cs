@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -47,6 +48,7 @@ public class OpcodeToByteCompiler()
     private int nesting;
     private bool allowCustomCompilers = true;
     private bool allowedRehydrate = true;
+    private bool SeenEndOfDataMark = false;
 
     readonly HashSet<OpCode> mathAndLogicOpcodes =
     [
@@ -132,7 +134,10 @@ public class OpcodeToByteCompiler()
         while ((line = reader.ReadLine()) != null)
         {
             if (!ValidateLine(writer, line, out var parts, out var opcodeByte))
-                continue;
+                if (SeenEndOfDataMark)
+                    break;
+                else
+                    continue;
 
             var opcode = (OpCode)opcodeByte;
 
@@ -149,6 +154,9 @@ public class OpcodeToByteCompiler()
             EmitOpcode(writer, line, parts, opcodeByte, opcode);
             bufferingActive = bufferedObject != null;
         }
+
+        if (bytesDestination is NetworkStream && !SeenEndOfDataMark)
+            writer.Write((byte)OpCode.END_OF_DATA);
 
         writer.Flush();
     }
@@ -228,6 +236,7 @@ public class OpcodeToByteCompiler()
         if (line == "WF_ENDOFDATA")
         {
             writer.Write((byte)OpCode.END_OF_DATA);
+            SeenEndOfDataMark = true;
             return false; // no further processing needed
         }
 
@@ -247,7 +256,7 @@ public class OpcodeToByteCompiler()
 
     private void EmitOpcode(BinaryWriter writer, string line, string[] parts, byte opcodeByte, OpCode opcode)
     {
-        if(opcode is OpCode.DEFINE)
+        if (opcode is OpCode.DEFINE)
         {
             Type t = InstructionExecutor.ResolveType(parts[1]);
 
@@ -260,7 +269,7 @@ public class OpcodeToByteCompiler()
                     bufferedObjectRefID = int.Parse(parts[2]); // object id;
                     nesting = 1;
                     this.customCompiler = customCompiler;
-                    
+
                     return;
                 }
 
@@ -382,7 +391,7 @@ public class OpcodeToByteCompiler()
                 // no args
                 break;
 
-            
+
 
             default:
                 throw new InvalidOperationException($"Opcode not implemented: {opcode}");

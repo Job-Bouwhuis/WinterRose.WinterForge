@@ -95,7 +95,7 @@ namespace WinterRose.WinterForgeSerializing
             DoSerialization(serializer, o, serialized, formatted, targetFormat);
 
             byte[] bytes = formatted.ToArray();
-            return Encoding.UTF8.GetString(bytes);
+            return Convert.ToBase64String(bytes);
         }
         /// <summary>
         /// Serializes the object into the stream
@@ -244,7 +244,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <returns></returns>
         public static object? DeserializeFromString(string opcodes, WinterForgeProgressTracker? progressTracker = null)
         {
-            using MemoryStream ops = new MemoryStream(Encoding.UTF8.GetBytes(opcodes));
+            using MemoryStream ops = new MemoryStream(Convert.FromBase64String(opcodes));
             return DeserializeFromStream(ops, progressTracker);
         }
         /// <summary>
@@ -491,9 +491,6 @@ namespace WinterRose.WinterForgeSerializing
             new HumanReadableParser().Parse(humanreadable, mem);
             mem.Position = 0;
             new OpcodeToByteCompiler().Compile(mem, opcodeDestination);
-
-            long memlength = mem.Length;
-            long reslength = opcodeDestination.Length;
         }
         /// <summary>
         /// Converts a human-readable file to an opcode file.
@@ -515,8 +512,7 @@ namespace WinterRose.WinterForgeSerializing
             using var outputStream = new MemoryStream();
             ConvertFromStreamToStream(inputStream, outputStream);
             outputStream.Position = 0;
-            using var reader = new StreamReader(outputStream);
-            return reader.ReadToEnd();
+            return Convert.ToBase64String(outputStream.ToArray());
         }
         /// <summary>
         /// Converts a human-readable file to an opcode string.
@@ -527,8 +523,7 @@ namespace WinterRose.WinterForgeSerializing
             using var outputStream = new MemoryStream();
             ConvertFromStreamToStream(inputStream, outputStream);
             outputStream.Position = 0;
-            using var reader = new StreamReader(outputStream);
-            return reader.ReadToEnd();
+            return Convert.ToBase64String(outputStream.ToArray());
         }
         /// <summary>
         /// Converts a human-readable string to an opcode file.
@@ -536,7 +531,7 @@ namespace WinterRose.WinterForgeSerializing
         public static void ConvertFromStringToFile(string input, string outputPath)
         {
             EnsurePathExists(outputPath);
-            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
+            using var inputStream = new MemoryStream(Convert.FromBase64String(input));
             using var outputStream = File.Create(outputPath);
             ConvertFromStreamToStream(inputStream, outputStream);
         }
@@ -556,7 +551,7 @@ namespace WinterRose.WinterForgeSerializing
         /// </summary>
         public static Stream ConvertFromStringToStream(string input)
         {
-            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
+            using var inputStream = new MemoryStream(Convert.FromBase64String(input));
             var outputStream = new MemoryStream();
             ConvertFromStreamToStream(inputStream, outputStream);
             outputStream.Position = 0;
@@ -567,19 +562,17 @@ namespace WinterRose.WinterForgeSerializing
         {
             serializer.SerializeAsStatic(type, serialized);
             serialized.Seek(0, SeekOrigin.Begin);
-
-            if (target is TargetFormat.HumanReadable)
-                serialized.CopyTo(opcodes);
-            else if (target is TargetFormat.FormattedHumanReadable)
-                new HumanReadableIndenter().Process(serialized, opcodes);
-            else
-                new HumanReadableParser().Parse(serialized, opcodes);
+            FinishSerialization(serialized, opcodes, target);
         }
         private static void DoSerialization(ObjectSerializer serializer, object o, Stream serialized, Stream opcodes, TargetFormat target)
         {
             serializer.Serialize(o, serialized);
             serialized.Seek(0, SeekOrigin.Begin);
+            FinishSerialization(serialized, opcodes, target);
+        }
 
+        private static void FinishSerialization(Stream serialized, Stream opcodes, TargetFormat target)
+        {
             if (target is TargetFormat.HumanReadable)
             {
                 serialized.CopyTo(opcodes);
@@ -589,12 +582,19 @@ namespace WinterRose.WinterForgeSerializing
                 new HumanReadableIndenter().Process(serialized, opcodes);
             else
             {
-                using MemoryStream mem = new();
-                new HumanReadableParser().Parse(serialized, mem);
-                mem.Position = 0;
-                new OpcodeToByteCompiler().Compile(mem, opcodes);
+                if (target is TargetFormat.IntermediateRepresentation)
+                {
+                    new HumanReadableParser().Parse(serialized, opcodes);
+                }
+                else
+                {
+                    using MemoryStream mem = new();
+                    new HumanReadableParser().Parse(serialized, mem);
+                    mem.Position = 0;
+                    new OpcodeToByteCompiler().Compile(mem, opcodes);
+                }
+                opcodes.Flush();
             }
-                
         }
 
         private static void DoDeserialization(out object? result, Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
