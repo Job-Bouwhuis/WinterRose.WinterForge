@@ -61,22 +61,22 @@ namespace WinterRose.Reflection
 
         public override bool IsValid => !string.IsNullOrWhiteSpace(name) && anonymous is not null;
 
-        public override void SetFieldValue<T>(ref object? obj, T value)
+        public override void SetFieldValue<TTarget, TValue>(ref TTarget obj, TValue value)
         {
             SetValue(ref obj, value);
         }
-        public override void SetPropertyValue<T>(ref object? obj, T value)
+        public override void SetPropertyValue<TTarget, TValue>(ref TTarget obj, TValue value)
         {
             SetValue(ref obj, value);
         }
-        public override void SetValue(ref object? obj, object? value)
+        public override void SetValue<TTarget, TValue>(ref TTarget obj, TValue value)
         {
             if (obj is not Anonymous an)
                 throw new Exception("obj was not of type Anonymous, or a derived type of Anonymous");
 
             an.runtimeVariables[name] = value;
         }
-        public override object? GetValue(ref object? obj)
+        public override object? GetValue<TTarget>(ref TTarget obj)
         {
             if (obj is not Anonymous an)
                 throw new Exception("obj was not of type Anonymous, or a derived type of Anonymous");

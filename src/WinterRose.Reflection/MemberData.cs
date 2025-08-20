@@ -51,6 +51,15 @@ namespace WinterRose.Reflection
             return data;
         }
 
+        public static MemberData FromMemberInfo(MemberInfo member)
+        {
+            if (member is FieldInfo field)
+                return FromField(field);
+            else if (member is PropertyInfo property)
+                return FromProperty(property);
+            throw new InvalidOperationException("Only fields and properties are supported");
+        }
+
         protected MemberData() { }
 
         public static implicit operator MemberData(FieldInfo field) => FromField(field);
@@ -221,14 +230,14 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <returns>The object stored in the field or property</returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public object? GetValue(object? obj) => GetValue(ref obj);
+        public object? GetValue<TTarget>(TTarget? obj) => GetValue(ref obj);
 
         /// <summary>
         /// Gets the value stored at this field or property
         /// </summary>
         /// <returns>The object stored in the field or property</returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public virtual unsafe object? GetValue(ref object? obj)
+        public virtual unsafe object? GetValue<TTarget>(ref TTarget? obj)
         {
             if (propertysource is null && fieldsource is null)
                 throw new InvalidOperationException("This MemberData object is invalid");
@@ -264,7 +273,7 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <param name="value"></param>
         /// <exception cref="InvalidOperationException"></exception>
-        public virtual void SetValue(ref object? obj, object? value)
+        public virtual void SetValue<TTarget, TValue>(ref TTarget? obj, TValue? value)
         {
             if (fieldsource is not null)
                 SetFieldValue(ref obj, value);
@@ -279,11 +288,12 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <param name="value"></param>
         /// <exception cref="InvalidOperationException"></exception>
-        public void SetValue(object? obj, object? value)
+        public void SetValue<TTarget, TValue>(TTarget? obj, TValue? value)
         {
             SetValue(ref obj, value);
         }
-        public virtual void SetPropertyValue<T>(ref object? obj, T value)
+
+        public virtual void SetPropertyValue<TTarget, TValue>(ref TTarget? obj, TValue value)
         {
             if (obj is null && !propertysource.SetMethod.IsStatic && !(Type.IsAbstract && Type.IsSealed))
                 throw new Exception("Reflection helper was created type only.");
@@ -323,7 +333,7 @@ namespace WinterRose.Reflection
             return value;
         }
 
-        public virtual void SetFieldValue<T>(ref object? obj, T value)
+        public virtual void SetFieldValue<TTarget, TValue>(ref TTarget? obj, TValue value)
         {
             if (obj is null && !fieldsource.IsStatic && !(Type.IsAbstract && Type.IsSealed))
                 throw new Exception("Reflection helper was created type only.");
