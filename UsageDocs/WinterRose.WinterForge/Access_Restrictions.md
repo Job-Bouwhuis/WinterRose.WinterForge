@@ -13,6 +13,7 @@ Without accessing, theres no way to read a variable
 - [Syntax Features](Syntax_Features.md)  
 - [Built-in Functions](WinterForge_Built-in_Functions.md)  
 - [Custom Value Providers](CustomValueProvider_Examples.md)  
+- [CustomValueCompiler](CustomValueCompiler.md)
 - [Flow Hooks](FlowHooks.md) 
 
 ## Examples:

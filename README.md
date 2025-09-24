@@ -24,6 +24,7 @@ all folks are welcome!
 - [Anonymous Type Syntax](UsageDocs/WinterRose.WinterForge/Anonymous_Type_Syntax.md)  
 - [Built-in Functions](UsageDocs/WinterRose.WinterForge/WinterForge_Built-in_Functions.md)  
 - [Custom Value Providers](UsageDocs/WinterRose.WinterForge/CustomValueProvider_Examples.md)  
+- [Custom Value Compilers](UsageDocs/WinterRose.WinterForge/CustomValueCompiler.md)
 - [Flow Hooks](UsageDocs/WinterRose.WinterForge/FlowHooks.md)  
 - [Access Restrictions](UsageDocs/WinterRose.WinterForge/Access_Restrictions.md)  
   

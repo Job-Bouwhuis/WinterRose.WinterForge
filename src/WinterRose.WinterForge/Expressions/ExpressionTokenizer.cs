@@ -49,16 +49,54 @@ public static class ExpressionTokenizer
             if (c == '"')
             {
                 int start = i++;
-                while (i < input.Length && input[i] != '"')
+                var sb = new StringBuilder();
+
+                bool escape = false;
+                while (i < input.Length)
+                {
+                    char current = input[i];
+
+                    if (escape)
+                    {
+                        sb.Append(current switch
+                        {
+                            'n' => '\n',
+                            't' => '\t',
+                            'r' => '\r',
+                            '\\' => '\\',
+                            '"' => '"',
+                            '\'' => '\'',
+                            _ => current // unknown escapes stay literal
+                        });
+                        escape = false;
+                    }
+                    else
+                    {
+                        if (current == '\\')
+                        {
+                            escape = true; // next char is escaped
+                        }
+                        else if (current == '"')
+                        {
+                            break; // closing quote
+                        }
+                        else
+                        {
+                            sb.Append(current);
+                        }
+                    }
+
                     i++;
+                }
 
                 if (i >= input.Length)
                     throw new Exception("Unterminated string literal");
 
-                i++; // Consume the closing quote
-                tokens.Add(new Token(TokenType.String, input[start..i]));
+                i++; // consume closing quote
+                tokens.Add(new Token(TokenType.String, sb.ToString()));
                 continue;
             }
+
 
             // Skip whitespace
             if (char.IsWhiteSpace(c))
@@ -224,38 +262,6 @@ public static class ExpressionTokenizer
     private static int GetPrecedence(string op) => OperatorPrecedence.TryGetValue(op, out int prec) ? prec : 0;
 
     private static bool IsRightAssociative(string op) => op == "^" || op == "!";
-
-    private static List<Token> CombineChainedIdentifiers(List<Token> tokens)
-    {
-        var combined = new List<Token>();
-
-        for (int i = 0; i < tokens.Count; i++)
-        {
-            if (tokens[i].Type == TokenType.Identifier)
-            {
-                // Start building a chain
-                var sb = new StringBuilder(tokens[i].Text);
-
-                int j = i + 1;
-                while (j + 1 < tokens.Count && tokens[j].Type == TokenType.Arrow && tokens[j + 1].Type == TokenType.Identifier)
-                {
-                    sb.Append("->");
-                    sb.Append(tokens[j + 1].Text);
-                    j += 2; // Skip the arrow and next identifier
-                }
-
-                combined.Add(new Token(TokenType.Identifier, sb.ToString()));
-                i = j - 1; // Move i forward to the last processed token in the chain
-            }
-            else
-            {
-                combined.Add(tokens[i]);
-            }
-        }
-
-        return combined;
-    }
-
 
     private static List<Token> ConvertToPostfix(List<Token> tokens)
     {

@@ -16,6 +16,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WinterForge", "WinterForge"
 		UsageDocs\WinterRose.WinterForge\Access_Restrictions.md = UsageDocs\WinterRose.WinterForge\Access_Restrictions.md
 		UsageDocs\WinterRose.WinterForge\Anonymous_Type_Syntax.md = UsageDocs\WinterRose.WinterForge\Anonymous_Type_Syntax.md
 		UsageDocs\WinterRose.WinterForge\CSharp_Usage.md = UsageDocs\WinterRose.WinterForge\CSharp_Usage.md
+		UsageDocs\WinterRose.WinterForge\CustomValueCompiler.md = UsageDocs\WinterRose.WinterForge\CustomValueCompiler.md
 		UsageDocs\WinterRose.WinterForge\CustomValueProvider_Examples.md = UsageDocs\WinterRose.WinterForge\CustomValueProvider_Examples.md
 		UsageDocs\WinterRose.WinterForge\FlowHooks.md = UsageDocs\WinterRose.WinterForge\FlowHooks.md
 		UsageDocs\WinterRose.WinterForge\Syntax_Features.md = UsageDocs\WinterRose.WinterForge\Syntax_Features.md

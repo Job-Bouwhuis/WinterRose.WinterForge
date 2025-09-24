@@ -67,29 +67,40 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 if (argument is string s)
                 {
-                    if (int.TryParse(s, out var intResult))
-                        resolvedArguments.Add(intResult); // Integer
-                    else if (float.TryParse(s, out var floatResult))
-                    {
-                        resolvedArguments.Add(floatResult); // Float
-                    }
-                    else if (double.TryParse(s, out var doubleResult))
-                    {
-                        resolvedArguments.Add(doubleResult); // Double
-                    }
-                    else if (s == "true" || s == "false")
-                    {
-                        resolvedArguments.Add(bool.Parse(s)); // Boolean
-                    }
-                    else
-                        resolvedArguments.Add(s);
+                    // Try to detect and parse into the most appropriate type
+                    object parsed = TryParsePrimitive(s);
+                    resolvedArguments.Add(parsed);
                 }
                 else
+                {
                     resolvedArguments.Add(argument);
-
+                }
             }
 
             return resolvedArguments;
+        }
+
+        private static object TryParsePrimitive(string s)
+        {
+            if (bool.TryParse(s, out var boolResult))
+                return boolResult;
+
+            if (int.TryParse(s, out var intResult))
+                return intResult;
+
+            if (long.TryParse(s, out var longResult))
+                return longResult;
+
+            if (decimal.TryParse(s, out var decimalResult))
+            {
+                if (float.TryParse(s, out var floatResult) && s.IndexOf('.') < 7) 
+                    return floatResult;
+                if (double.TryParse(s, out var doubleResult))
+                    return doubleResult;
+                return decimalResult; 
+            }
+
+            return s;
         }
 
         private static bool TryConvertArguments(List<object> inputArgs, ParameterInfo[] parameters, out object[] convertedArgs)

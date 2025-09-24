@@ -16,6 +16,11 @@ namespace WinterRose.WinterForgeSerializing.InclusionRules;
 public abstract class InclusionRule
 {
     /// <summary>
+    /// The weight of this rule
+    /// </summary>
+    public virtual int Weight => 1;
+
+    /// <summary>
     /// When overridden in a derived class, Returns <see langword="true"/> when the member should be serialized, <see langword="false"/> if not
     /// </summary>
     /// <param name="member"></param>

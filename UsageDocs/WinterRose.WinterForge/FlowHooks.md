@@ -5,7 +5,8 @@ A way for an object instance to have a say in what happens before and after its 
 - [CSharp Usage](CSharp_Usage.md)  
 - [Syntax Features](Syntax_Features.md)  
 - [Built-in Functions](WinterForge_Built-in_Functions.md)  
-- [Custom Value Providers](CustomValueProvider_Examples.md)  
+- [Custom Value Providers](CustomValueProvider_Examples.md)   
+- [CustomValueCompiler](CustomValueCompiler.md)
 - [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
 - [Access Restrictions](Access_Restrictions.md)  
 

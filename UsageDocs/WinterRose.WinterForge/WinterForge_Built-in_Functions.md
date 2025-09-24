@@ -4,7 +4,8 @@
 - [CSharp Usage](CSharp_Usage.md)  
 - [Syntax Features](Syntax_Features.md)  
 - [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
-- [Custom Value Providers](CustomValueProvider_Examples.md)  
+- [Custom Value Providers](CustomValueProvider_Examples.md)   
+- [CustomValueCompiler](CustomValueCompiler.md)
 - [Flow Hooks](FlowHooks.md)  
 - [Access Restrictions](Access_Restrictions.md)  
 

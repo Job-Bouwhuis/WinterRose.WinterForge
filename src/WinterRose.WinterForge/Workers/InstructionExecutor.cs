@@ -16,11 +16,21 @@ namespace WinterRose.WinterForgeSerializing.Workers
     /// </summary>
     public class InstructionExecutor : IDisposable
     {
+        /// <summary>
+        /// Enables some 
+        /// </summary>
+        public static bool Debug { get; set; } = false;
+        /// <summary>
+        /// when true, prints the debug stuff to the console automatically
+        /// </summary>
+        public static bool DebugAutoPrint { get; set; } = false;
+
+        public bool IsDisposed { get; private set; }
+
         private abstract class CollectionDefinition
         {
             public abstract ICollection Collection { get; }
         }
-
         private class ListDefinition : CollectionDefinition
         {
             public ListDefinition(Type itemType, IList newList)
@@ -33,7 +43,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             public IList Values { get; set; }
             public override ICollection Collection => Values;
         }
-
         private class DictionaryDefinition : CollectionDefinition
         {
             public DictionaryDefinition(Type keyType, Type valueType, IDictionary values)
@@ -49,8 +58,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             public override ICollection Collection => Values;
         }
 
-        public bool IsDisposed { get; private set; }
-
         internal WinterForgeProgressTracker? progressTracker;
         private static readonly ConcurrentDictionary<string, Type> typeCache = new();
         private DeserializationContext context = null!;
@@ -62,6 +69,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private int instructionIndex = 0;
         private int instructionTotal;
+
+        private Dictionary<OpCode, (long totalTicks, int count)> opcodeTimings;
 
         /// <summary>
         /// Create a new instance of the <see cref="InstructionExecutor"/> to deserialize objects
@@ -86,8 +95,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             instanceIDStack.Clear();
         }
 
-        //private readonly Dictionary<OpCode, (long totalTicks, int count)> opcodeTimings = new();
-
         public unsafe object? Execute(List<Instruction> instructionCollection)
         {
             ObjectDisposedException.ThrowIf(IsDisposed, this);
@@ -104,7 +111,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 foreach(var instruction in instructionCollection) 
                 {
-                    //long startTicks = Stopwatch.GetTimestamp();
+                    long startTicks = 0;
+                    if(Debug)
+                        startTicks = Stopwatch.GetTimestamp();
 
                     switch (instruction.OpCode)
                     {
@@ -222,13 +231,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                     instructionIndex++;
 
-                    //long endTicks = Stopwatch.GetTimestamp();
-                    //long elapsedTicks = endTicks - startTicks;
+                    if(Debug)
+                    {
+                        long endTicks = Stopwatch.GetTimestamp();
+                        long elapsedTicks = endTicks - startTicks;
 
-                    //if (!opcodeTimings.TryGetValue(instruction.OpCode, out var timing))
-                    //timing = (0, 0);
+                        if (!(opcodeTimings ??= []).TryGetValue(instruction.OpCode, out var timing))
+                            timing = (0, 0);
 
-                    //opcodeTimings[instruction.OpCode] = (timing.totalTicks + elapsedTicks, timing.count + 1);
+                        opcodeTimings[instruction.OpCode] = (timing.totalTicks + elapsedTicks, timing.count + 1);
+                    }
                 }
 
                 return new Nothing(context.ObjectTable);
@@ -243,7 +255,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 listStack.Clear();
                 instanceIDStack.Clear();
 
-                //PrintOpcodeTimings();
+                if(DebugAutoPrint)
+                    PrintOpcodeTimings(new TextWriterStream(Console.Out));
             }
         }
 
@@ -255,44 +268,50 @@ namespace WinterRose.WinterForgeSerializing.Workers
         }
 
         #region benchmark methods
-        //public void PrintOpcodeTimings()
-        //{
-        //    var averages = GetAverageOpcodeTimes(); // Dictionary<OpCode, double>
+        public void PrintOpcodeTimings(Stream outputStream)
+        {
+            using var writer = new StreamWriter(outputStream, leaveOpen: true);
 
-        //    if (averages.Count == 0)
-        //    {
-        //        Console.WriteLine("No opcode timing data available.");
-        //        return;
-        //    }
+            var averages = GetAverageOpcodeTimes(); // Dictionary<OpCode, double>
 
-        //    Console.WriteLine("Opcode Execution Counts and Average Times (ms):");
-        //    Console.WriteLine("------------------------------------------------");
+            if (averages.Count == 0)
+            {
+                writer.WriteLine("No opcode timing data available.");
+                writer.Flush();
+                return;
+            }
 
-        //    foreach (var opcode in averages.Keys)
-        //    {
-        //        string opcodeName = opcode.ToString();
-        //        int count = opcodeTimings[opcode].count;
-        //        double avgMs = averages[opcode];
-        //        Console.WriteLine($"{opcodeName,-15} : {count,7} executions, {avgMs,8:F4} ms avg");
-        //    }
+            writer.WriteLine("Opcode Execution Counts and Average Times (ms):");
+            writer.WriteLine("------------------------------------------------");
 
-        //    Console.WriteLine("------------------------------------------------");
-        //    Console.WriteLine($"Distinct opcodes timed: {averages.Count}");
-        //}
-        //public Dictionary<OpCode, double> GetAverageOpcodeTimes()
-        //{
-        //    var result = new Dictionary<OpCode, double>();
-        //    double tickFrequency = Stopwatch.Frequency; // ticks per second
+            foreach (var opcode in averages.Keys)
+            {
+                string opcodeName = opcode.ToString();
+                int count = opcodeTimings[opcode].count;
+                double avgMs = averages[opcode];
+                writer.WriteLine($"{opcodeName,-15} : {count,7} executions, {avgMs,8:F4} ms avg");
+            }
 
-        //    foreach (var kvp in opcodeTimings)
-        //    {
-        //        double avgTicks = (double)kvp.Value.totalTicks / kvp.Value.count;
-        //        double avgMs = (avgTicks / tickFrequency) * 1000;
-        //        result[kvp.Key] = avgMs;
-        //    }
+            writer.WriteLine("------------------------------------------------");
+            writer.WriteLine($"Distinct opcodes timed: {averages.Count}");
+            writer.Flush();
+        }
 
-        //    return result;
-        //}
+        public Dictionary<OpCode, double> GetAverageOpcodeTimes()
+        {
+            var result = new Dictionary<OpCode, double>();
+            double tickFrequency = Stopwatch.Frequency; // ticks per second
+
+            foreach (var kvp in opcodeTimings)
+            {
+                double avgTicks = (double)kvp.Value.totalTicks / kvp.Value.count;
+                double avgMs = (avgTicks / tickFrequency) * 1000;
+                result[kvp.Key] = avgMs;
+            }
+
+            return result;
+        }
+
         #endregion
 
         private unsafe void HandleMathOp(Instruction instruction)

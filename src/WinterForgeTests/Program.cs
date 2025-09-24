@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -24,6 +25,7 @@ using WinterRose.WinterForgeSerializing.Expressions;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.InclusionRules;
 using WinterRose.WinterForgeSerializing.Logging;
+using WinterRose.WinterForgeSerializing.Workers;
 
 namespace WinterForgeTests;
 
@@ -56,11 +58,104 @@ internal class Program
         //};
         List<demo> list = new() { demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D() };
 
-        //WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
+        WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
 
         WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
 
-        var vec = WinterForge.DeserializeFromFile("bytes.wfbin");
+        InstructionExecutor.Debug = true;
+        using FileStream stream = File.OpenRead("bytes.wfbin");
+        var instr = ByteToOpcodeParser.Parse(stream);
+        var exer = new InstructionExecutor();
+        var vec = exer.Execute(instr);
+
+        using TextWriterStream2 s = new TextWriterStream2(Console.Out);
+        exer.PrintOpcodeTimings(s);
+        s.Flush();
+
+    }
+
+    public class TextWriterStream2 : Stream
+    {
+        private readonly TextWriter writer;
+
+        private readonly Encoding encoding;
+
+        private readonly Decoder decoder;
+
+        private readonly byte[] singleByte = new byte[1];
+
+        public override bool CanWrite => true;
+
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override long Length
+        {
+            get
+            {
+                throw new NotSupportedException();
+            }
+        }
+
+        public override long Position
+        {
+            get
+            {
+                throw new NotSupportedException();
+            }
+            set
+            {
+                throw new NotSupportedException();
+            }
+        }
+
+        public TextWriterStream2(TextWriter writer, Encoding? encoding = null)
+        {
+            this.writer = writer ?? throw new ArgumentNullException("writer");
+            this.encoding = encoding ?? Encoding.UTF8;
+            decoder = this.encoding.GetDecoder();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            char[] array = new char[encoding.GetMaxCharCount(count)];
+            int chars = decoder.GetChars(buffer, offset, count, array, 0, true);
+            writer.Write(array, 0, chars);
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            char[] array = new char[encoding.GetMaxCharCount(buffer.Length)];
+            int chars = decoder.GetChars(buffer, array, true);
+            writer.Write(array, 0, chars);
+        }
+
+        public override void WriteByte(byte value)
+        {
+            singleByte[0] = value;
+            Write(singleByte, 0, 1);
+        }
+
+        public override void Flush()
+        {
+            writer.Flush();
+        }
+
+        public override void SetLength(long value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
     }
 
     private class TestClass

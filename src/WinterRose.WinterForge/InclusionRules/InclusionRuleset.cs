@@ -47,8 +47,8 @@ public static class InclusionRuleset
         if (rules.Count == 1)
             return rules[0].ShouldInclude(member, staticContext) is InclusionVerdict.AllowSoft or InclusionVerdict.AllowHard;
 
-        int allowSoftVotes = 0;
-        int denySoftVotes = 0;
+        int allowSoftScore = 0;
+        int denySoftScore = 0;
 
         foreach (var rule in rules)
         {
@@ -65,21 +65,21 @@ public static class InclusionRuleset
                     return true;
 
                 case InclusionVerdict.AllowSoft:
-                    allowSoftVotes++;
+                    allowSoftScore += rule.Weight;
                     break;
 
                 case InclusionVerdict.DenySoft:
-                    denySoftVotes++;
+                    denySoftScore += rule.Weight;
                     break;
             }
 
             LogInclusionDecision?.Invoke(member, $"Rule {rule.GetType().Name} voted {verdict}");
         }
 
-        bool result = allowSoftVotes > denySoftVotes;
+        bool result = allowSoftScore > denySoftScore;
 
         LogInclusionDecision?.Invoke(member, 
-            $"Final vote: {allowSoftVotes} soft-allow vs {denySoftVotes} soft-deny → {(result ? "Included" : "Excluded")}");
+            $"Final vote scores: {allowSoftScore} soft-allow vs {denySoftScore} soft-deny → {(result ? "Included" : "Excluded")}");
 
         return result;
     }
