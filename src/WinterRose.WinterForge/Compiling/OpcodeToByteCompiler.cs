@@ -50,34 +50,42 @@ public class OpcodeToByteCompiler()
     private bool allowedRehydrate = true;
     private bool SeenEndOfDataMark = false;
 
-    readonly HashSet<OpCode> mathAndLogicOpcodes =
-    [
-        OpCode.ADD,
-        OpCode.SUB,
-        OpCode.MUL,
-        OpCode.DIV,
-        OpCode.MOD,
+    private string? peekedLine = null;
 
-        OpCode.POW,
-        OpCode.NEG,
+    private string? Peek(StreamReader reader)
+    {
+        peekedLine ??= reader.ReadLine();
+        return peekedLine;
+    }
 
-        OpCode.EQ,
-        OpCode.NEQ,
-        OpCode.GT,
-        OpCode.LT,
-        OpCode.GTE,
-        OpCode.LTE,
+    private string? ReadLine(StreamReader reader)
+    {
+        if (peekedLine != null)
+        {
+            string line = peekedLine;
+            peekedLine = null;
+            return line;
+        }
+        return reader.ReadLine();
+    }
 
-        OpCode.AND,
-        OpCode.NOT,
-        OpCode.OR,
-        OpCode.XOR,
+    private void Consume(StreamReader reader, int count)
+    {
+        // If we had a peeked line waiting, consume it first if needed
+        if (peekedLine != null)
+        {
+            peekedLine = null;
+            count--;
+        }
 
-        OpCode.SET,
-        OpCode.PUSH,
-        OpCode.ACCESS,
-        OpCode.CALL
-    ];
+        // Read and discard the remaining lines
+        for (int i = 0; i < count; i++)
+        {
+            if (reader.ReadLine() == null)
+                break; // End of stream reached early
+        }
+    }
+
 
     internal OpcodeToByteCompiler(bool allowCustomCompilers) : this()
     {
@@ -131,7 +139,7 @@ public class OpcodeToByteCompiler()
         string? line;
         bool bufferingActive = bufferedObject != null; // Is optimized buffering active?
 
-        while ((line = reader.ReadLine()) != null)
+        while ((line = ReadLine(reader)) != null)
         {
             if (!ValidateLine(writer, line, out var parts, out var opcodeByte))
                 if (SeenEndOfDataMark)
@@ -144,14 +152,14 @@ public class OpcodeToByteCompiler()
             if (bufferingActive)
             {
                 // Pass bufferingActive by ref, so ParseOptimizedCompile can disable it early
-                ParseOptimizedCompile(writer, line, ref opcodeByte, opcode, ref bufferingActive);
+                ParseOptimizedCompile(writer, reader, line, ref opcodeByte, opcode, ref bufferingActive);
                 if (bufferingActive)
                     continue;
                 if (opcode is OpCode.END)
                     continue;
             }
 
-            EmitOpcode(writer, line, parts, opcodeByte, opcode);
+            EmitOpcode(writer, reader, line, parts, opcodeByte, opcode);
             bufferingActive = bufferedObject != null;
         }
 
@@ -162,7 +170,7 @@ public class OpcodeToByteCompiler()
     }
 
 
-    private void ParseOptimizedCompile(BinaryWriter writer, string line, ref byte opcodeByte, OpCode opcode, ref bool bufferingActive)
+    private void ParseOptimizedCompile(BinaryWriter writer, StreamReader reader, string line, ref byte opcodeByte, OpCode opcode, ref bool bufferingActive)
     {
         if (opcode is not OpCode.SET and not OpCode.END)
         {
@@ -175,7 +183,7 @@ public class OpcodeToByteCompiler()
             foreach (string bufferedLine in bufferedObject)
             {
                 ValidateLine(writer, bufferedLine, out var bufferedParts, out var bufferedOpcodeByte);
-                EmitOpcode(writer, bufferedLine, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
+                EmitOpcode(writer, reader, bufferedLine, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
             }
 
             allowCustomCompilers = true;
@@ -254,7 +262,7 @@ public class OpcodeToByteCompiler()
     }
 
 
-    private void EmitOpcode(BinaryWriter writer, string line, string[] parts, byte opcodeByte, OpCode opcode)
+    private void EmitOpcode(BinaryWriter writer, StreamReader reader, string line, string[] parts, byte opcodeByte, OpCode opcode)
     {
         if (opcode is OpCode.DEFINE)
         {
@@ -391,7 +399,113 @@ public class OpcodeToByteCompiler()
                 // no args
                 break;
 
+            case OpCode.CALL:
+                WriteString(writer, parts[1]);
+                WritePrefered(writer, parts[2], ValuePrefix.INT);
+                break;
 
+            case OpCode.TEMPLATE_CREATE: // 37
+                {
+                    // parts: [ "37", "<templateName>", "<paramCount>", "<type1>", "<name1>", ... ]
+                    writer.Write(opcodeByte);
+                    string templateName = parts[1];
+                    WriteString(writer, templateName);
+
+                    int paramCount = 0;
+                    if (parts.Length >= 3)
+                        paramCount = int.Parse(parts[2]);
+                    WriteInt(writer, paramCount);
+
+                    // write pairs of (type, name)
+                    int idx = 3;
+                    for (int p = 0; p < paramCount && idx + 1 < parts.Length; p++, idx += 2)
+                    {
+                        WriteString(writer, parts[idx]);     // param type
+                        WriteString(writer, parts[idx + 1]); // param name
+                    }
+                }
+                break;
+
+            case OpCode.TEMPLATE_END: // 38
+                {
+                    // parts: [ "38", "<templateName>" ]
+                    writer.Write(opcodeByte);
+                    if (parts.Length > 1)
+                        WriteString(writer, parts[1]);
+                }
+                break;
+
+            case OpCode.CONTAINER_START: // 39
+                {
+                    // parts: [ "39", "<containerName>" ]
+                    writer.Write(opcodeByte);
+                    if (parts.Length > 1)
+                        WriteString(writer, parts[1]);
+                }
+                break;
+
+            case OpCode.CONTAINER_END: // 40
+                {
+                    // parts: [ "40", "<containerName>" ]
+                    writer.Write(opcodeByte);
+                    if (parts.Length > 1)
+                        WriteString(writer, parts[1]);
+                }
+                break;
+
+            case OpCode.CONSTRUCTOR_START: // 41
+                {
+                    // parts: [ "41", "<containerName>" ]
+                    writer.Write(opcodeByte);
+                    if (parts.Length > 1)
+                        WriteString(writer, parts[1]);
+                }
+                break;
+
+            case OpCode.CONSTRUCTOR_END: // 42
+                {
+                    // parts: [ "42", "<containerName>" ]
+                    writer.Write(opcodeByte);
+                    if (parts.Length > 1)
+                        WriteString(writer, parts[1]);
+                }
+                break;
+
+            case OpCode.VAR_DEF_START: // 43
+                {
+                    // parts: [ "43", "<varName>" ]
+                    writer.Write(opcodeByte);
+                    if (parts.Length > 1)
+                        WriteString(writer, parts[1]);
+                    if (Peek(reader) is string next)
+                    {
+                        string opcs = ((byte)OpCode.VAR_DEFAULT_VALUE).ToString();
+                        if (next.StartsWith(opcs))
+                        {
+                            Consume(reader, 1);
+                            WriteAny(writer, next[2..].Trim());
+                        }
+                    }
+                }
+                break;
+
+            case OpCode.VAR_DEF_END: // 44
+                {
+                    // parts: [ "44", "<varName>" ]
+                    writer.Write(opcodeByte);
+                    if (parts.Length > 1)
+                        WriteString(writer, parts[1]);
+                }
+                break;
+
+            case OpCode.FORCE_DEF_VAR: // 45
+                {
+                    // parts: [ "45", "<varName>" ]
+                    writer.Write(opcodeByte);
+                    if (parts.Length > 1)
+                        WriteString(writer, parts[1]);
+                }
+                break;
 
             default:
                 throw new InvalidOperationException($"Opcode not implemented: {opcode}");
@@ -496,12 +610,12 @@ public class OpcodeToByteCompiler()
             default:
                 if (value is string raw)
                 {
-                    if (raw.StartsWith("_ref(") && raw.EndsWith(")"))
+                    if (raw.StartsWith("#ref(") && raw.EndsWith(")"))
                     {
                         writer.Write((byte)ValuePrefix.REF);
                         writer.Write(int.Parse(raw[5..^1]));
                     }
-                    else if (raw.StartsWith("_stack(") && raw.EndsWith(")"))
+                    else if (raw.StartsWith("#stack(") && raw.EndsWith(")"))
                     {
                         writer.Write((byte)ValuePrefix.STACK);
                     }
@@ -548,12 +662,12 @@ public class OpcodeToByteCompiler()
     {
         if (raw.StartsWith("\""))
             WriteString(writer, raw.Trim('"'));
-        else if (raw.StartsWith("_ref(") && raw.EndsWith(")"))
+        else if (raw.StartsWith("#ref(") && raw.EndsWith(")"))
         {
             writer.Write((byte)ValuePrefix.REF);
             writer.Write(int.Parse(raw[5..^1]));
         }
-        else if (raw.StartsWith("_stack(") && raw.EndsWith(")"))
+        else if (raw.StartsWith("#stack(") && raw.EndsWith(")"))
         {
             writer.Write((byte)ValuePrefix.STACK);
         }

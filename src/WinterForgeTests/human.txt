@@ -1,0 +1,26 @@
+Program->data = 1;
+
+#container Bor
+{
+	#variables
+	{
+		x;
+		y = 5;
+		z = Random->Shared->Next(1, 7);
+	}
+
+	Bor
+	{
+		x = 10;
+	}
+
+	#template Func
+	{
+		return x;
+	}
+
+	#template Foo int n
+	{
+		return n + x;
+	}
+}

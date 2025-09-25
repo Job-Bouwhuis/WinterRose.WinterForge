@@ -39,7 +39,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// 
         /// EG "3 5"<br></br>
         /// 3 - PUSH<br></br>
-        /// 5 - value. value can also be a _ref() or _stack() call
+        /// 5 - value. value can also be a #ref() or #stack() call
         /// </summary>
         PUSH = 3,
         /// <summary>
@@ -49,9 +49,9 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// <summary>
         /// Adds an element to the current list<br></br><br></br>
         /// 
-        /// EG "5 _ref(4)"<br></br>
+        /// EG "5 #ref(4)"<br></br>
         /// 5 - ELEMENT<br></br>
-        /// _ref(4) - value, the reference of an object with ID 4
+        /// #ref(4) - value, the reference of an object with ID 4
         /// </summary>
         ELEMENT = 5,
         /// <summary>
@@ -63,7 +63,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// </summary>
         LIST_START = 6,
         /// <summary>
-        /// Ends a list and puts it to the stack. can then be accessed by <see cref="SET"/> using '_stack()'<br></br><br></br>
+        /// Ends a list and puts it to the stack. can then be accessed by <see cref="SET"/> using '#stack()'<br></br><br></br>
         /// 
         /// Has no arguments. line should be only "7".
         /// </summary>
@@ -184,9 +184,17 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         TEMPLATE_END,
 
         /// <summary>
-        /// represents the end of data in a winterforge byte stream, not used by the winterforge vm.
+        /// represents the end of data in a winterforge byte stream
         /// </summary>
         END_OF_DATA = 255,
-    }
 
+        CONTAINER_START = 39,
+        CONTAINER_END = 40,
+        CONSTRUCTOR_START = 41,
+        CONSTRUCTOR_END = 42,
+        VAR_DEF_START = 43,
+        VAR_DEF_END = 44,
+        FORCE_DEF_VAR = 45,
+        VAR_DEFAULT_VALUE = 46,
+    }
 }

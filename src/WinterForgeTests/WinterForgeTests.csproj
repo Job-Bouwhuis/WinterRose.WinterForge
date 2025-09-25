@@ -17,4 +17,10 @@
     <ProjectReference Include="..\WinterRose.WinterForge\WinterRose.WinterForge.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="human.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

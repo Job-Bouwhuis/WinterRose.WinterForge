@@ -16,7 +16,7 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
         }
         public override object CreateString(Type obj, ObjectSerializer serializer)
         {
-            return $"_type({serializer.ParseTypeName(obj)})";
+            return $"#type({serializer.ParseTypeName(obj)})";
         }
     }
 }

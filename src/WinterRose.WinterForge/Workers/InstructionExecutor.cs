@@ -160,7 +160,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             break;
                         case OpCode.RET:
                             Validate();
-                            if (instruction.Args[0] is "_stack()")
+                            if (instruction.Args[0] is "#stack()")
                                 return context.ValueStack.Peek();
                             if (instruction.Args[0] == "null")
                                 return null;
@@ -718,7 +718,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             object? value;
             switch (arg)
             {
-                case string s when s.StartsWith("_ref("):
+                case string s when s.StartsWith("#ref("):
                     int refID = ParseRef(s);
                     value = context.GetObject(refID);
                     if (value == null)
@@ -728,7 +728,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     }
                     break;
 
-                case string s when s.StartsWith("_stack("):
+                case string s when s.StartsWith("#stack("):
                     var stackValue = context.ValueStack.Pop();
                     if (stackValue is string ss)
                         value = ParseLiteral(ss, desiredType);
@@ -736,10 +736,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         value = stackValue;
 
                     break;
-                case string s when s.StartsWith("_type("):
+                case string s when s.StartsWith("#type("):
                     value = ParseTypeLiteral(s);
                     break;
-                case string s when s.StartsWith("_str("):
+                case string s when s.StartsWith("#str("):
                     value = ParseStringFunc(s);
                     break;
                 case object o when CustomValueProviderCache.Get(desiredType, out var provider):

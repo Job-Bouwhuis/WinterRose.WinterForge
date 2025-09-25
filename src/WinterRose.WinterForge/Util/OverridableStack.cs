@@ -11,6 +11,9 @@ namespace WinterRose.WinterForgeSerializing.Util
     {
         private readonly List<T> items = new();
 
+        public OverridableStack() { }
+        public OverridableStack(List<T> items) => this.items = items;
+
         public int Count => items.Count;
 
         public void PushEnd(T item)

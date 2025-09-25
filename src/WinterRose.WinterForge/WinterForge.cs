@@ -1,4 +1,5 @@
-﻿using System;
+﻿global using ParamTuple = (System.Type type, string name);
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -485,75 +486,72 @@ namespace WinterRose.WinterForgeSerializing
         /// </summary>
         /// <param name="humanreadable"></param>
         /// <param name="opcodeDestination"></param>
-        public static void ConvertFromStreamToStream(Stream humanreadable, Stream opcodeDestination)
+        public static void ConvertFromStreamToStream(Stream humanreadable, Stream opcodeDestination, TargetFormat target)
         {
-            using MemoryStream mem = new();
-            new HumanReadableParser().Parse(humanreadable, mem);
-            mem.Position = 0;
-            new OpcodeToByteCompiler().Compile(mem, opcodeDestination);
+            FinishSerialization(humanreadable, opcodeDestination, target);
         }
         /// <summary>
         /// Converts a human-readable file to an opcode file.
         /// </summary>
-        public static void ConvertFromFileToFile(string inputPath, string outputPath)
+        public static void ConvertFromFileToFile(string inputPath, string outputPath, TargetFormat target = TargetFormat.Optimized)
         {
             EnsurePathExists(outputPath);
             using var input = File.OpenRead(inputPath);
             using var output = File.Create(outputPath);
-
-            ConvertFromStreamToStream(input, output);
+            
+            ConvertFromStreamToStream(input, output, target);
         }
         /// <summary>
         /// Converts a human-readable string to an opcode string.
         /// </summary>
-        public static string ConvertFromStringToString(string input)
+        public static string ConvertFromStringToString(string input, TargetFormat target = TargetFormat.Optimized)
         {
             using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(input));
             using var outputStream = new MemoryStream();
-            ConvertFromStreamToStream(inputStream, outputStream);
+            ConvertFromStreamToStream(inputStream, outputStream, target);
             outputStream.Position = 0;
             return Convert.ToBase64String(outputStream.ToArray());
         }
         /// <summary>
         /// Converts a human-readable file to an opcode string.
         /// </summary>
-        public static string ConvertFromFileToString(string inputPath)
+        public static string ConvertFromFileToString(string inputPath, TargetFormat target = TargetFormat.Optimized)
         {
             using var inputStream = File.OpenRead(inputPath);
             using var outputStream = new MemoryStream();
-            ConvertFromStreamToStream(inputStream, outputStream);
+            ConvertFromStreamToStream(inputStream, outputStream, target);
             outputStream.Position = 0;
             return Convert.ToBase64String(outputStream.ToArray());
         }
         /// <summary>
         /// Converts a human-readable string to an opcode file.
         /// </summary>
-        public static void ConvertFromStringToFile(string input, string outputPath)
+        public static void ConvertFromStringToFile(string input, string outputPath, TargetFormat target = TargetFormat.Optimized)
         {
             EnsurePathExists(outputPath);
             using var inputStream = new MemoryStream(Convert.FromBase64String(input));
             using var outputStream = File.Create(outputPath);
-            ConvertFromStreamToStream(inputStream, outputStream);
+            ConvertFromStreamToStream(inputStream, outputStream, target);
         }
         /// <summary>
         /// Converts a human-readable file to an opcode stream.
         /// </summary>
-        public static Stream ConvertFromFileToStream(string inputPath)
+        public static Stream ConvertFromFileToStream(string inputPath, TargetFormat target = TargetFormat.Optimized)
         {
             using var inputStream = File.OpenRead(inputPath);
             var outputStream = new MemoryStream();
-            ConvertFromStreamToStream(inputStream, outputStream);
+            ConvertFromStreamToStream(inputStream, outputStream, target);
             outputStream.Position = 0;
             return outputStream;
         }
         /// <summary>
         /// Converts a human-readable string to an opcode stream.
         /// </summary>
-        public static Stream ConvertFromStringToStream(string input)
+        public static Stream ConvertFromStringToStream(string input, TargetFormat target = TargetFormat.Optimized)
         {
             using var inputStream = new MemoryStream(Convert.FromBase64String(input));
             var outputStream = new MemoryStream();
-            ConvertFromStreamToStream(inputStream, outputStream);
+            ConvertFromStreamToStream(inputStream, outputStream, target);
             outputStream.Position = 0;
             return outputStream;
         }

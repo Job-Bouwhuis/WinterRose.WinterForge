@@ -1,30 +1,14 @@
-﻿using System.Buffers;
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Drawing;
-using System.Dynamic;
-using System.Numerics;
-using System.Reflection;
-using System.Reflection.Emit;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
+﻿using System.Numerics;
 using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using WinterRose;
-using WinterRose.AnonymousTypes;
-using WinterRose.FileManagement;
-using WinterRose.ForgeGuardChecks;
 using WinterRose.Reflection;
 using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Compiling;
+using WinterRose.WinterForgeSerializing.Containers;
 using WinterRose.WinterForgeSerializing.Expressions;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.InclusionRules;
-using WinterRose.WinterForgeSerializing.Logging;
 using WinterRose.WinterForgeSerializing.Workers;
 
 namespace WinterForgeTests;
@@ -50,17 +34,18 @@ internal class Program
 
         File.Create("bytes.wfbin").Close();
 
-        var tokens = ExpressionTokenizer.Tokenize("_ref(0)->X == 15");
+        //var tokens = ExpressionTokenizer.Tokenize("_ref(0)->X == 15");
 
         //Dictionary<string, string> kv = new()
         //{
         //    { "key", "val" }
         //};
-        List<demo> list = new() { demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D() };
+        //List<demo> list = new() { demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D() };
 
-        WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
+        //WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
 
-        WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
+        WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin", TargetFormat.IntermediateRepresentation);
+        return;
 
         InstructionExecutor.Debug = true;
         using FileStream stream = File.OpenRead("bytes.wfbin");
@@ -71,7 +56,6 @@ internal class Program
         using TextWriterStream2 s = new TextWriterStream2(Console.Out);
         exer.PrintOpcodeTimings(s);
         s.Flush();
-
     }
 
     public class TextWriterStream2 : Stream

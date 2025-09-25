@@ -192,8 +192,8 @@ public class ByteToOpcodeParser
         {
             ValuePrefix.STRING => ReadString(reader, true),
             ValuePrefix.INT => reader.ReadInt32(),
-            ValuePrefix.REF => $"_ref({reader.ReadInt32()})",
-            ValuePrefix.STACK => "_stack()",
+            ValuePrefix.REF => $"#ref({reader.ReadInt32()})",
+            ValuePrefix.STACK => "#stack()",
             ValuePrefix.DEFAULT => "default",
             ValuePrefix.BOOL => reader.ReadBoolean(),
             ValuePrefix.MULTILINE_STRING => ReadMultilineString(reader),

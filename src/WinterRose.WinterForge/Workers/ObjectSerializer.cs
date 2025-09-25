@@ -94,7 +94,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             if (cache.TryGetValue(obj, out int key))
             {
-                WriteToStream(destinationStream, $"_ref({key})");
+                WriteToStream(destinationStream, $"#ref({key})");
                 return;
             }
             else
@@ -128,7 +128,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 WriteToStream(destinationStream, collection);
 
                 if (isRootCall)
-                    WriteToStream(destinationStream, "\n\nreturn _stack()");
+                    WriteToStream(destinationStream, "\n\nreturn #stack()");
 
                 return;
             }
@@ -326,7 +326,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     int key = int.Parse(indexStart);
 
                     WriteToStream(destinationStream, serializedString);
-                    WriteToStream(destinationStream, $"{type.FullName}->{member.Name} = _ref({key});\n");
+                    WriteToStream(destinationStream, $"{type.FullName}->{member.Name} = #ref({key});\n");
                     return;
                 }
             }
@@ -372,9 +372,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                     WriteToStream(destinationStream, serializedString);
                     if (includeType)
-                        WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = _ref({key});\n");
+                        WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = #ref({key});\n");
                     else
-                        WriteToStream(destinationStream, $"{member.Name} = _ref({key});\n");
+                        WriteToStream(destinationStream, $"{member.Name} = #ref({key});\n");
                     return;
                 }
             }
@@ -420,9 +420,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                     WriteToStream(destinationStream, serializedString);
                     if (includeType)
-                        WriteToStream(destinationStream, $"{typeName}:{memberName} = _ref({key});\n");
+                        WriteToStream(destinationStream, $"{typeName}:{memberName} = #ref({key});\n");
                     else
-                        WriteToStream(destinationStream, $"{memberName} = _ref({key});\n");
+                        WriteToStream(destinationStream, $"{memberName} = #ref({key});\n");
                     return;
                 }
             }

@@ -34,20 +34,18 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
         private StreamReader reader = null!;
         private StreamWriter writer = null!;
-        private string? currentLine;
+        internal string? currentLine;
         private int depth = 0;
         private Dictionary<string, int> aliasMap = [];
         private readonly Stack<OverridableStack<string>> lineBuffers = new();
         List<int> foundIds = [];
         private int autoAsIDs;
-        private static readonly Dictionary<string, int> opcodeMap = Enum
+        private static readonly Dictionary<OpCode, int> opcodeMap = Enum
             .GetValues<OpCode>()
-            .ToDictionary(op => op.ToString(), op => (int)op);
+            .ToDictionary(op => op, op => (int)op);
 
         int ldI = 0;
         int ldD = 0;
-
-
 
         //private static readonly Dictionary<string, string> opcodeMap = Enum
         //  .GetValues<OpCode>()
@@ -61,12 +59,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         /// <remarks>Appends a line 'WF_ENDOFDATA' when <paramref name="output"/> is of type <see cref="NetworkStream"/></remarks>
         public void Parse(Stream input, Stream output)
         {
-            reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-            writer = new StreamWriter(output, Encoding.UTF8);
+            using var _ = reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+            using var _1 = writer = new StreamWriter(output, Encoding.UTF8, leaveOpen: true);
 
             string version = typeof(WinterForge)
-                .Assembly
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                .Assembly!
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!
                 .InformationalVersion;
 
             WriteLine($"// Parsed by WinterForge {version.Split('+')[0]}");
@@ -74,14 +72,25 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             WriteLine("");
 
             while ((currentLine = ReadNonEmptyLine()) != null)
-                ParseObjectOrAssignment();
+                ParseObjectOrAssignment(false);
 
             if (output is NetworkStream)
                 writer.WriteLine("WF_ENDOFDATA");
             writer.Flush();
         }
 
-        private void ParseObjectOrAssignment()
+        internal void ContinueWithBody()
+        {
+            while ((currentLine = ReadNonEmptyLine()?.Trim()) != null)
+            {
+                if (currentLine == "}")
+                    break;
+                ParseBlockLine(null, true, currentLine);
+            }
+
+        }
+
+        internal void ParseObjectOrAssignment(bool isBody)
         {
             string line = currentLine!.Trim();
 
@@ -108,10 +117,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 foreach (string arg in args)
-                    WriteLine($"{opcodeMap["PUSH"]} " + arg);
-                WriteLine($"{opcodeMap["DEFINE"]} {type} {id} {args.Length}");
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
+                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} {args.Length}");
                 depth++;
-                ParseBlock(id);
+                ParseBlock(id, isBody);
             }
             // Constructor Definition with no block: Type(arguments) : ID;
             else if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.EndsWith(";"))
@@ -133,9 +142,9 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 foreach (string arg in args)
-                    WriteLine($"{opcodeMap["PUSH"]} " + arg);
-                WriteLine($"{opcodeMap["DEFINE"]} {type} {id} {args.Length}");
-                WriteLine($"{opcodeMap["END"]} {id}");
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
+                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} {args.Length}");
+                WriteLine($"{opcodeMap[OpCode.END]} {id}");
             }
             // Definition: Type : ID {
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
@@ -153,9 +162,9 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     id = GetAutoID().ToString();
                 foundIds.Add(int.Parse(id));
 
-                WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
+                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} 0");
                 depth++;
-                ParseBlock(id);
+                ParseBlock(id, isBody);
             }
             // Definition: Type : ID;
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.EndsWith(';'))
@@ -173,8 +182,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     id = GetAutoID().ToString();
                 foundIds.Add(int.Parse(id));
 
-                WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
-                WriteLine($"{opcodeMap["END"]} {id}");
+                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} 0");
+                WriteLine($"{opcodeMap[OpCode.END]} {id}");
             }
             // Definition: Type : ID
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1)
@@ -194,28 +203,18 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 foundIds.Add(int.Parse(id));
                 ReadNextLineExpecting("{");
 
-                WriteLine($"{opcodeMap["DEFINE"]} {type} {id} 0");
+                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} 0");
                 depth++;
 
-                ParseBlock(id);
+                ParseBlock(id, isBody);
             }
             else if (line.StartsWith("return"))
             {
-                int trimoffEnd = 0;
-                if (line.EndsWith(';'))
-                    trimoffEnd = 1;
-                string ID = line[6..new Index(trimoffEnd, true)].Trim();
-                if (string.IsNullOrWhiteSpace(ID) || !ID.All(char.IsDigit) && ID != "_stack()" && ID != "null")
-                    if (aliasMap.TryGetValue(ID, out int aliasID))
-                        ID = aliasID.ToString();
-                    else
-                        throw new Exception("Invalid ID parameter in RETURN statement");
-                string result = $"{opcodeMap["RET"]} {ID}";
-                WriteLine(result);
+                HandleReturn(line, isBody);
             }
             else if (line.Contains("->"))
             {
-                HandleAccessing(null);
+                HandleAccessing(null, isBody);
             }
             else if (line.StartsWith("as"))
             {
@@ -226,12 +225,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 if (id is "nextid")
                     id = GetAutoID().ToString();
 
-                WriteLine($"{opcodeMap["AS"]} {id}");
+                WriteLine($"{opcodeMap[OpCode.AS]} {id}");
                 foundIds.Add(int.Parse(id));
             }
             else if (HasValidGenericFollowedByBracket(line))
             {
-                ParseCollection();
+                ParseCollection(isBody);
             }
             else if (line.StartsWith("alias"))
             {
@@ -242,8 +241,49 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 string alias = parts[2].EndsWith(';') ? parts[2][..^1] : parts[2];
                 aliasMap.Add(alias, id);
             }
+            else if (line.StartsWith("#container"))
+            {
+                ContainerParser.ParseContainers(this, reader, writer);
+            }
             else
                 throw new Exception($"Unexpected top-level line: {line}");
+        }
+
+        private void HandleReturn(string line, bool isBody)
+        {
+            int trimoffEnd = line.EndsWith(';') ? 1 : 0;
+            string rawID = line[6..^trimoffEnd].Trim();
+
+            if (!isBody)
+            {
+                if (string.IsNullOrWhiteSpace(rawID) ||
+                    (!rawID.All(char.IsDigit) && rawID != "#stack()" && rawID != "null"))
+                {
+                    if (aliasMap.TryGetValue(rawID, out int aliasID))
+                        rawID = aliasID.ToString();
+                    else
+                        throw new Exception("Invalid ID parameter in RETURN statement outside body");
+                }
+
+                if (rawID.All(char.IsDigit))
+                    rawID = $"#ref({rawID})";
+
+                string result = $"{opcodeMap[OpCode.RET]} {rawID}";
+                WriteLine(result);
+            }
+            else
+            {
+                if(ContainsSequenceOutsideQuotes(rawID, " ") != -1)
+                {
+                    string name = UniqueRandomVarNameGenerator.Next;
+                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {name}");
+                    ParseAssignment($"{name} = {rawID}", null, isBody);
+                    WriteLine($"{opcodeMap[OpCode.RET]} {name}");
+                    return;
+                }
+                string result = $"{opcodeMap[OpCode.RET]} {rawID}";
+                WriteLine(result);
+            }
         }
 
         private bool TryParseFirstParts()
@@ -280,12 +320,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     importedFileName = line;
                 }
 
-                WriteLine($"{opcodeMap["IMPORT"]} \"{importedFileName}\" {id}");
+                WriteLine($"{opcodeMap[OpCode.IMPORT]} \"{importedFileName}\" {id}");
                 return true;
             }
             return false;
         }
-
         private static bool HasValidGenericFollowedByBracket(ReadOnlySpan<char> input)
         {
             int newlineIndex = input.IndexOf('\n');
@@ -317,79 +356,100 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return false;
         }
-
-
-        private void ParseBlock(string id)
+        private void ParseBlock(string id, bool isBody)
         {
             if (id is "1")
                 ;
             while ((currentLine = ReadNonEmptyLine()) != null)
             {
                 string line = currentLine.Trim();
-
-                if (line.Trim().StartsWith("//"))
-                    continue;
-
-                if (line == "}")
+                bool? flowControl = ParseBlockLine(id, isBody, line);
+                switch (flowControl)
                 {
-                    depth--;
-
-                    WriteLine($"{opcodeMap["END"]} {id}");
-                    return;
-                }
-                if (ContainsExpressionOutsideQuotes(line) &&
-                    line.Contains(" = ") && line.EndsWith(';'))
-                    ParseAssignment(line, id);
-                else if (line.Contains("->"))
-                    HandleAccessing(id);
-                else if (line.IndexOf(':') is int colinx && line.IndexOf('=') is int eqinx
-                    && colinx is not -1 && eqinx is not -1
-                    && colinx < eqinx)
-                    ParseAnonymousAssignment(line);
-                else if (line.Contains('=') && line.EndsWith(';'))
-                    ParseAssignment(line, id);
-                else if (line.Contains('=') && line.Contains('\"'))
-                    ParseAssignment(line, id);
-                else if (line.Contains(':'))
-                {
-                    currentLine = line;
-                    ParseObjectOrAssignment(); // nested define
-                }
-                else if (line.StartsWith("as"))
-                {
-                    string asid = line[2..].Trim();
-                    if (asid.EndsWith(';'))
-                        asid = asid[..^1];
-                    WriteLine($"{opcodeMap["AS"]} {asid}");
-                }
-                else if (line.StartsWith("alias"))
-                {
-                    string[] parts = line.Split(' ');
-                    int aliasid = int.Parse(parts[0]);
-                    WriteLine($"{opcodeMap["ALIAS"]} {aliasid} {parts[1]}");
-                }
-                else if (TryParseCollection(line, out _) is var colres && colres is not CollectionParseResult.Failed and not CollectionParseResult.NotACollection)
-                {
-                    continue;
-                }
-                else
-                {
-                    throw new Exception($"unexpected block content: {line}");
+                    case false: continue;
+                    case true: return;
                 }
             }
         }
 
-        private CollectionParseResult TryParseCollection(string line, out string name)
+        /// <summary>
+        /// Returns True when end of block is reached
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="isBody"></param>
+        /// <param name="line"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        internal bool? ParseBlockLine(string id, bool isBody, string line)
+        {
+            if (line.Trim().StartsWith("//"))
+                return false;
+
+            if (line == "}")
+            {
+                depth--;
+
+                WriteLine($"{opcodeMap[OpCode.END]} {id}");
+                return true;
+            }
+            if (ContainsExpressionOutsideQuotes(line) &&
+                line.Contains(" = ") && line.EndsWith(';'))
+                ParseAssignment(line, id, isBody);
+            else if (line.Contains("->"))
+                HandleAccessing(id, isBody);
+            else if (line.IndexOf(':') is int colinx && line.IndexOf('=') is int eqinx
+                && colinx is not -1 && eqinx is not -1
+                && colinx < eqinx)
+                ParseAnonymousAssignment(line, isBody);
+            else if (line.Contains('=') && line.EndsWith(';'))
+                ParseAssignment(line, id, isBody);
+            else if (line.Contains('=') && line.Contains('\"'))
+                ParseAssignment(line, id, isBody);
+            else if (line.Contains(':'))
+            {
+                currentLine = line;
+                ParseObjectOrAssignment(isBody); // nested define
+            }
+            else if (line.StartsWith("as"))
+            {
+                string asid = line[2..].Trim();
+                if (asid.EndsWith(';'))
+                    asid = asid[..^1];
+                WriteLine($"{opcodeMap[OpCode.AS]} {asid}");
+            }
+            else if (line.StartsWith("alias"))
+            {
+                string[] parts = line.Split(' ');
+                int aliasid = int.Parse(parts[0]);
+                WriteLine($"{opcodeMap[OpCode.ALIAS]} {aliasid} {parts[1]}");
+            }
+            else if (TryParseCollection(line, out _, isBody) is var colres && colres is not CollectionParseResult.Failed and not CollectionParseResult.NotACollection)
+            {
+                return false;
+            }
+            else if(isBody && currentLine.StartsWith("return"))
+            {
+                HandleReturn(currentLine, isBody);
+            }
+            else
+            {
+                throw new Exception($"unexpected block content: {line}");
+            }
+
+            return null;
+        }
+
+        private CollectionParseResult TryParseCollection(string line, out string name, bool isBody)
         {
             if (!line.Contains('['))
             {
                 name = line;
                 return CollectionParseResult.NotACollection;
             }
-            name = "_stack()";
+            name = "#stack()";
 
             currentLine = line;
-            CollectionParseResult result = ParseCollection();
+            CollectionParseResult result = ParseCollection(isBody);
 
             int colonIndex = line.IndexOf(':');
             if (colonIndex is -1)
@@ -399,7 +459,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             {
                 name = line[..equalsIndex].Trim();
                 if (!string.IsNullOrEmpty(name))
-                    WriteLine($"{opcodeMap["SET"]} {name} _stack()");
+                    WriteLine($"{opcodeMap[OpCode.SET]} {name} #stack()");
             }
 
             if (lineBuffers.Count > 0)
@@ -416,9 +476,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return result;
         }
-
-
-        private void ParseAnonymousAssignment(string line)
+        private void ParseAnonymousAssignment(string line, bool isBody)
         {
             // Example: "type:name = value"
             int colonIndex = line.IndexOf('=');
@@ -427,7 +485,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             string typeAndName = line[..colonIndex].Trim();
             string value = line[(colonIndex + 1)..].Trim();
 
-            TryParseCollection(value, out value);
+            TryParseCollection(value, out value, isBody);
 
             if (value.EndsWith(';'))
                 value = value[..^1].Trim();
@@ -439,10 +497,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             string type = typeAndNameParts[0];
             string name = typeAndNameParts[1];
 
-            WriteLine($"{opcodeMap["ANONYMOUS_SET"]} {type} {name} {value}");
+            WriteLine($"{opcodeMap[OpCode.ANONYMOUS_SET]} {type} {name} {value}");
         }
 
-        private int ParseRHSAccess(string rhs, string? id)
+        internal int ParseRHSAccess(string rhs, string? id, bool isBody)
         {
             var rhsParts = rhs.Split("->", StringSplitOptions.RemoveEmptyEntries);
 
@@ -455,14 +513,14 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     if (id is null)
                         throw new WinterForgeFormatException("'this' reference outside the bounds of an object");
 
-                    WriteLine($"{opcodeMap["PUSH"]} _ref({id})");
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({id})");
                 }
-                else if (firstRhs.StartsWith("_ref("))
-                    WriteLine($"{opcodeMap["PUSH"]} {firstRhs}");
+                else if (firstRhs.StartsWith("#ref("))
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} {firstRhs}");
                 else if (aliasMap.TryGetValue(firstRhs, out int aliasID))
-                    WriteLine($"{opcodeMap["PUSH"]} _ref({aliasID})");
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({aliasID})");
                 else // assume value is a type literal
-                    WriteLine($"{opcodeMap["PUSH"]} _type({firstRhs})");
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #type({firstRhs})");
 
                 for (int i = 1; i < rhsParts.Length; i++)
                 {
@@ -471,29 +529,22 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                         continue;
 
                     if (part.Contains('(') && part.Contains(')'))
-                        ParseMethodCall(id, part);
+                        ParseMethodCall(id, part, isBody);
                     else
                     {
                         if (part.EndsWith(';'))
                             part = part[..^1];
 
-                        WriteLine($"{opcodeMap["ACCESS"]} {part}");
+                        WriteLine($"{opcodeMap[OpCode.ACCESS]} {part}");
                     }
                 }
             }
             else
                 throw new WinterForgeFormatException($"nothing to access on the right side...");
 
-            //if (rhs.Contains("->"))
-            //{
-            //    int asID = GetAutoID();
-            //    WriteLine($"{opcodeMap["AS"]} {asID}");
-            //    return asID;
-            //}
             return -1;
         }
-
-        private void HandleAccessing(string? id)
+        private void HandleAccessing(string? id, bool isBody)
         {
             string[] assignmentParts = currentLine.Split('=', 2, StringSplitOptions.TrimEntries);
             string accessPart = assignmentParts[0];
@@ -502,13 +553,13 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             //int asID = -1;
             string val = "";
             if (rhs != null && rhs.Contains("->"))
-                ParseRHSAccess(rhs, id);
+                ParseRHSAccess(rhs, id, isBody);
             else
             {
                 if (rhs.EndsWith(';'))
                     rhs = rhs[..^1];
-                val = ValidateValue(rhs);
-                if (val is "_stack()")
+                val = ValidateValue(rhs, isBody, id);
+                if (val is "#stack()")
                 {
                     //if (ContainsExpressionOutsideQuotes(rhs))
                     //{
@@ -516,7 +567,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     //WriteLine($"{opcodeMap["AS"]} {asID}");
                     //}
 
-                    //val = $"_ref({asID})";
+                    //val = $"#ref({asID})";
                 }
             }
             // Step 3: Process LHS
@@ -529,7 +580,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             if (lhsParts.Length is 1)
             {
-                WriteLine($"{opcodeMap["SET"]} {first} _stack()");
+                WriteLine($"{opcodeMap[OpCode.SET]} {first} #stack()");
                 return;
             }
 
@@ -538,14 +589,14 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 if (id is null)
                     throw new WinterForgeFormatException("'this' reference outside the bounds of an object");
 
-                WriteLine($"{opcodeMap["PUSH"]} _ref({id})");
+                WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({id})");
             }
-            else if (first.StartsWith("_ref("))
-                WriteLine($"{opcodeMap["PUSH"]} {first}");
+            else if (first.StartsWith("#ref("))
+                WriteLine($"{opcodeMap[OpCode.PUSH]} {first}");
             else if (aliasMap.TryGetValue(first, out int aliasID))
-                WriteLine($"{opcodeMap["PUSH"]} _ref({aliasID})");
+                WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({aliasID})");
             else // assume value is a type literal
-                WriteLine($"{opcodeMap["PUSH"]} _type({first})");
+                WriteLine($"{opcodeMap[OpCode.PUSH]} #type({first})");
 
             for (int i = 1; i < lhsParts.Length; i++)
             {
@@ -561,17 +612,16 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     if (rhs != null && isLast)
                     {
-                        WriteLine($"{opcodeMap["SETACCESS"]} {part} {val}");
+                        WriteLine($"{opcodeMap[OpCode.SETACCESS]} {part} {val}");
                     }
                     else
-                        WriteLine($"{opcodeMap["ACCESS"]} {part}");
+                        WriteLine($"{opcodeMap[OpCode.ACCESS]} {part}");
                 }
             }
 
 
         }
-
-        private void ParseMethodCall(string? id, string part)
+        private void ParseMethodCall(string? id, string part, bool isBody)
         {
             var openParen = part.IndexOf('(');
             var closeParen = part.LastIndexOf(')');
@@ -588,17 +638,15 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     continue; // assumed stack value exists from elsewhere
 
                 if (arg.Contains("->"))
-                    HandleAccessing(id);
+                    HandleAccessing(id, isBody);
                 else
-                    WriteLine($"{opcodeMap["PUSH"]} {arg}");
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} {arg}");
             }
 
-            WriteLine($"{opcodeMap["CALL"]} {methodName} {args.Count}");
+            WriteLine($"{opcodeMap[OpCode.CALL]} {methodName} {args.Count}");
         }
-
         private int GetAutoID() => int.MaxValue - 1000 - autoAsIDs++;
-
-        private CollectionParseResult ParseCollection()
+        private CollectionParseResult ParseCollection(bool isBody)
         {
             int typeOpen = currentLine!.IndexOf('<');
             int blockOpen = currentLine.IndexOf('[');
@@ -618,9 +666,9 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 throw new Exception("Invalid generic parameter count — expected one <T> for list or two <K, V> for dicts");
 
             if (isDictionary)
-                WriteLine($"{opcodeMap["LIST_START"]} {typeParts[0]} {typeParts[1]}");
+                WriteLine($"{opcodeMap[OpCode.LIST_START]} {typeParts[0]} {typeParts[1]}");
             else
-                WriteLine($"{opcodeMap["LIST_START"]} {typeParts[0]}");
+                WriteLine($"{opcodeMap[OpCode.LIST_START]} {typeParts[0]}");
 
             bool insideFunction = false;
             StringBuilder currentElement = new();
@@ -655,7 +703,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                         ref isDictionary,
                         ref listDepth,
                         c,
-                        ref prefStringChar);
+                        ref prefStringChar,
+                        isBody);
 
                     if (res == -1)
                         return isDictionary ? CollectionParseResult.Dictionary : CollectionParseResult.ListOrArray;
@@ -676,277 +725,15 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             throw new WinterForgeFormatException("Expected ']' to close list.");
         }
-
-        int HandleChar(ref bool insideFunction, ref bool collectingString, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref bool isDictionary, ref int listDepth, char? currentChar, ref char prefStringChar)
-        {
-            char character = currentChar.Value;
-
-            if (collectingString)
-            {
-                currentElement.Append(character);
-                if (character == '"' && prefStringChar != '\\')
-                {
-                    collectingString = false;
-                    prefStringChar = '\0';
-                    return 1;
-                }
-
-                prefStringChar = character;
-                return 1;
-            }
-
-            if (character == '"' && !collectingString)
-            {
-                collectingString = true;
-                currentElement.Append(character);
-                return 1;
-            }
-
-            if (character == '{')
-            {
-                collectingDefinition = true;
-                depth++;
-                currentElement.Append(character);
-                return 1;
-            }
-
-            if (character == '<' && !collectingDefinition)
-            {
-                collectingDefinition = true;
-                currentElement.Append(character);
-                return 1;
-            }
-
-            if (character == '}')
-            {
-                depth--;
-
-                currentElement.Append(character);
-
-                if (listDepth is 0 or 1 && depth <= 0)
-                {
-                    string s = currentElement.ToString();
-                    int dvsp = -1;
-                    if (isDictionary && (dvsp = ContainsSequenceOutsideBraces(currentElement, "=>")) == -1)
-                        return 1; // skip emiting the element when not complete yet
-
-                    collectingDefinition = false;
-                    EmitElement(currentElement, isDictionary, dvsp);
-                    return 1;
-                }
-
-                return 1;
-            }
-
-            if (character == '(')
-            {
-                insideFunction = true;
-                currentElement.Append(character);
-                return 1;
-            }
-
-            if (character == ')')
-            {
-                insideFunction = false;
-                currentElement.Append(character);
-                return 1;
-            }
-
-            if (!insideFunction && !collectingString && character == ',')
-            {
-                if (prefStringChar == '}')
-                    collectingDefinition = false;
-                int d = depth;
-                if (listDepth is 1 or 0 && !collectingDefinition)
-                {
-                    EmitElement(currentElement, isDictionary, -1);
-                }
-                else
-                    currentElement.Append(character);
-
-                return 1;
-            }
-
-            if (!insideFunction && character == '[')
-            {
-                ldI++;
-                listDepth++;
-                collectingDefinition = true;
-
-                if (listDepth is 5)
-                    ;
-            }
-
-            if (!insideFunction && character == ']')
-            {
-                // Now actually close one list level if possible.
-                if (listDepth > 0)
-                {
-                    listDepth--;
-                    ldD++;
-                    if(collectingDefinition)
-                        currentElement.Append(character);
-                }
-                else
-                {
-                    // Defensive: unexpected close bracket (log and recover)
-                    Console.WriteLine("WARNING: unexpected ']' while listDepth == 0");
-                }
-
-                // If there's a pending element and we are not currently collecting an in-object definition,
-                // flush it before closing the list.
-                if (!collectingDefinition && listDepth > 0)
-                {
-                    EmitElement(currentElement, isDictionary, -1);
-                }
-
-                // If after decrementing we reached the root list, finish parsing collection.
-                if (listDepth == 0)
-                {
-                    // Emit any trailing content (safe-guard)
-                    EmitElement(currentElement, isDictionary, -1);
-                    currentElement.Clear();
-                    collectingDefinition = false;
-                    WriteLine(opcodeMap["LIST_END"].ToString());
-                    return -1;
-                }
-
-                return 1;
-            }
-
-            //if (!collectingDefinition || listDepth is 0 or 1 && char.IsWhiteSpace(character))
-            //    return 1;
-            currentElement.Append(character);
-            return 0;
-        }
-
-        void EmitElement(StringBuilder elementSB, bool isDictionary, int dictValueSplitterIndex)
-        {
-            if (elementSB.Length == 0)
-                return;
-
-            string currentElement = elementSB.ToString();
-            elementSB.Clear();
-            if (string.IsNullOrWhiteSpace(currentElement))
-                return;
-            if (currentElement.Contains(':'))
-            {
-                if (isDictionary)
-                {
-                    int dictKVsplit = dictValueSplitterIndex == -1 ? currentElement.IndexOf("=>") : dictValueSplitterIndex;
-                    if (dictKVsplit == -1)
-                        throw new WinterForgeFormatException(currentElement, "Dictionary key-value not properly written. Expected 'key => value'");
-
-                    string rawKey = currentElement[..dictKVsplit].Trim();
-                    string rawValue = currentElement[(dictKVsplit + 2)..].Trim();
-
-                    string keyResult;
-                    string valueResult;
-
-                    // KEY PARSING
-                    var lines = rawKey.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                    if (lines.Length >= 1 && lines[0].Contains(':'))
-                    {
-                        lineBuffers.Push(new OverridableStack<string>());
-
-                        for (int i = 0; i < lines.Length; i++)
-                            lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
-
-                        currentLine = ReadNonEmptyLine();
-                        int colonIndex = currentLine.IndexOf(':');
-                        int braceIndex = currentLine.IndexOf('{');
-
-                        string id = braceIndex == -1
-                            ? currentLine[colonIndex..].Trim()
-                            : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
-
-                        ParseObjectOrAssignment();
-                        keyResult = $"_ref({id})";
-                    }
-                    else
-                    {
-                        keyResult = ValidateValue(rawKey);
-                    }
-
-                    // VALUE PARSING
-                    lines = rawValue.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                    if (lines.Length >= 1 && lines[0].Contains(':'))
-                    {
-                        // Push full remaining lines
-                        lineBuffers.Push(new OverridableStack<string>());
-                        ;
-                        for (int i = 0; i < lines.Length; i++)
-                            lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
-
-                        currentLine = ReadNonEmptyLine();
-                        int colonIndex = currentLine.IndexOf(':');
-                        int braceIndex = currentLine.IndexOf('{');
-
-                        string id = braceIndex == -1
-                            ? currentLine[colonIndex..].Trim()
-                            : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
-
-                        ParseObjectOrAssignment();
-                        valueResult = $"_ref({id})";
-                    }
-                    else
-                    {
-                        valueResult = ValidateValue(rawValue);
-                    }
-
-                    WriteLine($"{opcodeMap["ELEMENT"]} {keyResult} {valueResult}");
-                }
-                else
-                {
-                    // existing object parsing logic
-                    lineBuffers.Push(new OverridableStack<string>());
-                    var lines = currentElement.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var line in lines)
-                        lineBuffers.Peek().PushEnd(line.Trim() + '\n');
-
-                    currentLine = ReadNonEmptyLine();
-                    int colonIndex = currentLine.IndexOf(':');
-                    int braceIndex = currentLine.IndexOf('{');
-
-                    string id = braceIndex == -1
-                        ? currentLine[colonIndex..].Trim()
-                        : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
-
-                    ParseObjectOrAssignment();
-                    WriteLine($"{opcodeMap["ELEMENT"]} _ref({id})");
-                }
-            }
-            else if (isDictionary && !currentElement.Contains("=<"))
-            {
-                string[] parts = currentElement.Split("=>", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                if (parts.Length == 0)
-                    throw new WinterForgeFormatException(currentElement, "No dictionary key-value given");
-                if (parts.Length == 1)
-                    throw new WinterForgeFormatException(currentElement, "Only a key was given for the dictionary");
-
-                parts[0] = ValidateValue(parts[0]);
-                parts[1] = ValidateValue(parts[1]);
-
-                WriteLine($"{opcodeMap["ELEMENT"]} {parts[0]} {parts[1]}");
-            }
-            else
-            {
-                currentElement = ValidateValue(currentElement);
-                WriteLine($"{opcodeMap["ELEMENT"]} " + currentElement);
-            }
-        }
-
-
-        private void ParseAssignment(string line, string? id)
+        private void ParseAssignment(string line, string? id, bool isBody)
         {
             line = line.TrimEnd(';');
             int eq = line.IndexOf('=');
             string field = line[..eq].Trim();
-            string value = ValidateValue(line[(eq + 1)..].Trim(), id);
+            string value = ValidateValue(line[(eq + 1)..].Trim(), isBody, id);
 
-            WriteLine($"{opcodeMap["SET"]} {field} {value}");
+            WriteLine($"{opcodeMap[OpCode.SET]} {field} {value}");
         }
-
         int ContainsSequenceOutsideBraces(StringBuilder sb, string sequence)
         {
             if (sequence.Length == 0) return 0;          // empty sequence is “found” at 0
@@ -989,7 +776,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return -1;
         }
-
         int ContainsSequenceOutsideQuotes(string text, string sequence)
         {
             if (sequence.Length == 0) return 0;                 // empty sequence is “found” at 0
@@ -1027,7 +813,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return -1;
         }
-
         public static bool HasMoreThanOneOf(string input, char target)
         {
             int count = 0;
@@ -1043,7 +828,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return false;
         }
-
         public static bool ContainsExpressionOutsideQuotes(string input)
         {
             bool insideQuotes = false;
@@ -1131,11 +915,9 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             // Valid expression requires operand-operator-operand sequence
             // So if last token was operator, invalid (e.g. "5 +")
-            return lastToken == TokenType.Operator;
+            return lastToken == TokenType.Identifier;
         }
-
-
-        private string ValidateValue(string value, string? id = null)
+        private string ValidateValue(string value, bool isBody, string? id = null)
         {
             if (value.StartsWith('\"') && value.StartsWith('\"'))
             {
@@ -1145,27 +927,27 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     return fullString;
                 else
                 {
-                    writer.WriteLine(opcodeMap["START_STR"]);
+                    writer.WriteLine(opcodeMap[OpCode.START_STR]);
                     foreach (string line in fullString.Split('\n'))
-                        writer.WriteLine($"{opcodeMap["STR"]} \"{line}\"");
-                    writer.WriteLine(opcodeMap["END_STR"]);
+                        writer.WriteLine($"{opcodeMap[OpCode.STR]} \"{line}\"");
+                    writer.WriteLine(opcodeMap[OpCode.END_STR]);
 
-                    return "_stack()";
+                    return "#stack()";
                 }
             }
 
             if (ContainsExpressionOutsideQuotes(value))
             {
-                ParseExpression(value, id);
-                return "_stack()";
+                ParseExpression(value, id, isBody);
+                return "#stack()";
             }
 
-            if (value.StartsWith("_type"))
+            if (value.StartsWith("#type"))
                 return value;
 
             if (HasValidGenericFollowedByBracket(value))
             {
-                TryParseCollection(value, out string name);
+                TryParseCollection(value, out string name, isBody);
                 return name;
             }
             if (value.Contains('.') && !IsValidNumericString(value) && !value.Contains('<'))
@@ -1209,8 +991,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             return value;
         }
-
-        private void ParseExpression(string value, string? id)
+        private void ParseExpression(string value, string? id, bool isBody)
         {
             var tokens = ExpressionTokenizer.Tokenize(value);
 
@@ -1223,10 +1004,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     case TokenType.Identifier:
                         if (ContainsSequenceOutsideQuotes(token.Text, "->") != -1)
                         {
-                            ParseRHSAccess(token.Text, id);
+                            ParseRHSAccess(token.Text, id, isBody);
                             break;
                         }
-                        WriteLine($"{opcodeMap["PUSH"]} {token.Text}");
+                        WriteLine($"{opcodeMap[OpCode.PUSH]} {token.Text}");
                         break;
                     case TokenType.Operator:
                         OpCode operatorCode = token.Text switch
@@ -1253,7 +1034,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                             _ => throw new InvalidOperationException($"Unknown operator: {token.Text}")
                         };
 
-                        WriteLine(opcodeMap[operatorCode.ToString()].ToString());
+                        WriteLine(opcodeMap[operatorCode].ToString());
                         break;
                     case TokenType.LParen:
                         break;
@@ -1264,7 +1045,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 }
             }
         }
-
         public static bool IsValidNumericString(string input)
         {
             if (string.IsNullOrWhiteSpace(input))
@@ -1293,7 +1073,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 CultureInfo.InvariantCulture,
                 out parsedNumber);
         }
-
         private string ReadString(string start)
         {
             if (start is "\"\"")
@@ -1420,7 +1199,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 }
             }
         }
-
         private string? ReadNonEmptyLine(bool allowEmptyLines = false)
         {
             string? line;
@@ -1445,8 +1223,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     if (reader.EndOfStream)
                         return null;
                     line = reader.ReadLine();
-                    if (c++ == 65)
-                        ;
                 }
 
                 if (allowEmptyLines)
@@ -1456,16 +1232,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return line;
         }
-
-        int c = 0;
-
         private void ReadNextLineExpecting(string expected)
         {
             currentLine = ReadNonEmptyLine();
             if (currentLine == null || currentLine.Trim() != expected)
                 throw new Exception($"Expected '{expected}' but got: {currentLine}");
         }
-
         private void WriteLine(string line)
         {
             if (line.Contains('\n'))
@@ -1483,6 +1255,267 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             writer.WriteLine(line);
         }
-    }
+        int HandleChar(ref bool insideFunction, ref bool collectingString, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref bool isDictionary, ref int listDepth, char? currentChar, ref char prefStringChar, bool isBody)
+        {
+            char character = currentChar.Value;
 
+            if (collectingString)
+            {
+                currentElement.Append(character);
+                if (character == '"' && prefStringChar != '\\')
+                {
+                    collectingString = false;
+                    prefStringChar = '\0';
+                    return 1;
+                }
+
+                prefStringChar = character;
+                return 1;
+            }
+
+            if (character == '"' && !collectingString)
+            {
+                collectingString = true;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (character == '{')
+            {
+                collectingDefinition = true;
+                depth++;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (character == '<' && !collectingDefinition)
+            {
+                collectingDefinition = true;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (character == '}')
+            {
+                depth--;
+
+                currentElement.Append(character);
+
+                if (listDepth is 0 or 1 && depth <= 0)
+                {
+                    string s = currentElement.ToString();
+                    int dvsp = -1;
+                    if (isDictionary && (dvsp = ContainsSequenceOutsideBraces(currentElement, "=>")) == -1)
+                        return 1; // skip emiting the element when not complete yet
+
+                    collectingDefinition = false;
+                    EmitElement(currentElement, isDictionary, dvsp, isBody);
+                    return 1;
+                }
+
+                return 1;
+            }
+
+            if (character == '(')
+            {
+                insideFunction = true;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (character == ')')
+            {
+                insideFunction = false;
+                currentElement.Append(character);
+                return 1;
+            }
+
+            if (!insideFunction && !collectingString && character == ',')
+            {
+                if (prefStringChar == '}')
+                    collectingDefinition = false;
+                int d = depth;
+                if (listDepth is 1 or 0 && !collectingDefinition)
+                {
+                    EmitElement(currentElement, isDictionary, -1, isBody);
+                }
+                else
+                    currentElement.Append(character);
+
+                return 1;
+            }
+
+            if (!insideFunction && character == '[')
+            {
+                ldI++;
+                listDepth++;
+                collectingDefinition = true;
+
+                if (listDepth is 5)
+                    ;
+            }
+
+            if (!insideFunction && character == ']')
+            {
+                // Now actually close one list level if possible.
+                if (listDepth > 0)
+                {
+                    listDepth--;
+                    ldD++;
+                    if (collectingDefinition)
+                        currentElement.Append(character);
+                }
+                else
+                {
+                    // Defensive: unexpected close bracket (log and recover)
+                    Console.WriteLine("WARNING: unexpected ']' while listDepth == 0");
+                }
+
+                // If there's a pending element and we are not currently collecting an in-object definition,
+                // flush it before closing the list.
+                if (!collectingDefinition && listDepth > 0)
+                {
+                    EmitElement(currentElement, isDictionary, -1, isBody);
+                }
+
+                // If after decrementing we reached the root list, finish parsing collection.
+                if (listDepth == 0)
+                {
+                    // Emit any trailing content (safe-guard)
+                    EmitElement(currentElement, isDictionary, -1, isBody);
+                    currentElement.Clear();
+                    collectingDefinition = false;
+                    WriteLine(opcodeMap[OpCode.LIST_END].ToString());
+                    return -1;
+                }
+
+                return 1;
+            }
+
+            //if (!collectingDefinition || listDepth is 0 or 1 && char.IsWhiteSpace(character))
+            //    return 1;
+            currentElement.Append(character);
+            return 0;
+        }
+        void EmitElement(StringBuilder elementSB, bool isDictionary, int dictValueSplitterIndex, bool isBody)
+        {
+            if (elementSB.Length == 0)
+                return;
+
+            string currentElement = elementSB.ToString();
+            elementSB.Clear();
+            if (string.IsNullOrWhiteSpace(currentElement))
+                return;
+            if (currentElement.Contains(':'))
+            {
+                if (isDictionary)
+                {
+                    int dictKVsplit = dictValueSplitterIndex == -1 ? currentElement.IndexOf("=>") : dictValueSplitterIndex;
+                    if (dictKVsplit == -1)
+                        throw new WinterForgeFormatException(currentElement, "Dictionary key-value not properly written. Expected 'key => value'");
+
+                    string rawKey = currentElement[..dictKVsplit].Trim();
+                    string rawValue = currentElement[(dictKVsplit + 2)..].Trim();
+
+                    string keyResult;
+                    string valueResult;
+
+                    // KEY PARSING
+                    var lines = rawKey.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length >= 1 && lines[0].Contains(':'))
+                    {
+                        lineBuffers.Push(new OverridableStack<string>());
+
+                        for (int i = 0; i < lines.Length; i++)
+                            lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
+
+                        currentLine = ReadNonEmptyLine();
+                        int colonIndex = currentLine.IndexOf(':');
+                        int braceIndex = currentLine.IndexOf('{');
+
+                        string id = braceIndex == -1
+                            ? currentLine[colonIndex..].Trim()
+                            : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                        ParseObjectOrAssignment(isBody);
+                        keyResult = $"#ref({id})";
+                    }
+                    else
+                    {
+                        keyResult = ValidateValue(rawKey, isBody, null);
+                    }
+
+                    // VALUE PARSING
+                    lines = rawValue.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length >= 1 && lines[0].Contains(':'))
+                    {
+                        // Push full remaining lines
+                        lineBuffers.Push(new OverridableStack<string>());
+                        ;
+                        for (int i = 0; i < lines.Length; i++)
+                            lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
+
+                        currentLine = ReadNonEmptyLine();
+                        int colonIndex = currentLine.IndexOf(':');
+                        int braceIndex = currentLine.IndexOf('{');
+
+                        string id = braceIndex == -1
+                            ? currentLine[colonIndex..].Trim()
+                            : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                        ParseObjectOrAssignment(isBody);
+                        valueResult = $"#ref({id})";
+                    }
+                    else
+                    {
+                        valueResult = ValidateValue(rawValue, isBody);
+                    }
+
+                    WriteLine($"{opcodeMap[OpCode.ELEMENT]} {keyResult} {valueResult}");
+                }
+                else
+                {
+                    // existing object parsing logic
+                    lineBuffers.Push(new OverridableStack<string>());
+                    var lines = currentElement.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var line in lines)
+                        lineBuffers.Peek().PushEnd(line.Trim() + '\n');
+
+                    currentLine = ReadNonEmptyLine();
+                    int colonIndex = currentLine.IndexOf(':');
+                    int braceIndex = currentLine.IndexOf('{');
+
+                    string id = braceIndex == -1
+                        ? currentLine[colonIndex..].Trim()
+                        : currentLine.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+
+                    ParseObjectOrAssignment(isBody);
+                    WriteLine($"{opcodeMap[OpCode.ELEMENT]} #ref({id})");
+                }
+            }
+            else if (isDictionary && !currentElement.Contains("=<"))
+            {
+                string[] parts = currentElement.Split("=>", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length == 0)
+                    throw new WinterForgeFormatException(currentElement, "No dictionary key-value given");
+                if (parts.Length == 1)
+                    throw new WinterForgeFormatException(currentElement, "Only a key was given for the dictionary");
+
+                parts[0] = ValidateValue(parts[0], isBody);
+                parts[1] = ValidateValue(parts[1], isBody);
+
+                WriteLine($"{opcodeMap[OpCode.ELEMENT]} {parts[0]} {parts[1]}");
+            }
+            else
+            {
+                currentElement = ValidateValue(currentElement, isBody);
+                WriteLine($"{opcodeMap[OpCode.ELEMENT]} " + currentElement);
+            }
+        }
+
+        internal void EnqueueLines(List<string> lines)
+        {
+            lineBuffers.Push(new(lines));
+        }
+    }
 }

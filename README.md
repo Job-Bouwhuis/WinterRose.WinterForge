@@ -157,7 +157,7 @@ Person : 0 {
             isBald = false;
             gender = Gender.Male;
             children = null;
-            mother = _ref(0);
+            mother = #ref(0);
         }
     ]
 }
@@ -179,11 +179,11 @@ Opcode format may change in the future. Backwards compatibility between this for
 1 isBald false
 1 gender 0
 1 children null
-1 mother _ref(0)
+1 mother #ref(0)
 2 1
-5 _ref(1)
+5 #ref(1)
 7
-1 children _stack()
+1 children #stack()
 2 0
 ```
 
