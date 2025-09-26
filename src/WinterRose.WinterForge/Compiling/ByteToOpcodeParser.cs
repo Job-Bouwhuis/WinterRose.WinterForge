@@ -143,6 +143,46 @@ public class ByteToOpcodeParser
                         // no args
                         break;
 
+                    case OpCode.CALL:
+                        // prints: CALL <methodName> <argument count>
+                        args.Add(ReadString(reader));
+                        args.Add(ReadInt(reader));
+                        break;
+
+                    case OpCode.CONSTRUCTOR_START:
+                    case OpCode.TEMPLATE_CREATE: // 37
+                        // prints: TEMPLATE_CREATE <templateName> <paramCount> <type1> <name1> <type2> <name2> ...
+                        args.Add(ReadString(reader));
+                        int argCount = ReadInt(reader);
+                        args.Add(argCount);
+                        for (int i = 0; i < argCount; i++)
+                        {
+                            args.Add(ReadString(reader)); //type
+                            args.Add(ReadString(reader)); //name
+                        }
+                        break;
+
+                    case OpCode.VAR_DEF_START: // 43
+                        // prints: VAR_DEF_START <varName> [<defaultValue> if present]
+                        args.Add(ReadString(reader));
+                        byte next = (byte)reader.PeekChar();
+                        if (next == (byte)OpCode.VAR_DEFAULT_VALUE)
+                        {
+                            reader.Read(); // consume default value prefix
+                            args.Add(ReadAny(reader));
+                        }
+                        break;
+
+                    case OpCode.TEMPLATE_END: // 38
+                    case OpCode.CONTAINER_START:
+                    case OpCode.CONTAINER_END: // 40
+                    case OpCode.CONSTRUCTOR_END: // 42
+                    case OpCode.VAR_DEF_END: // 44
+                    case OpCode.FORCE_DEF_VAR: // 45
+                        args.Add(ReadString(reader));
+                        break;
+
+
                     default:
                         throw new InvalidOperationException($"Opcode {opcode} not supported in deserializer.");
                 }
@@ -209,15 +249,12 @@ public class ByteToOpcodeParser
             ValuePrefix.CHAR => reader.ReadChar(),
             ValuePrefix.DECIMAL => reader.ReadDecimal(),
             ValuePrefix.NULL => null,
-            _ => throw new InvalidDataException($"Unknown type prefix {type:X2}")
+            _ => throw new InvalidDataException($"Unknown type prefix {type}")
         };
     }
 
-
-
     private static string ReadMultilineString(BinaryReader reader)
     {
-        // For example, prefix 0x08 then length-prefixed string
         byte prefix = reader.ReadByte();
         if (prefix != 0x01)
             throw new InvalidDataException($"Expected string prefix 0x01 but got {prefix:X2}");

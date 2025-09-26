@@ -2,11 +2,15 @@
 using System.Collections.Generic;
 using System.ComponentModel.Design.Serialization;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing.Containers;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
     internal class DeserializationContext : IDisposable
     {
+        internal Stack<Scope> constructingScopes = [];
+
+        internal Dictionary<string, Container> Containers { get; set; } = [];
         internal Dictionary<int, object> ObjectTable { get; } = [];
         internal Stack<object> ValueStack { get; } = new();
         internal List<DeferredObject> DeferredObjects { get; } = [];

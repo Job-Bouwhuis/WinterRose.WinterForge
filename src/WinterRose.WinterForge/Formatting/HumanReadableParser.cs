@@ -261,8 +261,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     if (aliasMap.TryGetValue(rawID, out int aliasID))
                         rawID = aliasID.ToString();
-                    else
-                        throw new Exception("Invalid ID parameter in RETURN statement outside body");
                 }
 
                 if (rawID.All(char.IsDigit))
@@ -392,7 +390,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 WriteLine($"{opcodeMap[OpCode.END]} {id}");
                 return true;
             }
-            if (ContainsExpressionOutsideQuotes(line) &&
+            else if (isBody && currentLine.StartsWith("return"))
+            {
+                HandleReturn(currentLine, isBody);
+            }
+            else if (ContainsExpressionOutsideQuotes(line) &&
                 line.Contains(" = ") && line.EndsWith(';'))
                 ParseAssignment(line, id, isBody);
             else if (line.Contains("->"))
@@ -426,10 +428,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             else if (TryParseCollection(line, out _, isBody) is var colres && colres is not CollectionParseResult.Failed and not CollectionParseResult.NotACollection)
             {
                 return false;
-            }
-            else if(isBody && currentLine.StartsWith("return"))
-            {
-                HandleReturn(currentLine, isBody);
             }
             else
             {

@@ -44,10 +44,9 @@ internal class Program
 
         //WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
 
-        WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin", TargetFormat.IntermediateRepresentation);
-        return;
+        WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
 
-        InstructionExecutor.Debug = true;
+        //InstructionExecutor.Debug = true;
         using FileStream stream = File.OpenRead("bytes.wfbin");
         var instr = ByteToOpcodeParser.Parse(stream);
         var exer = new InstructionExecutor();

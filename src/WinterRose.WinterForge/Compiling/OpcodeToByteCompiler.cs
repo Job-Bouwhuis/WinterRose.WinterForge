@@ -404,10 +404,10 @@ public class OpcodeToByteCompiler()
                 WritePrefered(writer, parts[2], ValuePrefix.INT);
                 break;
 
+            case OpCode.CONSTRUCTOR_START:
             case OpCode.TEMPLATE_CREATE: // 37
                 {
                     // parts: [ "37", "<templateName>", "<paramCount>", "<type1>", "<name1>", ... ]
-                    writer.Write(opcodeByte);
                     string templateName = parts[1];
                     WriteString(writer, templateName);
 
@@ -429,7 +429,6 @@ public class OpcodeToByteCompiler()
             case OpCode.TEMPLATE_END: // 38
                 {
                     // parts: [ "38", "<templateName>" ]
-                    writer.Write(opcodeByte);
                     if (parts.Length > 1)
                         WriteString(writer, parts[1]);
                 }
@@ -438,7 +437,6 @@ public class OpcodeToByteCompiler()
             case OpCode.CONTAINER_START: // 39
                 {
                     // parts: [ "39", "<containerName>" ]
-                    writer.Write(opcodeByte);
                     if (parts.Length > 1)
                         WriteString(writer, parts[1]);
                 }
@@ -447,25 +445,15 @@ public class OpcodeToByteCompiler()
             case OpCode.CONTAINER_END: // 40
                 {
                     // parts: [ "40", "<containerName>" ]
-                    writer.Write(opcodeByte);
                     if (parts.Length > 1)
                         WriteString(writer, parts[1]);
                 }
                 break;
 
-            case OpCode.CONSTRUCTOR_START: // 41
-                {
-                    // parts: [ "41", "<containerName>" ]
-                    writer.Write(opcodeByte);
-                    if (parts.Length > 1)
-                        WriteString(writer, parts[1]);
-                }
-                break;
 
             case OpCode.CONSTRUCTOR_END: // 42
                 {
                     // parts: [ "42", "<containerName>" ]
-                    writer.Write(opcodeByte);
                     if (parts.Length > 1)
                         WriteString(writer, parts[1]);
                 }
@@ -474,7 +462,6 @@ public class OpcodeToByteCompiler()
             case OpCode.VAR_DEF_START: // 43
                 {
                     // parts: [ "43", "<varName>" ]
-                    writer.Write(opcodeByte);
                     if (parts.Length > 1)
                         WriteString(writer, parts[1]);
                     if (Peek(reader) is string next)
@@ -483,6 +470,7 @@ public class OpcodeToByteCompiler()
                         if (next.StartsWith(opcs))
                         {
                             Consume(reader, 1);
+                            writer.Write((byte)OpCode.VAR_DEFAULT_VALUE);
                             WriteAny(writer, next[2..].Trim());
                         }
                     }
@@ -492,7 +480,6 @@ public class OpcodeToByteCompiler()
             case OpCode.VAR_DEF_END: // 44
                 {
                     // parts: [ "44", "<varName>" ]
-                    writer.Write(opcodeByte);
                     if (parts.Length > 1)
                         WriteString(writer, parts[1]);
                 }
@@ -501,7 +488,6 @@ public class OpcodeToByteCompiler()
             case OpCode.FORCE_DEF_VAR: // 45
                 {
                     // parts: [ "45", "<varName>" ]
-                    writer.Write(opcodeByte);
                     if (parts.Length > 1)
                         WriteString(writer, parts[1]);
                 }

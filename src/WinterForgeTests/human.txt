@@ -1,4 +1,4 @@
-Program->data = 1;
+#import "human2.txt" as Vector2 (compiles into opcodes2.wfbin)
 
 #container Bor
 {
@@ -24,3 +24,5 @@ Program->data = 1;
 		return n + x;
 	}
 }
+
+return Bor;

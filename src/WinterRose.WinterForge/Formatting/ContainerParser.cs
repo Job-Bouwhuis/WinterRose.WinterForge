@@ -18,44 +18,50 @@ internal static class ContainerParser
         if (output == null) throw new ArgumentNullException(nameof(output));
 
         string? line = parser.currentLine;
-        do
+        while (string.IsNullOrWhiteSpace(line))
         {
+            line = raw.ReadLine();
+            if (line == null) break; // EOF
             line = line.Trim();
-            if (line.Length == 0) continue;
+        }
 
-            if (line.StartsWith("#container"))
+        // 'line' now contains either:
+        // - null (end of file)
+        // - a valid, non-whitespace line
+
+
+        if (line.StartsWith("#container"))
+        {
+            string containerHeader = line["#container".Length..].Trim();
+            string containerName;
+            bool openBraceOnSameLine = false;
+
+            // header may include a trailing '{'
+            if (containerHeader.EndsWith("{"))
             {
-                string containerHeader = line["#container".Length..].Trim();
-                string containerName;
-                bool openBraceOnSameLine = false;
-
-                // header may include a trailing '{'
-                if (containerHeader.EndsWith("{"))
-                {
-                    containerName = containerHeader[..^1].Trim();
-                    openBraceOnSameLine = true;
-                }
-                else
-                {
-                    containerName = containerHeader;
-                }
-
-                WriteOpcode(output, OpCode.CONTAINER_START, containerName);
-
-                // consume opening brace if not present on same line
-                if (!openBraceOnSameLine)
-                {
-                    SeekToNextNonEmptyLineExpecting("{", raw);
-                }
-
-                // Now read the entire container block
-                List<string> containerBlock = ReadBlockContent(raw);
-
-                ProcessContainerBlock(containerName, containerBlock, output, parser);
-
-                WriteOpcode(output, OpCode.CONTAINER_END, containerName);
+                containerName = containerHeader[..^1].Trim();
+                openBraceOnSameLine = true;
             }
-        } while ((line = raw.ReadLine()) != null);
+            else
+            {
+                containerName = containerHeader;
+            }
+
+            WriteOpcode(output, OpCode.CONTAINER_START, containerName);
+
+            // consume opening brace if not present on same line
+            if (!openBraceOnSameLine)
+            {
+                SeekToNextNonEmptyLineExpecting("{", raw);
+            }
+
+            // Now read the entire container block
+            List<string> containerBlock = ReadBlockContent(raw);
+
+            ProcessContainerBlock(containerName, containerBlock, output, parser);
+
+            WriteOpcode(output, OpCode.CONTAINER_END, containerName);
+        }
         return true;
     }
 
@@ -87,72 +93,71 @@ internal static class ContainerParser
                 continue;
             }
 
-            // Constructor block - named same as container
-            if (rawLine.StartsWith(containerName) && (rawLine.Length == containerName.Length || rawLine[containerName.Length] == ' ' || rawLine[containerName.Length] == '{'))
-            {
-                // If the header has '{' on same line it's handled by ExtractSubBlock
-                // Move index past the header line if we are at it
-                if (rawLine.EndsWith("{"))
-                {
-                    // i currently points to the header line; ExtractSubBlock will start from next line
-                }
-                else
-                {
-                    // move to the line that contains '{'
-                }
-
-                List<string> constructorBody = ExtractSubBlock(blockLines, ref lineIndex, headerLine: rawLine);
-                WriteOpcode(output, OpCode.CONSTRUCTOR_START, containerName);
-                constructorBody.Add("}");
-
-                parser.EnqueueLines(constructorBody);
-                parser.ContinueWithBody();
-
-                WriteOpcode(output, OpCode.CONSTRUCTOR_END, containerName);
+            if (TryParseBlock(rawLine, blockLines, ref lineIndex, containerName: containerName))
                 continue;
-            }
-
-            // Template declaration
-            if (rawLine.StartsWith("#template"))
-            {
-                // header may be "#template Name params... {" or "#template Name params..."
-                string header = rawLine["#template".Length..].Trim();
-                bool hasBraceOnHeader = header.EndsWith("{");
-                if (hasBraceOnHeader) header = header[..^1].Trim();
-
-                // header now contains name and parameter tokens (if any)
-                var headerTokens = TokenizeHeader(header);
-                if (headerTokens.Count == 0)
-                {
-                    throw new InvalidDataException("Template declaration missing name.");
-                }
-
-                string templateName = headerTokens[0];
-                var paramTuples = ParseParamTuples(headerTokens.Skip(1).ToList());
-
-                // Extract template body as sub-block
-                List<string> templateBody = ExtractSubBlock(blockLines, ref lineIndex, headerLine: rawLine);
-                templateBody.Add("}");
-
-                // Emit TEMPLATE_CREATE with param details
-                var args = new List<string> { templateName, paramTuples.Count.ToString() };
-                foreach (var p in paramTuples)
-                {
-                    args.Add(p.type);
-                    args.Add(p.name);
-                }
-                WriteOpcode(output, OpCode.TEMPLATE_CREATE, args.ToArray());
-
-                parser.EnqueueLines(templateBody);
-                parser.ContinueWithBody();
-
-                WriteOpcode(output, OpCode.TEMPLATE_END, templateName);
-                continue;
-            }
 
             lineIndex++;
         }
+
+        bool TryParseBlock(string rawLine, List<string> blockLines, ref int lineIndex, string containerName = null)
+        {
+            // Determine if this line is a block header (constructor or template)
+            string header = null;
+            string blockTypeName = null;
+            bool isConstructor = false;
+            List<(string type, string name)> paramTuples = new();
+
+            if (containerName != null && rawLine.StartsWith(containerName) &&
+                (rawLine.Length == containerName.Length || rawLine[containerName.Length] == ' ' || rawLine[containerName.Length] == '{'))
+            {
+                // It's a constructor
+                blockTypeName = containerName;
+                header = rawLine[containerName.Length..].Trim();
+                isConstructor = true;
+            }
+            else if (rawLine.StartsWith("#template"))
+            {
+                // It's a template
+                header = rawLine["#template".Length..].Trim();
+                blockTypeName = "#template"; // just for clarity
+            }
+            else
+            {
+                return false; // not a block we care about
+            }
+
+            bool hasBraceOnHeader = header.EndsWith("{");
+            if (hasBraceOnHeader) header = header[..^1].Trim();
+
+            // Parse name and parameters
+            List<string> headerTokens = TokenizeHeader(header);
+            string blockName = isConstructor ? containerName : headerTokens[0];
+            if (headerTokens.Count > 1 && containerName == null)
+                paramTuples = ParseParamTuples(headerTokens.Skip(1).ToList());
+
+            // Extract body
+            List<string> body = ExtractSubBlock(blockLines, ref lineIndex, headerLine: rawLine);
+            body.Add("}");
+
+            // Emit opcodes
+            var args = new List<string> { blockName, paramTuples.Count.ToString() };
+            foreach (var p in paramTuples)
+            {
+                args.Add(p.type);
+                args.Add(p.name);
+            }
+
+            WriteOpcode(output, blockTypeName == "#template" ? OpCode.TEMPLATE_CREATE : OpCode.CONSTRUCTOR_START, args.ToArray());
+
+            parser.EnqueueLines(body);
+            parser.ContinueWithBody();
+
+            WriteOpcode(output, blockTypeName == "#template" ? OpCode.TEMPLATE_END : OpCode.CONSTRUCTOR_END, blockName);
+
+            return true;
+        }
     }
+
 
     // Parses a variable declaration line (e.g. "x;" or "y = 5;") and emits VAR_DEF opcodes.
     private static void ParseVariableLine(string line, StreamWriter output, HumanReadableParser parser)

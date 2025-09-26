@@ -2,10 +2,14 @@
 using System.Collections.Concurrent;
 using System.Data;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
+using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Text;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing.Containers;
 using WinterRose.WinterForgeSerializing.Instructions;
 using WinterRose.WinterForgeSerializing.Logging;
 
@@ -109,10 +113,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
                 context = new();
 
-                foreach(var instruction in instructionCollection) 
+                Variable? buildingVariable = null;
+
+                for (instructionIndex = 0; instructionIndex < instructionCollection.Count; instructionIndex++)
                 {
+                    Instruction instruction = instructionCollection[instructionIndex];
                     long startTicks = 0;
-                    if(Debug)
+                    if (Debug)
                         startTicks = Stopwatch.GetTimestamp();
 
                     switch (instruction.OpCode)
@@ -159,15 +166,21 @@ namespace WinterRose.WinterForgeSerializing.Workers
                             HandleEnd();
                             break;
                         case OpCode.RET:
-                            Validate();
-                            if (instruction.Args[0] is "#stack()")
-                                return context.ValueStack.Peek();
-                            if (instruction.Args[0] == "null")
-                                return null;
-                            object val = context.GetObject((int)instruction.Args[0]) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
-                            return val;
+                            {
+                                Validate();
+                                if (instruction.Args[0] == "null")
+                                    return null;
+                                if (instruction.Args[0] is "#stack()")
+                                    return context.ValueStack.Peek();
+
+                                if (context.Containers.TryGetValue((string)instruction.Args[0], out Container c))
+                                    return c;
+
+                                object val = context.GetObject((int)instruction.Args[0]) ?? throw new Exception($"object with ID {instruction.Args[0]} not found");
+                                return val;
+                            }
                         case OpCode.PROGRESS:
-                            progressTracker?.Report((instructionIndex + 1) / (float)instructionTotal);
+                            progressTracker?.Report((this.instructionIndex + 1) / (float)instructionTotal);
                             break;
                         case OpCode.ACCESS:
                             {
@@ -225,13 +238,143 @@ namespace WinterRose.WinterForgeSerializing.Workers
                                 break;
                             }
 
+                        case OpCode.CONSTRUCTOR_START:
+                        case OpCode.TEMPLATE_CREATE:
+                            {
+                                bool isConstructor = context.constructingScopes.TryPeek(out Scope s)
+                                                && s.Name == (string)instruction.Args[0];
+
+                                int argCount = (int)instruction.Args[1];
+
+                                // when argCount == 0 we skip only name, otherwise name+count
+                                int startIndex = (argCount == 0) ? 1 : 2; 
+
+                                List<TemplateParmeter> templateArgs = new(argCount);
+
+                                for (int i = startIndex; i < startIndex + argCount * 2; i += 2)
+                                {
+                                    templateArgs.Add(new TemplateParmeter(
+                                        ResolveType((string)instruction.Args[i]),
+                                        (string)instruction.Args[i + 1]
+                                    ));
+                                }
+
+                                Template t = new Template((string)instruction.Args[0], templateArgs);
+                                context.constructingScopes.Push(t);
+
+                                while (NextInstruction(out instruction))
+                                {
+                                    if (instruction.OpCode is OpCode.TEMPLATE_END or OpCode.CONSTRUCTOR_END)
+                                        if (isConstructor)
+                                            goto case OpCode.CONSTRUCTOR_END;
+                                        else
+                                            goto case OpCode.TEMPLATE_END;
+
+                                    t.Instructions.Add(instruction);
+                                }
+                            }
+                            break;
+
+                        case OpCode.TEMPLATE_END: // 38
+                            {
+                                if (!context.constructingScopes.TryPop(out Scope s) || s is not Template t)
+                                    throw new WinterForgeExecutionException("Tried ending a template but most recent scope was not a template");
+
+                                if (!context.constructingScopes.TryPeek(out s))
+                                    throw new WinterForgeExecutionException("Tried ending a template but just ended scope was not defined in a scope");
+
+                                s.DefineTemplate(t);
+                            }
+                            break;
+
+                        case OpCode.CONTAINER_START: // 39
+                                                     // TODO: Start container
+                            Container newContainer = new((string)instruction.Args[0]);
+                            context.constructingScopes.Push(newContainer);
+                            break;
+
+                        case OpCode.CONTAINER_END: // 40
+                            {
+                                if (!context.constructingScopes.TryPop(out Scope s) || s is not Container c)
+                                    throw new WinterForgeExecutionException("Tried ending a container but just ended scope was not a container");
+
+                                context.Containers[c.Name] = c;
+                            }
+                            break;
+
+                        case OpCode.CONSTRUCTOR_END: // 42
+                            {
+                                if (!context.constructingScopes.TryPop(out Scope s) || s is not Template t)
+                                    throw new WinterForgeExecutionException("Tried ending a constructor but most recent scope was not a template");
+
+                                if (!context.constructingScopes.TryPeek(out s) || s is not Container c)
+                                    throw new WinterForgeExecutionException("Tried ending a constructor but just ended template was not defined in a container");
+
+                                c.Constructors.DefineTemplate(t);
+                            }
+                            break;
+
+                        case OpCode.VAR_DEF_START:
+                            buildingVariable = new Variable();
+                            buildingVariable.Name = (string)instruction.Args[0];
+
+                            if (instruction.Args.Length == 1)
+                            {
+                                if (PeekInstruction(out Instruction instr)
+                                    && instr.OpCode == OpCode.VAR_DEF_END)
+                                {
+                                    buildingVariable.defaultValue = null;
+                                    buildingVariable.DefaultValueAsExpression = false;
+                                    break;
+                                }
+                                goto ExpressionBuilding;
+                            }
+                            if (instruction.Args.Length == 2)
+                            {
+                                buildingVariable.defaultValue = instruction.Args[1];
+                                buildingVariable.DefaultValueAsExpression = false;
+                                break;
+                            }
+
+ExpressionBuilding:
+                            buildingVariable.DefaultValueInstructions = [];
+                            buildingVariable.DefaultValueAsExpression = true;
+                            while (NextInstruction(out instruction))
+                            {
+                                if (instruction.OpCode == OpCode.VAR_DEF_END)
+                                    goto case OpCode.VAR_DEF_END;
+                                buildingVariable.DefaultValueInstructions.Add(instruction);
+                            }
+                            break;
+
+                        case OpCode.VAR_DEF_END: // 44
+                                                 // TODO: End variable definition
+                            {
+                                Scope s = context.constructingScopes.Peek();
+                                if (s is null)
+                                    throw new WinterForgeExecutionException("Attempting to add a variable on a non existing scope is impossible!");
+
+                                if (buildingVariable is null)
+                                    throw new WinterForgeExecutionException("Attempting to add a null variable to a scope is illegal!");
+
+                                s.DefineVariable(buildingVariable);
+                                buildingVariable = null;
+                            }
+                            break;
+
+                        case OpCode.FORCE_DEF_VAR: // 45
+                                                   // TODO: Force define variable
+                            object[] args = [instruction.Args[0], null];
+                            HandleSet(args);
+
+                            break;
+
+
                         default:
                             throw new WinterForgeExecutionException($"Opcode: {instruction.OpCode} not supported");
                     }
 
-                    instructionIndex++;
-
-                    if(Debug)
+                    if (Debug)
                     {
                         long endTicks = Stopwatch.GetTimestamp();
                         long elapsedTicks = endTicks - startTicks;
@@ -244,6 +387,24 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 }
 
                 return new Nothing(context.ObjectTable);
+
+                bool PeekInstruction([NotNullWhen(true)] out Instruction instruction)
+                {
+                    instruction = default;
+                    if (instructionIndex + 1 >= instructionCollection.Count)
+                        return false;
+                    instruction = instructionCollection[instructionIndex + 1];
+                    return true;
+                }
+
+                bool NextInstruction([NotNullWhen(true)] out Instruction instruction)
+                {
+                    instruction = default;
+                    if (instructionIndex + 1 >= instructionCollection.Count)
+                        return false;
+                    instruction = instructionCollection[++instructionIndex];
+                    return true;
+                }
             }
             finally
             {
@@ -255,7 +416,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 listStack.Clear();
                 instanceIDStack.Clear();
 
-                if(DebugAutoPrint)
+                if (DebugAutoPrint)
                     PrintOpcodeTimings(new TextWriterStream(Console.Out));
             }
         }
@@ -824,7 +985,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             if (o.GetType() == target)
                 return o;
-            if(o is string raw)
+            if (o is string raw)
             {
                 if (raw is "null")
                     return null;
@@ -836,7 +997,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (TypeConverter.TryConvert(o, target, out var converted))
                 return converted;
             return o;
-            
+
         }
         private static int ParseRef(string raw)
         {
