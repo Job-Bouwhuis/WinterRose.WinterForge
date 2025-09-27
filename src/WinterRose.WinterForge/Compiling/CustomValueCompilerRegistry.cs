@@ -43,6 +43,11 @@ public static class CustomValueCompilerRegistry
 
     public static bool TryGetByType(Type type, [NotNullWhen(true)] out ICustomValueCompiler? compiler)
     {
+        if (type is null)
+        {
+            compiler = null;
+            return false; // assume its a container;
+        }
         return _compilersByType.TryGetValue(type, out compiler);
     }
 

@@ -58,7 +58,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             throw new WinterForgeSerializeException(targetType, s);
         }
 
-        // This method will resolve argument types to their correct types
         public static List<object> ResolveArgumentTypes(List<object> argumentStrings)
         {
             var resolvedArguments = new List<object>();
@@ -67,7 +66,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 if (argument is string s)
                 {
-                    // Try to detect and parse into the most appropriate type
                     object parsed = TryParsePrimitive(s);
                     resolvedArguments.Add(parsed);
                 }
@@ -105,12 +103,18 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         private static bool TryConvertArguments(List<object> inputArgs, ParameterInfo[] parameters, out object[] convertedArgs)
         {
-            convertedArgs = new object[parameters.Length];
+            var targetTypes = parameters.Select(p => p.ParameterType).ToArray();
+            return TryConvertArguments(inputArgs, targetTypes, out convertedArgs);
+        }
 
-            for (int i = 0; i < parameters.Length; i++)
+        internal static bool TryConvertArguments(List<object> inputArgs, Type[] targetTypes, out object[] convertedArgs)
+        {
+            convertedArgs = new object[targetTypes.Length];
+
+            for (int i = 0; i < targetTypes.Length; i++)
             {
                 object input = inputArgs[i];
-                Type targetType = parameters[i].ParameterType;
+                Type targetType = targetTypes[i];
 
                 if (input == null)
                 {
@@ -132,14 +136,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     if (input is string s)
                     {
-                        var converted = Convert.ChangeType(s, targetType);
-                        convertedArgs[i] = converted!;
+                        convertedArgs[i] = Convert.ChangeType(s, targetType);
                         continue;
                     }
-                    else
-                    {
-                        convertedArgs[i] = Convert.ChangeType(input, targetType);
-                    }
+
+                    convertedArgs[i] = Convert.ChangeType(input, targetType);
                 }
                 catch
                 {
@@ -149,6 +150,5 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             return true;
         }
-
     }
 }

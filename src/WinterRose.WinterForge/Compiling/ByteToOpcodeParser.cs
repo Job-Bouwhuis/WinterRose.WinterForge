@@ -20,7 +20,14 @@ public class ByteToOpcodeParser
         catch (InvalidOperationException e)
         {
             using DualStreamReader cache = cacheStream.CreateFallbackReader();
-            return InstructionParser.ParseOpcodes(cache);
+            try
+            {
+                return InstructionParser.ParseOpcodes(cache);
+            }
+            catch
+            {
+                throw e;
+            }
         }
     }
 
@@ -140,7 +147,15 @@ public class ByteToOpcodeParser
                     case OpCode.NOT:
                     case OpCode.OR:
                     case OpCode.XOR:
+                    case OpCode.SCOPE_PUSH:
+                    case OpCode.SCOPE_POP:
                         // no args
+                        break;
+
+                    case OpCode.JUMP:
+                    case OpCode.JUMP_IF_FALSE:
+                    case OpCode.LABEL:
+                        args.Add(ReadString(reader));
                         break;
 
                     case OpCode.CALL:

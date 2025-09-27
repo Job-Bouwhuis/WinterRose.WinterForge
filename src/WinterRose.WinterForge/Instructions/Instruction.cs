@@ -22,5 +22,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
 
 
         public override string ToString() => $"{opCode} {string.Join(' ', args)}";
+
+        public readonly Instruction Clone() => new Instruction(OpCode, Args);
     }
 }

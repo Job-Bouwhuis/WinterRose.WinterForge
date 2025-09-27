@@ -44,13 +44,17 @@ internal class Program
 
         //WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
 
+        WinterForge.AllowCustomCompilers = false;
         WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
 
-        //InstructionExecutor.Debug = true;
+        //WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin", TargetFormat.IntermediateRepresentation);
+        //return;
+
+        InstructionExecutor.Debug = true;
         using FileStream stream = File.OpenRead("bytes.wfbin");
         var instr = ByteToOpcodeParser.Parse(stream);
         var exer = new InstructionExecutor();
-        var vec = exer.Execute(instr);
+        var vec = exer.Execute(instr, false);
 
         using TextWriterStream2 s = new TextWriterStream2(Console.Out);
         exer.PrintOpcodeTimings(s);

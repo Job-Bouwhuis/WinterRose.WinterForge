@@ -93,7 +93,7 @@ internal static class ContainerParser
                 continue;
             }
 
-            if (TryParseBlock(rawLine, blockLines, ref lineIndex, containerName: containerName))
+            if (TryParseBlock(rawLine, blockLines, ref lineIndex, containerName))
                 continue;
 
             lineIndex++;
@@ -132,7 +132,7 @@ internal static class ContainerParser
             // Parse name and parameters
             List<string> headerTokens = TokenizeHeader(header);
             string blockName = isConstructor ? containerName : headerTokens[0];
-            if (headerTokens.Count > 1 && containerName == null)
+            if (headerTokens.Count > 1)
                 paramTuples = ParseParamTuples(headerTokens.Skip(1).ToList());
 
             // Extract body

@@ -1,28 +1,23 @@
-#import "human2.txt" as Vector2 (compiles into opcodes2.wfbin)
+// #import "human2.txt" (compiles into opcodes2.wfbin)
+// #import "human3.txt" (compiles into opcodes3.wfbin)
 
 #container Bor
 {
-	#variables
+	#template Factorial int n
 	{
-		x;
-		y = 5;
-		z = Random->Shared->Next(1, 7);
-	}
-
-	Bor
-	{
-		x = 10;
-	}
-
-	#template Func
-	{
-		return x;
-	}
-
-	#template Foo int n
-	{
-		return n + x;
+		if n <= 1
+		{
+			return 1;
+		}
+		else
+		{
+			return n * Factorial(n - 1);
+		}
 	}
 }
+Bor : b;
+var fac = b->Factorial(5);
 
-return Bor;
+Console->WriteLine(fac);
+
+return ba;

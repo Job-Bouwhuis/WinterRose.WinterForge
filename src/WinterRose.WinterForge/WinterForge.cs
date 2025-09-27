@@ -49,6 +49,10 @@ namespace WinterRose.WinterForgeSerializing
 
         /// <inheritdoc cref="WinterForgeGlobalAccessRestriction"/>
         public static WinterForgeGlobalAccessRestriction GlobalAccessRestriction { get; set; } = WinterForgeGlobalAccessRestriction.NoGlobalBlock;
+        /// <summary>
+        /// Setting this to false can increase the load times of certain larger datasets, however the scripting side of WinterForge can have issues with this is enabled
+        /// </summary>
+        public static bool AllowCustomCompilers { get; set; } = true;
 
         private static void EnsurePathExists(string path)
         {
@@ -333,7 +337,7 @@ namespace WinterRose.WinterForgeSerializing
             new HumanReadableParser().Parse(humanReadable, mem);
             mem.Seek(0, SeekOrigin.Begin);
             using var opcodes = new MemoryStream();
-            new OpcodeToByteCompiler().Compile(mem, opcodes);
+            new OpcodeToByteCompiler(AllowCustomCompilers).Compile(mem, opcodes);
             opcodes.Position = 0;
             var instructions = ByteToOpcodeParser.Parse(opcodes);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
@@ -588,7 +592,7 @@ namespace WinterRose.WinterForgeSerializing
                     using MemoryStream mem = new();
                     new HumanReadableParser().Parse(serialized, mem);
                     mem.Position = 0;
-                    new OpcodeToByteCompiler().Compile(mem, opcodes);
+                    new OpcodeToByteCompiler(AllowCustomCompilers).Compile(mem, opcodes);
                 }
                 opcodes.Flush();
             }
@@ -599,7 +603,7 @@ namespace WinterRose.WinterForgeSerializing
             using var executor = new InstructionExecutor();
             if (progressTracker is not null)
                 executor.progressTracker = progressTracker;
-            object? res = executor.Execute(instructions);
+            object? res = executor.Execute(instructions, true);
 
             if (res is List<object> list)
             {

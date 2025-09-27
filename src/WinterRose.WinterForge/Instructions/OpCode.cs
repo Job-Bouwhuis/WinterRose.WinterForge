@@ -196,5 +196,10 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         VAR_DEF_END = 44,
         FORCE_DEF_VAR = 45,
         VAR_DEFAULT_VALUE = 46,
+        JUMP = 47,
+        JUMP_IF_FALSE = 48,
+        LABEL = 49,
+        SCOPE_PUSH = 50,
+        SCOPE_POP = 51,
     }
 }

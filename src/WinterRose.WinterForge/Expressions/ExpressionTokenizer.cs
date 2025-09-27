@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WinterRose.WinterForgeSerializing.Formatting;
 
 namespace WinterRose.WinterForgeSerializing.Expressions;
 
@@ -13,13 +14,17 @@ public enum TokenType
     String,
     Identifier,
     Arrow,        // ->
-    Operator,     // + - * /
+    Operator,     // + - * / etc
     LParen,       // (
     RParen,       // )
     Comma,
 }
 
-public record Token(TokenType Type, string Text);
+public class Token(TokenType type, string text)
+{
+    public TokenType Type => type;
+    public string Text { get; set; } = text;
+}
 
 public static class ExpressionTokenizer
 {
@@ -33,7 +38,7 @@ public static class ExpressionTokenizer
         {"==", 3}, {"!=", 3},
         {"&&", 2},
         {"||", 1},
-        {"!", 8} // Unary operators highest? Treat carefully
+        {"!", 8} // unary
     };
 
     public static List<Token> Tokenize(string input)
@@ -97,6 +102,22 @@ public static class ExpressionTokenizer
                 continue;
             }
 
+            if (c == '|' && i + 1 < input.Length)
+            {
+                int start = i;
+                i++; // consume first '|'
+                while (i < input.Length && input[i] != '|') i++; // scan type name
+                if (i < input.Length && input[i] == '|') i++; // consume closing '|'
+
+                // Now consume the literal value immediately after
+                int valueStart = i;
+                while (i < input.Length && !char.IsWhiteSpace(input[i]) && "!+-*/%^><=()".IndexOf(input[i]) < 0)
+                    i++;
+
+                string fullLiteral = input[start..i];
+                tokens.Add(new Token(TokenType.Identifier, fullLiteral));
+                continue;
+            }
 
             // Skip whitespace
             if (char.IsWhiteSpace(c))
@@ -125,7 +146,7 @@ public static class ExpressionTokenizer
                 }
             }
 
-            // Single-char operators
+            // Single-char operators (note: '=' omitted intentionally if you treat '=' as assignment outside expressions)
             if ("+-*/%^><!()".Contains(c))
             {
                 if (c == '(')
@@ -165,55 +186,69 @@ public static class ExpressionTokenizer
                 continue;
             }
 
-            // Identifiers (variables, functions, etc.)
+            // Identifiers (variables, functions, member chains, etc.)
+            // Accepts: Name, Name.Member, Name.Member( ... ), Name->Member, chained combinations
             if (char.IsLetter(c) || c == '_')
             {
                 int start = i;
 
-                // Build up the identifier (including -> parts and method calls)
+                // Build up the identifier (including -> parts, . member access and method calls)
                 string identifier = "";
 
                 while (i < input.Length)
                 {
                     int segmentStart = i;
 
-                    // Base identifier
+                    // Base identifier segment (letters/digits/underscore)
                     while (i < input.Length && (char.IsLetterOrDigit(input[i]) || input[i] == '_'))
                         i++;
 
                     identifier += input[segmentStart..i];
 
-                    // Check for function call after identifier
+                    // Skip whitespace to inspect next char
                     int temp = i;
                     while (temp < input.Length && char.IsWhiteSpace(input[temp])) temp++;
 
+                    // If function call immediately follows, consume the full call (including nested parentheses)
                     if (temp < input.Length && input[temp] == '(')
                     {
                         i = temp;
                         string fullCall = ConsumeFullFunctionCall(input, ref i);
                         identifier += fullCall;
+                        // continue the while loop to possibly chain further (e.g. Foo(a)->Bar or Foo(a).Prop)
+                        continue;
                     }
 
-                    // Check for -> to continue the chain
+                    // If arrow -> continues the chain
                     if (i + 1 < input.Length && input[i] == '-' && input[i + 1] == '>')
                     {
                         identifier += "->";
                         i += 2;
+                        continue;
                     }
-                    else
+
+                    // If dot . continues the member chain (e.g. System.Console.WriteLine)
+                    if (i < input.Length && input[i] == '.')
                     {
-                        break;
+                        identifier += ".";
+                        i++; // consume '.'
+                        continue;
                     }
+
+                    // nothing more to chain
+                    break;
                 }
 
                 tokens.Add(new Token(TokenType.Identifier, identifier));
                 continue;
             }
 
-
+            // if nothing matched, throw
             throw new Exception($"Unexpected character '{c}' at position {i}");
         }
 
+        // NOTE: original code returned postfix tokens — that's fine for expression evaluation.
+        // We'll simply return the token list converted to postfix here to preserve existing behavior (operators handled).
         return ConvertToPostfix(tokens);
     }
 
@@ -282,9 +317,6 @@ public static class ExpressionTokenizer
 
                 case TokenType.Operator:
                     {
-                        // Handle unary operators (like !) here if needed
-                        // (optional: check if previous token is operator or left paren or start of expression)
-
                         while (operators.Count > 0 && IsOperator(operators.Peek()))
                         {
                             var topOp = operators.Peek();
@@ -321,8 +353,7 @@ public static class ExpressionTokenizer
                     break;
 
                 case TokenType.Arrow:
-                    // Treat as operator with very high precedence, or handle separately during parsing.
-                    // For now just push it, you may want special handling.
+                    // treat arrow as higher-precedence op, but many consumers expect arrow chains to be identifiers
                     operators.Push(token);
                     break;
 
@@ -343,3 +374,65 @@ public static class ExpressionTokenizer
     }
 }
 
+/// <summary>
+/// Small helpers that use the tokenizer to detect whether a string contains a "true expression"
+/// (i.e. arithmetic/boolean/comparison operators) outside of quotes.
+/// </summary>
+public static class ExpressionUtils
+{
+    // operators that indicate an expression (single '=' is typically assignment and ignored)
+    private static readonly HashSet<string> ExpressionOperators = new()
+    {
+        "+","-","*","/","%","^",
+        ">", "<", ">=", "<=", "==", "!=",
+        "&&", "||", "!"
+    };
+
+    /// <summary>
+    /// Returns true if the input contains expression operators (math/boolean/comparison) outside quotes.
+    /// Member access chains and single function calls (no operators) will return false.
+    /// </summary>
+    public static bool ContainsExpressionOutsideQuotes(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return false;
+
+        List<Token> tokens;
+        try
+        {
+            // Tokenize returns postfix converted tokens in this implementation,
+            // but operator tokens will still be present.
+            tokens = ExpressionTokenizer.Tokenize(input);
+        }
+        catch
+        {
+            // If tokenization fails, conservatively fall back to a safer scan:
+            // check for operator chars outside quotes (but ignore '.' and '->').
+            bool insideQuotes = false;
+            for (int i = 0; i < input.Length; i++)
+            {
+                char c = input[i];
+                if (c == '"')
+                {
+                    bool escaped = i > 0 && input[i - 1] == '\\';
+                    if (!escaped) insideQuotes = !insideQuotes;
+                    continue;
+                }
+                if (insideQuotes) continue;
+                // treat only real expression operator characters:
+                if ("+-*/%><!&|^".Contains(c)) return true;
+            }
+            return false;
+        }
+
+        // If any operator token is present that is in ExpressionOperators -> it's an expression.
+        foreach (var t in tokens)
+        {
+            if (t.Type == TokenType.Operator && ExpressionOperators.Contains(t.Text))
+                return true;
+        }
+
+        // No expression-like operators => not an expression (member chains, single identifiers or function calls).
+        return false;
+    }
+}

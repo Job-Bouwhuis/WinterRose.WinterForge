@@ -39,6 +39,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         private Dictionary<string, int> aliasMap = [];
         private readonly Stack<OverridableStack<string>> lineBuffers = new();
         List<int> foundIds = [];
+        List<string> variables = [];
         private int autoAsIDs;
         private static readonly Dictionary<OpCode, int> opcodeMap = Enum
             .GetValues<OpCode>()
@@ -109,18 +110,47 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 string type = line[..openParenIndex].Trim();
                 string arguments = line.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
-                string id = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+                string idRaw = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
-                if (id is "nextid")
-                    id = GetAutoID().ToString();
-                foundIds.Add(int.Parse(id));
+                // special keywords -> numeric id
+                if (idRaw == "temp" || idRaw == "nextid")
+                    idRaw = GetAutoID().ToString();
 
-                var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                foreach (string arg in args)
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
-                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} {args.Length}");
-                depth++;
-                ParseBlock(id, isBody);
+                if (!int.TryParse(idRaw, out int idNum))
+                {
+                    // textual id -> create a variable and assign created instance to it
+                    string varName = idRaw;
+                    int assignedId = GetAutoID();
+                    foundIds.Add(assignedId);
+
+                    // ensure variable exists first
+                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+
+                    var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string arg in args)
+                        WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} {args.Length}");
+                    depth++;
+                    ParseBlock(assignedId.ToString(), isBody);
+
+                    // after the block finishes, assign the created instance to the variable
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
+                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
+                    variables.Add(varName);
+                }
+                else
+                {
+                    // numeric id path (unchanged)
+                    if (idNum == GetAutoID()) { /* noop - unreachable but keeps parity */ }
+                    foundIds.Add(idNum);
+
+                    var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string arg in args)
+                        WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {idNum} {args.Length}");
+                    depth++;
+                    ParseBlock(idNum.ToString(), isBody);
+                }
             }
             // Constructor Definition with no block: Type(arguments) : ID;
             else if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.EndsWith(";"))
@@ -134,18 +164,44 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     type = type.Replace(' ', '-');
 
                 string arguments = line.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1).Trim();
-                string id = line.Substring(colonIndex + 1, line.Length - colonIndex - 2).Trim();
+                string idRaw = line.Substring(colonIndex + 1, line.Length - colonIndex - 2).Trim();
 
-                if (id is "nextid")
-                    id = GetAutoID().ToString();
-                foundIds.Add(int.Parse(id));
+                if (idRaw == "temp" || idRaw == "nextid")
+                    idRaw = GetAutoID().ToString();
 
-                var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                foreach (string arg in args)
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
-                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} {args.Length}");
-                WriteLine($"{opcodeMap[OpCode.END]} {id}");
+                if (!int.TryParse(idRaw, out int idNum))
+                {
+                    string varName = idRaw;
+                    int assignedId = GetAutoID();
+                    foundIds.Add(assignedId);
+
+                    // ensure variable exists before define
+                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+
+                    var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string arg in args)
+                        WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} {args.Length}");
+                    WriteLine($"{opcodeMap[OpCode.END]} {assignedId}");
+
+                    // assign created instance to variable
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
+                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
+                    variables.Add(varName);
+                }
+                else
+                {
+                    // numeric id path (unchanged)
+                    foundIds.Add(idNum);
+
+                    var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string arg in args)
+                        WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {idNum} {args.Length}");
+                    WriteLine($"{opcodeMap[OpCode.END]} {idNum}");
+                }
             }
+
             // Definition: Type : ID {
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
             {
@@ -156,57 +212,137 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
 
-                string id = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
+                string idRaw = line.Substring(colonIndex + 1, braceIndex - colonIndex - 1).Trim();
 
-                if (id is "nextid")
-                    id = GetAutoID().ToString();
-                foundIds.Add(int.Parse(id));
+                if (idRaw == "temp" || idRaw == "nextid")
+                    idRaw = GetAutoID().ToString();
 
-                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} 0");
-                depth++;
-                ParseBlock(id, isBody);
+                if (!int.TryParse(idRaw, out int idNum))
+                {
+                    string varName = idRaw;
+                    int assignedId = GetAutoID();
+                    foundIds.Add(assignedId);
+
+                    // ensure variable exists
+                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} 0");
+                    depth++;
+                    ParseBlock(assignedId.ToString(), isBody);
+
+                    // assign created instance
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
+                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
+                    variables.Add(varName);
+                }
+                else
+                {
+                    foundIds.Add(idNum);
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {idNum} 0");
+                    depth++;
+                    ParseBlock(idNum.ToString(), isBody);
+                }
             }
+
             // Definition: Type : ID;
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.EndsWith(';'))
             {
                 string type;
-                string id;
+                string idRaw;
 
                 var parts = line[..^1].Split(':');
                 type = parts[0].Trim();
                 if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
-                id = parts[1].Trim();
+                idRaw = parts[1].Trim();
 
-                if (id is "nextid")
-                    id = GetAutoID().ToString();
-                foundIds.Add(int.Parse(id));
+                if (idRaw == "temp" || idRaw == "nextid")
+                    idRaw = GetAutoID().ToString();
 
-                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} 0");
-                WriteLine($"{opcodeMap[OpCode.END]} {id}");
+                if (!int.TryParse(idRaw, out int idNum))
+                {
+                    string varName = idRaw;
+                    int assignedId = GetAutoID();
+                    foundIds.Add(assignedId);
+
+                    // ensure variable exists
+                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} 0");
+                    WriteLine($"{opcodeMap[OpCode.END]} {assignedId}");
+
+                    // assign created instance
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
+                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
+                    variables.Add(varName);
+                }
+                else
+                {
+                    if (idNum == GetAutoID()) { /* noop */ }
+                    foundIds.Add(idNum);
+
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {idNum} 0");
+                    WriteLine($"{opcodeMap[OpCode.END]} {idNum}");
+                }
             }
             // Definition: Type : ID
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1)
             {
                 string type;
-                string id;
+                string idRaw;
 
                 var parts = line.Split(':');
                 type = parts[0].Trim();
                 if (type.Contains("Anonymous"))
                     type = type.Replace(' ', '-');
-                id = parts[1].Trim();
+                idRaw = parts[1].Trim();
 
-                if (id is "nextid")
-                    id = GetAutoID().ToString();
+                // allow 'temp' shorthand
+                if (idRaw == "temp" || idRaw == "nextid")
+                    idRaw = GetAutoID().ToString();
 
-                foundIds.Add(int.Parse(id));
-                ReadNextLineExpecting("{");
+                if (!int.TryParse(idRaw, out int idNum))
+                {
+                    string varName = idRaw;
+                    int assignedId = GetAutoID();
+                    foundIds.Add(assignedId);
 
-                WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {id} 0");
-                depth++;
+                    ReadNextLineExpecting("{");
 
-                ParseBlock(id, isBody);
+                    // ensure variable exists
+                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} 0");
+                    depth++;
+
+                    ParseBlock(assignedId.ToString(), isBody);
+
+                    // assign created instance
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
+                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
+                    variables.Add(varName);
+                }
+                else
+                {
+                    if (idNum == GetAutoID()) { /* noop */ }
+                    foundIds.Add(idNum);
+                    ReadNextLineExpecting("{");
+
+                    WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {idNum} 0");
+                    depth++;
+
+                    ParseBlock(idNum.ToString(), isBody);
+                }
+            }
+            else if (line.StartsWith("var ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI)
+            {
+                string varName = line[4..eqI].Trim();
+                string rhs = line[(eqI + 1)..].Trim();
+                if (rhs.EndsWith(';'))
+                    rhs = rhs[..^1];
+                string tempVar = ValidateValue(rhs, isBody);
+                WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+                WriteLine($"{opcodeMap[OpCode.SET]} {varName} {tempVar}");
             }
             else if (line.StartsWith("return"))
             {
@@ -215,6 +351,18 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             else if (line.Contains("->"))
             {
                 HandleAccessing(null, isBody);
+            }
+            else if (line.StartsWith("if "))
+            {
+                ParseIfChain(line, isBody);
+            }
+            else if (!string.IsNullOrWhiteSpace(line) &&
+                    line.EndsWith(":") &&
+                    line.IndexOf(':') == line.Length - 1 &&
+                    line[..^1].All(c => char.IsLetterOrDigit(c) || c == '_'))
+            {
+                string name = line[..^1];
+                WriteLine($"{opcodeMap[OpCode.LABEL]} {name}");
             }
             else if (line.StartsWith("as"))
             {
@@ -249,10 +397,143 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 throw new Exception($"Unexpected top-level line: {line}");
         }
 
+        // Call when currentLine starts with "if", "else if" or "else"
+        // id and isBody forwarded to ValidateValue/ParseBlock like your other handlers.
+        private void ParseIfChain(string? id, bool isBody)
+        {
+            // unique end label for the whole chain
+            string endLabel = "L" + GetAutoID();
+
+            // Helper: get next non-empty trimmed line without advancing parser (implement according to your parser)
+            string PeekNextNonEmptyLine()
+            {
+                return PeekNonEmptyLine(); // <-- replace with your real peek
+            }
+
+            // Helper: advance parser to next non-empty trimmed line and return it
+            string AdvanceToNextNonEmptyLine()
+            {
+                // Replace with your real advance implementation
+                return ReadNonEmptyLine(); // <-- replace with your real advance
+            }
+
+            // Loop over branches: first branch must be 'if', subsequent ones may be 'else if' or 'else'.
+            while (true)
+            {
+                string raw = currentLine.Trim();
+
+                bool isIf = raw.StartsWith("if ");
+                bool isElseIf = raw.StartsWith("else if ");
+                bool isElse = raw == "else" || raw.StartsWith("else ");
+
+                if (!isIf && !isElseIf && !isElse)
+                    throw new WinterForgeFormatException("ParseIfChain called when current line is not an if/else-if/else");
+
+                string conditionExpr = null;
+                bool hasCondition = false;
+
+                // figure out condition text if applicable
+                if (isIf || isElseIf)
+                {
+                    int kwLen = isIf ? 2 : 7; // "if" or "else if"
+                    int braceIndex = raw.IndexOf('{');
+
+                    if (braceIndex >= 0)
+                    {
+                        // "if cond {"
+                        conditionExpr = raw[kwLen..braceIndex].Trim();
+                    }
+                    else
+                    {
+                        // "if cond" (brace on next line), take remainder of line
+                        conditionExpr = raw[kwLen..].Trim();
+                    }
+
+                    // allow optional parentheses or extra whitespace; leave ValidateValue to handle it
+                    hasCondition = !string.IsNullOrEmpty(conditionExpr);
+                    if (!hasCondition)
+                        throw new WinterForgeFormatException("Missing condition on if/else if");
+                }
+
+                // create label that marks the start of the "next" branch (or end for an if that fails)
+                string nextBranchLabel = "L" + GetAutoID();
+
+                // if there's a condition, emit code to evaluate it and jump to nextBranchLabel when false
+                if (hasCondition)
+                {
+                    string condToken = ValidateValue(conditionExpr, isBody, id); // e.g. pushes #stack() or literal form
+                                                                                 // push condition result
+                    if (condToken is not "#stack()")
+                        WriteLine($"{opcodeMap[OpCode.PUSH]} {condToken}");
+                    // if false -> skip this branch, go to nextBranchLabel
+                    WriteLine($"{opcodeMap[OpCode.JUMP_IF_FALSE]} {nextBranchLabel}");
+                }
+
+                // ensure we have a block open brace. If '{' is on the same line we can proceed; otherwise expect it next.
+                if (!raw.Contains('{'))
+                {
+                    ReadNextLineExpecting("{");
+                }
+
+                WriteLine($"{opcodeMap[OpCode.SCOPE_PUSH]}");
+
+                // parse the block body (assumes ParseBlock consumes whole { ... } and leaves currentLine at the line after the closing '}')
+                while ((currentLine = ReadNonEmptyLine()?.Trim()) != null)
+                {
+                    if (currentLine == "}")
+                        break;
+                    ParseObjectOrAssignment(isBody);
+                }
+
+                WriteLine($"{opcodeMap[OpCode.SCOPE_POP]}");
+
+                // after a branch body executes we must jump to the end of the whole if/else chain
+                // but only if this branch had a condition (i.e. it is not 'else').
+                if (hasCondition)
+                {
+                    WriteLine($"{opcodeMap[OpCode.JUMP]} {endLabel}");
+                }
+                else
+                {
+                    // 'else' branch executes and should be last — after running else we jump to end implicitly,
+                    // so no need to add a jump; still we'll break from the loop below.
+                }
+
+                // place label for the next branch (this is where JUMP_IF_FALSE landed)
+                
+
+                // look ahead to see if next non-empty line is 'else if' or 'else'
+                string next = PeekNextNonEmptyLine()?.Trim() ?? "";
+                if (next.StartsWith("else if ") || next == "else" || next.StartsWith("else "))
+                {
+                    WriteLine($"{opcodeMap[OpCode.LABEL]} {nextBranchLabel}");
+                    // advance so that currentLine becomes that else/else-if — loop will handle it
+                    currentLine = AdvanceToNextNonEmptyLine();
+                    continue;
+                }
+                else
+                {
+                    // no more branches; emit final end label and stop
+                    WriteLine($"{opcodeMap[OpCode.LABEL]} {endLabel}");
+                    break;
+                }
+            } // end while
+        }
+
+
         private void HandleReturn(string line, bool isBody)
         {
             int trimoffEnd = line.EndsWith(';') ? 1 : 0;
             string rawID = line[6..^trimoffEnd].Trim();
+
+            if (ContainsSequenceOutsideQuotes(rawID, " ") != -1)
+            {
+                string name = UniqueRandomVarNameGenerator.Next;
+                WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {name}");
+                ParseAssignment($"{name} = {rawID}", null, isBody);
+                WriteLine($"{opcodeMap[OpCode.RET]} {name}");
+                return;
+            }
 
             if (!isBody)
             {
@@ -271,14 +552,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             else
             {
-                if(ContainsSequenceOutsideQuotes(rawID, " ") != -1)
-                {
-                    string name = UniqueRandomVarNameGenerator.Next;
-                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {name}");
-                    ParseAssignment($"{name} = {rawID}", null, isBody);
-                    WriteLine($"{opcodeMap[OpCode.RET]} {name}");
-                    return;
-                }
                 string result = $"{opcodeMap[OpCode.RET]} {rawID}";
                 WriteLine(result);
             }
@@ -291,21 +564,21 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 string line = currentLine[7..].Trim();
                 string importedFileName = ReadString(line)[1..^1];
                 line = line[(importedFileName.Length + 2)..].Trim();
-                if (!line.StartsWith("as"))
-                    throw new WinterForgeFormatException("Missing 'as' keyword in #import statement");
-
-                line = line[2..].Trim();
-
-                int aliasEndIndex = line.IndexOf(' ');
-                if (aliasEndIndex is -1)
-                    aliasEndIndex = line.IndexOf(';');
-                if (aliasEndIndex is -1)
-                    aliasEndIndex = line.Length;
-
-                string alias = line[..aliasEndIndex].Trim();
                 int id = GetAutoID();
-                aliasMap[alias] = id;
-                line = line[alias.Length..].Trim();
+                if (line.StartsWith("as"))
+                {
+                    line = line[2..].Trim();
+
+                    int aliasEndIndex = line.IndexOf(' ');
+                    if (aliasEndIndex is -1)
+                        aliasEndIndex = line.IndexOf(';');
+                    if (aliasEndIndex is -1)
+                        aliasEndIndex = line.Length;
+
+                    string alias = line[..aliasEndIndex].Trim();
+                    aliasMap[alias] = id;
+                    line = line[alias.Length..].Trim();
+                }
 
                 if (line.StartsWith("(compiles into "))
                 {
@@ -394,6 +667,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             {
                 HandleReturn(currentLine, isBody);
             }
+            else if (line.StartsWith("if "))
+            {
+                ParseIfChain(line, isBody);
+            }
             else if (ContainsExpressionOutsideQuotes(line) &&
                 line.Contains(" = ") && line.EndsWith(';'))
                 ParseAssignment(line, id, isBody);
@@ -412,6 +689,14 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 currentLine = line;
                 ParseObjectOrAssignment(isBody); // nested define
             }
+            else if (!string.IsNullOrWhiteSpace(line) &&
+                    line.EndsWith(":") &&
+                    line.IndexOf(':') == line.Length - 1 &&
+                    line[..^1].All(c => char.IsLetterOrDigit(c) || c == '_'))
+            {
+                string name = line[..^1];
+                WriteLine($"{opcodeMap[OpCode.LABEL]} {name}");
+            }
             else if (line.StartsWith("as"))
             {
                 string asid = line[2..].Trim();
@@ -424,6 +709,16 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 string[] parts = line.Split(' ');
                 int aliasid = int.Parse(parts[0]);
                 WriteLine($"{opcodeMap[OpCode.ALIAS]} {aliasid} {parts[1]}");
+            }
+            else if (line.StartsWith("var ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI)
+            {
+                string varName = line[4..eqI].Trim();
+                string rhs = line[(eqI + 1)..].Trim();
+                if (rhs.EndsWith(';'))
+                    rhs = rhs[..^1];
+                string tempVar = ValidateValue(rhs, isBody);
+                WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+                WriteLine($"{opcodeMap[OpCode.SET]} {varName} {tempVar}");
             }
             else if (TryParseCollection(line, out _, isBody) is var colres && colres is not CollectionParseResult.Failed and not CollectionParseResult.NotACollection)
             {
@@ -513,7 +808,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                     WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({id})");
                 }
-                else if (firstRhs.StartsWith("#ref("))
+                else if (firstRhs.StartsWith("#ref(") || variables.Contains(firstRhs))
                     WriteLine($"{opcodeMap[OpCode.PUSH]} {firstRhs}");
                 else if (aliasMap.TryGetValue(firstRhs, out int aliasID))
                     WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({aliasID})");
@@ -542,46 +837,87 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return -1;
         }
-        private void HandleAccessing(string? id, bool isBody)
+
+        public static List<string> SplitPreserveParentheses(string input)
         {
-            string[] assignmentParts = currentLine.Split('=', 2, StringSplitOptions.TrimEntries);
+            List<string> parts = new List<string>();
+            int depth = 0;
+            int start = 0;
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                if (input[i] == '(') depth++;
+                else if (input[i] == ')') depth--;
+                else if (depth == 0 && i + 1 < input.Length && input[i] == '-' && input[i + 1] == '>')
+                {
+                    // split point
+                    parts.Add(input[start..i]);
+                    start = i + 2; // skip over ->
+                    i++;
+                }
+            }
+
+            // add the last part
+            if (start < input.Length)
+                parts.Add(input[start..]);
+
+            return parts;
+        }
+
+
+        private void HandleAccessing(string? id, bool isBody, string? line = null)
+        {
+            string[] assignmentParts = (line ?? currentLine).Split('=', 2, StringSplitOptions.TrimEntries);
             string accessPart = assignmentParts[0];
             string? rhs = assignmentParts.Length > 1 ? assignmentParts[1] : null;
 
-            //int asID = -1;
+            // normalize trailing semicolon on RHS if present
+            if (rhs != null && rhs.EndsWith(';'))
+                rhs = rhs[..^1];
+
+            // If there's no RHS, only allow that when the LHS contains a function call (parentheses).
+            // Otherwise it's an error (missing RHS).
+            if (rhs is null && !(accessPart.Contains('(') && accessPart.Contains(')')))
+                throw new WinterForgeFormatException("Missing right-hand side for assignment and left-hand side is not a function call.");
+
             string val = "";
             if (rhs != null && rhs.Contains("->"))
                 ParseRHSAccess(rhs, id, isBody);
-            else
+            else if (rhs != null) // rhs may be null for allowed function-call-only LHS
             {
-                if (rhs.EndsWith(';'))
-                    rhs = rhs[..^1];
                 val = ValidateValue(rhs, isBody, id);
-                if (val is "#stack()")
-                {
-                    //if (ContainsExpressionOutsideQuotes(rhs))
-                    //{
-                    //asID = GetAutoID();
-                    //WriteLine($"{opcodeMap["AS"]} {asID}");
-                    //}
-
-                    //val = $"#ref({asID})";
-                }
+                // if val is "#stack()" we used to plan special behavior — leave as-is for now
             }
-            // Step 3: Process LHS
-            var lhsParts = accessPart.Split("->", StringSplitOptions.RemoveEmptyEntries);
 
-            if (lhsParts.Length == 0)
+            // Step 3: Process LHS
+            var lhsParts = SplitPreserveParentheses(accessPart);
+
+            if (lhsParts.Count == 0)
                 return;
 
             string first = lhsParts[0];
 
-            if (lhsParts.Length is 1)
+            // Single-part LHS (e.g. "x = ...") — if RHS is missing but the single LHS is a function call,
+            // we allow it (no assignment). Otherwise, generate a SET as before.
+            if (lhsParts.Count == 1)
             {
+                if (rhs is null)
+                {
+                    // LHS must be a function call to be allowed here. If it is, just return (call handling
+                    // is expected to be produced elsewhere in your pipeline). If you want this method to
+                    // emit call opcodes, add that here.
+                    if (first.Contains('(') && first.Contains(')'))
+                        return;
+
+                    // not a function call and no RHS -> error (should have been caught earlier, but be safe)
+                    throw new WinterForgeFormatException("Missing right-hand side for assignment.");
+                }
+
                 WriteLine($"{opcodeMap[OpCode.SET]} {first} #stack()");
                 return;
             }
 
+            // For multi-part LHS (a->b->c), push the root target first
             if (first == "this")
             {
                 if (id is null)
@@ -589,23 +925,30 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({id})");
             }
-            else if (first.StartsWith("#ref("))
+            else if (first.StartsWith("#ref(") || variables.Contains(first))
                 WriteLine($"{opcodeMap[OpCode.PUSH]} {first}");
             else if (aliasMap.TryGetValue(first, out int aliasID))
                 WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({aliasID})");
             else // assume value is a type literal
                 WriteLine($"{opcodeMap[OpCode.PUSH]} #type({first})");
 
-            for (int i = 1; i < lhsParts.Length; i++)
+            for (int i = 1; i < lhsParts.Count; i++)
             {
                 string part = lhsParts[i];
                 if (string.IsNullOrWhiteSpace(part))
                     continue;
 
-                bool isLast = i == lhsParts.Length - 1;
+                bool isLast = i == lhsParts.Count - 1;
 
+                // A function call on the left side is illegal *for assignments* (i.e. when rhs != null).
+                // If rhs == null and this part is a function call, it's allowed (we simply don't throw).
                 if (part.Contains('(') && part.Contains(')'))
-                    throw new WinterForgeFormatException("Left hand side function is illegal.");
+                {
+                    if (rhs != null)
+                        throw new WinterForgeFormatException("Left hand side function is illegal when used as an lvalue for assignment.");
+                    ParseMethodCall(id, part, isBody);
+                    continue;
+                }
                 else
                 {
                     if (rhs != null && isLast)
@@ -616,9 +959,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                         WriteLine($"{opcodeMap[OpCode.ACCESS]} {part}");
                 }
             }
-
-
         }
+
         private void ParseMethodCall(string? id, string part, bool isBody)
         {
             var openParen = part.IndexOf('(');
@@ -626,7 +968,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             var methodName = part[..openParen].Trim();
             var argList = part.Substring(openParen + 1, closeParen - openParen - 1);
-            var args = argList.Split(',').Select(x => x.Trim()).ToList();
+            var args = argList.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
 
             for (int j = args.Count - 1; j >= 0; j--)
             {
@@ -636,7 +978,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     continue; // assumed stack value exists from elsewhere
 
                 if (arg.Contains("->"))
-                    HandleAccessing(id, isBody);
+                    HandleAccessing(id, isBody, arg);
+                else if(ContainsExpressionOutsideQuotes(arg))
+                {
+                    ParseExpression(arg, id, isBody);
+                }
                 else
                     WriteLine($"{opcodeMap[OpCode.PUSH]} {arg}");
             }
@@ -723,6 +1069,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             throw new WinterForgeFormatException("Expected ']' to close list.");
         }
+
         private void ParseAssignment(string line, string? id, bool isBody)
         {
             line = line.TrimEnd(';');
@@ -732,6 +1079,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             WriteLine($"{opcodeMap[OpCode.SET]} {field} {value}");
         }
+
         int ContainsSequenceOutsideBraces(StringBuilder sb, string sequence)
         {
             if (sequence.Length == 0) return 0;          // empty sequence is “found” at 0
@@ -774,6 +1122,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return -1;
         }
+
         int ContainsSequenceOutsideQuotes(string text, string sequence)
         {
             if (sequence.Length == 0) return 0;                 // empty sequence is “found” at 0
@@ -811,6 +1160,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return -1;
         }
+
         public static bool HasMoreThanOneOf(string input, char target)
         {
             int count = 0;
@@ -826,95 +1176,107 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return false;
         }
+
         public static bool ContainsExpressionOutsideQuotes(string input)
         {
             bool insideQuotes = false;
-            bool insideGeneric = false;
 
-            // Operators considered for math/boolean expressions
-            string mathBoolOperators = "+-*/%==!=><>=<=&&||!^";
+            int identifierCount = 0; // identifiers or typed literals
+            int operatorCount = 0;   // math/boolean operators
             TokenType lastToken = TokenType.None;
 
-            // Simple helper to check if char is operator char used in math/boolean operators
             bool IsOperatorChar(char c) => "+-*/%><=!&|^".Contains(c);
 
             for (int i = 0; i < input.Length; i++)
             {
                 char c = input[i];
 
+                // toggle quote state
                 if (c == '"')
                 {
                     bool escaped = i > 0 && input[i - 1] == '\\';
-                    if (!escaped)
-                        insideQuotes = !insideQuotes;
+                    if (!escaped) insideQuotes = !insideQuotes;
                     continue;
                 }
 
-                if (insideQuotes)
-                    continue;
+                if (insideQuotes) continue;
 
-                if (c == '<' && lastToken == TokenType.Identifier)
+                // ignore whitespace, comma, semicolon
+                if (char.IsWhiteSpace(c) || c == ',' || c == ';') continue;
+
+                // typed literal |Type|Value
+                if (c == '|' && i + 1 < input.Length)
                 {
-                    // Entering generic syntax - skip until matching '>'
-                    insideGeneric = true;
-                    continue;
-                }
+                    i++; // skip first '|'
+                    while (i < input.Length && input[i] != '|') i++; // skip type
+                    if (i < input.Length && input[i] == '|') i++; // skip closing '|'
 
-                if (c == '>' && insideGeneric)
-                {
-                    insideGeneric = false;
-                    continue;
-                }
+                    // consume value part
+                    while (i < input.Length && !char.IsWhiteSpace(input[i]) && !"+-*/%><=!&|^(),;".Contains(input[i]))
+                        i++;
 
-                if (insideGeneric)
-                    continue;
-
-                if (char.IsWhiteSpace(c) || c == ',' || c == ';')
-                {
-                    // Reset last token on separators, but only if expression isn't found yet
-                    continue;
-                }
-
-                if (char.IsLetterOrDigit(c) || c == '_')
-                {
+                    identifierCount++;
                     lastToken = TokenType.Identifier;
+                    i--;
                     continue;
                 }
 
+                // numbers (including signed and comma/decimal numbers)
+                if (char.IsDigit(c) || ((c == '-' || c == '+') && i + 1 < input.Length && char.IsDigit(input[i + 1])))
+                {
+                    // consume full number literal
+                    if (c == '-' || c == '+') i++; // skip sign
+                    while (i < input.Length && (char.IsDigit(input[i]) || input[i] == '.' || input[i] == ',')) i++;
+                    lastToken = TokenType.Identifier;
+                    identifierCount++;
+                    i--;
+                    continue;
+                }
+
+                // identifiers (variables, function names, etc.)
+                if (char.IsLetter(c) || c == '_')
+                {
+                    while (i < input.Length && (char.IsLetterOrDigit(input[i]) || input[i] == '_')) i++;
+                    lastToken = TokenType.Identifier;
+                    identifierCount++;
+                    i--;
+                    continue;
+                }
+
+                // operators
                 if (IsOperatorChar(c))
                 {
-                    // If operator is '=' alone and previous token is None or operator, treat as assignment or invalid - ignore
-                    if (c == '=')
-                    {
-                        bool isDoubleEqual = i + 1 < input.Length && input[i + 1] == '=';
-                        if (!isDoubleEqual)
-                        {
-                            // Single = likely assignment, skip
-                            lastToken = TokenType.None;
-                            continue;
-                        }
-                    }
+                    // Try to read the longest operator token starting at i
+                    int start = i;
+                    int end = i + 1;
 
-                    // Check if last token was operand and operator is valid math/boolean operator
-                    if (lastToken == TokenType.Identifier)
+                    while (end < input.Length && IsOperatorChar(input[end]))
+                        end++;
+
+                    string opToken = input[start..end];
+
+                    // Handle single '=' as assignment, not operator
+                    if (opToken == "=")
                     {
-                        lastToken = TokenType.Operator;
+                        lastToken = TokenType.None;
+                        i = end; // skip this single character
                         continue;
                     }
 
-                    // Operator without operand before = no expression yet
-                    lastToken = TokenType.None;
+                    // If there's at least one identifier/typed literal before, count this as operator
+                    if (identifierCount > 0)
+                        operatorCount++;
+
+                    lastToken = TokenType.Operator;
+                    i = end - 1; // Skip past entire operator token
                     continue;
                 }
-
-                // Anything else resets state
-                lastToken = TokenType.None;
             }
 
-            // Valid expression requires operand-operator-operand sequence
-            // So if last token was operator, invalid (e.g. "5 +")
-            return lastToken == TokenType.Identifier;
+            // must have at least 2 operands and 1 operator, and end with an operand
+            return identifierCount >= 2 && operatorCount >= 1 && lastToken == TokenType.Identifier;
         }
+
         private string ValidateValue(string value, bool isBody, string? id = null)
         {
             if (value.StartsWith('\"') && value.StartsWith('\"'))
@@ -937,6 +1299,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             if (ContainsExpressionOutsideQuotes(value))
             {
                 ParseExpression(value, id, isBody);
+                return "#stack()";
+            }
+
+            else if (ContainsSequenceOutsideQuotes(value, "->") != -1)
+            {
+                HandleAccessing(null, isBody);
                 return "#stack()";
             }
 
@@ -1005,7 +1373,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                             ParseRHSAccess(token.Text, id, isBody);
                             break;
                         }
-                        WriteLine($"{opcodeMap[OpCode.PUSH]} {token.Text}");
+                        else if(token.Text.EndsWith(')') && token.Text.Contains('('))
+                        {
+                            ParseMethodCall(id, token.Text, isBody);
+                        }
+                        else
+                            WriteLine($"{opcodeMap[OpCode.PUSH]} {token.Text}");
                         break;
                     case TokenType.Operator:
                         OpCode operatorCode = token.Text switch
@@ -1230,6 +1603,45 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return line;
         }
+
+        private string? PeekNonEmptyLine(bool allowEmptyLines = false)
+        {
+            string? line = null;
+
+            if (lineBuffers.Count > 0)
+            {
+                var topBuffer = lineBuffers.Peek();
+                if ((topBuffer?.Count ?? 0) > 0)
+                {
+                    line = topBuffer.Peek();
+                }
+                else
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                if (reader.EndOfStream)
+                    return null;
+
+                // Read once, but push back into buffer so it can be read again later
+                line = reader.ReadLine();
+                if (line != null)
+                {
+                    var tempStack = new OverridableStack<string>();
+                    tempStack.PushStart(line);
+                    lineBuffers.Push(tempStack);
+                }
+            }
+
+            if (!allowEmptyLines && string.IsNullOrWhiteSpace(line))
+                return null;
+
+            return line;
+        }
+
+
         private void ReadNextLineExpecting(string expected)
         {
             currentLine = ReadNonEmptyLine();

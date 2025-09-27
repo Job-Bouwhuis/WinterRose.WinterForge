@@ -38,7 +38,7 @@ public enum ValuePrefix : byte
 
 
 
-public class OpcodeToByteCompiler()
+public class OpcodeToByteCompiler
 {
     private Stack<Type> instanceStack = new Stack<Type>();
     List<string>? bufferedObject = null;
@@ -87,7 +87,7 @@ public class OpcodeToByteCompiler()
     }
 
 
-    internal OpcodeToByteCompiler(bool allowCustomCompilers) : this()
+    internal OpcodeToByteCompiler(bool allowCustomCompilers)
     {
         this.allowCustomCompilers = allowCustomCompilers;
     }
@@ -178,7 +178,7 @@ public class OpcodeToByteCompiler()
 
             allowCustomCompilers = false;
             Type t = InstructionExecutor.ResolveType(bufferedObject[0].Split(' ')[1]);
-            instanceStack.Push(t);
+            //instanceStack.Push(t);
 
             foreach (string bufferedLine in bufferedObject)
             {
@@ -186,6 +186,10 @@ public class OpcodeToByteCompiler()
                 EmitOpcode(writer, reader, bufferedLine, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
             }
 
+            {
+                ValidateLine(writer, line, out var bufferedParts, out var bufferedOpcodeByte);
+                EmitOpcode(writer, reader, line, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
+            }
             allowCustomCompilers = true;
 
             bufferingActive = false;
@@ -396,6 +400,8 @@ public class OpcodeToByteCompiler()
             case OpCode.OR:
             case OpCode.XOR:
             case OpCode.DEFINE:
+            case OpCode.SCOPE_PUSH:
+            case OpCode.SCOPE_POP:
                 // no args
                 break;
 
@@ -493,6 +499,11 @@ public class OpcodeToByteCompiler()
                 }
                 break;
 
+            case OpCode.JUMP:
+            case OpCode.JUMP_IF_FALSE:
+            case OpCode.LABEL:
+                WriteString(writer, parts[1]);
+                break;
             default:
                 throw new InvalidOperationException($"Opcode not implemented: {opcode}");
         }
