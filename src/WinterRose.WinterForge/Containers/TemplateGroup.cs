@@ -57,7 +57,7 @@ public class TemplateGroup(string name)
         return true;
     }
 
-    public bool TryCall(out object? returnValue, List<object> args, InstructionExecutor executor, bool useImplicitEmptyCall = false)
+    public bool TryCall(out object? returnValue, List<object> args, WinterForgeVM executor, bool useImplicitEmptyCall = false)
     {
         var resolved = DynamicObjectCreator.ResolveArgumentTypes(args.ToList());
 

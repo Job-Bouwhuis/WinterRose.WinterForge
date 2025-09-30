@@ -600,7 +600,7 @@ namespace WinterRose.WinterForgeSerializing
 
         private static void DoDeserialization(out object? result, Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
         {
-            using var executor = new InstructionExecutor();
+            using var executor = new WinterForgeVM();
             if (progressTracker is not null)
                 executor.progressTracker = progressTracker;
             object? res = executor.Execute(instructions, true);

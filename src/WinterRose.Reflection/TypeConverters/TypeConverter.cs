@@ -282,7 +282,8 @@ public static class TypeConverter
         foreach (Type iface in srcIfaces)
         {
             if (tgtIfaces.Contains(iface) && _cache.TryGetValue((iface, iface), out converter))
-                return true;
+                if (converter.GetType().GetGenericArguments()[0] == tgt)
+                    return true;
         }
 
         // Search in instantiated converters for assignable matches

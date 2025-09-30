@@ -69,7 +69,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// </summary>
         LIST_END = 7,
         /// <summary>
-        /// tells the <see cref="InstructionExecutor"/> to return the object of which key is given<br></br><br></br>
+        /// tells the <see cref="WinterForgeVM"/> to return the object of which key is given<br></br><br></br>
         /// 
         /// EG "8 4"<br></br>
         /// 8 - RETURN<br></br>
@@ -77,7 +77,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// </summary>
         RET = 8,
         /// <summary>
-        /// invokes <see cref="InstructionExecutor.ProgressMark"/>
+        /// invokes <see cref="WinterForgeVM.ProgressMark"/>
         /// </summary>
         PROGRESS = 9,
         /// <summary>
@@ -201,5 +201,6 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         LABEL = 49,
         SCOPE_PUSH = 50,
         SCOPE_POP = 51,
+        VOID_STACK_ITEM = 52,
     }
 }

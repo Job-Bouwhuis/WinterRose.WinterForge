@@ -10,7 +10,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
     {
         internal abstract Type Type { get; }
         internal abstract object _CreateString(object? obj, ObjectSerializer serializer);
-        internal abstract object? _CreateObject(object value, InstructionExecutor executor);
+        internal abstract object? _CreateObject(object value, WinterForgeVM executor);
         /// <summary>
         /// If the value from the serialized data represents null, this method is called.
         /// </summary>

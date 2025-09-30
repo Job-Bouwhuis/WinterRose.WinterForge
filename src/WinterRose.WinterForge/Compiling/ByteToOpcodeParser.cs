@@ -149,6 +149,7 @@ public class ByteToOpcodeParser
                     case OpCode.XOR:
                     case OpCode.SCOPE_PUSH:
                     case OpCode.SCOPE_POP:
+                    case OpCode.VOID_STACK_ITEM:
                         // no args
                         break;
 

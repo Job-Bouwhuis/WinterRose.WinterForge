@@ -11,7 +11,7 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
 {
     class DateOnlyValueProvider : CustomValueProvider<DateOnly>
     {
-        public override DateOnly CreateObject(object value, InstructionExecutor executor)
+        public override DateOnly CreateObject(object value, WinterForgeVM executor)
         {
             return DateOnly.Parse((string)value);
         }

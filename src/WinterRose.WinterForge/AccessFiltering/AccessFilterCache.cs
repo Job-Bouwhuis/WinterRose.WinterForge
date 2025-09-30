@@ -77,7 +77,7 @@ namespace WinterRose.WinterForgeSerializing
             GetFilter(typeof(ObjectSerializer), AccessFilterKind.Whitelist);
             GetFilter(typeof(HumanReadableParser), AccessFilterKind.Whitelist);
             GetFilter(typeof(HumanReadableIndenter), AccessFilterKind.Whitelist);
-            GetFilter(typeof(InstructionExecutor), AccessFilterKind.Whitelist);
+            GetFilter(typeof(WinterForgeVM), AccessFilterKind.Whitelist);
             GetFilter(typeof(InstructionParser), AccessFilterKind.Whitelist);
 
             GetFilter(typeof(Thread), AccessFilterKind.Whitelist);
@@ -192,24 +192,6 @@ namespace WinterRose.WinterForgeSerializing
         }
     }
 
-    internal class WinterForgeAccessIllegalException(string msg) : Exception(msg);
-
-    [Serializable]
-    internal class WinterForgeAccessFilterException : Exception
-    {
-        public WinterForgeAccessFilterException()
-        {
-        }
-
-        public WinterForgeAccessFilterException(string? message) : base(message)
-        {
-        }
-
-        public WinterForgeAccessFilterException(string? message, Exception? innerException) : base(message, innerException)
-        {
-        }
-    }
-
     /// <summary>
     /// Defines granular allow/deny rules for member access on a specific runtime type.
     /// </summary>
@@ -318,6 +300,25 @@ namespace WinterRose.WinterForgeSerializing
         {
             foreach (var m in members)
                 ExceptThese.Add(m);
+        }
+    }
+
+    internal class WinterForgeAccessIllegalException(string msg) : Exception(msg);
+
+
+    [Serializable]
+    internal class WinterForgeAccessFilterException : Exception
+    {
+        public WinterForgeAccessFilterException()
+        {
+        }
+
+        public WinterForgeAccessFilterException(string? message) : base(message)
+        {
+        }
+
+        public WinterForgeAccessFilterException(string? message, Exception? innerException) : base(message, innerException)
+        {
         }
     }
 

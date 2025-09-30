@@ -1,7 +1,7 @@
-// #import "human2.txt" (compiles into opcodes2.wfbin)
-// #import "human3.txt" (compiles into opcodes3.wfbin)
+//#import "human2.txt" (compiles into opcodes2.wfbin)
+//#import "human3.txt" (compiles into opcodes3.wfbin)
 
-#container Bor
+#container Foo
 {
 	#template Factorial int n
 	{
@@ -14,10 +14,128 @@
 			return n * Factorial(n - 1);
 		}
 	}
+
+	#template outer TemplateGroup fact
+	{
+		#template inner
+		{
+			return fact(12);
+		}
+		return inner;
+	}
 }
-Bor : b;
-var fac = b->Factorial(5);
 
-Console->WriteLine(fac);
+Foo : f;
 
-return ba;
+global a = f->outer(f->Factorial);
+
+global b = a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+a();
+
+
+Console->WriteLine(b);
+
+return a;

@@ -50,15 +50,17 @@ internal class Program
         //WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin", TargetFormat.IntermediateRepresentation);
         //return;
 
-        InstructionExecutor.Debug = true;
+        WinterForgeVM.Debug = true;
         using FileStream stream = File.OpenRead("bytes.wfbin");
         var instr = ByteToOpcodeParser.Parse(stream);
-        var exer = new InstructionExecutor();
-        var vec = exer.Execute(instr, false);
-
         using TextWriterStream2 s = new TextWriterStream2(Console.Out);
-        exer.PrintOpcodeTimings(s);
-        s.Flush();
+
+        for (int i = 0; i < 10; i++)
+        {
+            var exer = new WinterForgeVM();
+            var vec = exer.Execute(instr, false);
+            exer.PrintOpcodeTimings(s);
+        }
     }
 
     public class TextWriterStream2 : Stream

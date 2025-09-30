@@ -4,7 +4,7 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
 {
     class DateTimeValueProvider : CustomValueProvider<DateTime>
     {
-        public override DateTime CreateObject(object value, InstructionExecutor executor)
+        public override DateTime CreateObject(object value, WinterForgeVM executor)
         {
             return DateTime.Parse((string)value);
         }

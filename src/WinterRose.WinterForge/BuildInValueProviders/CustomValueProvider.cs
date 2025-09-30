@@ -19,12 +19,12 @@ namespace WinterRose.WinterForgeSerializing
             return CreateString((T)obj, serializer);
         }
 
-        internal override object? _CreateObject(object value, InstructionExecutor executor)
+        internal override object? _CreateObject(object value, WinterForgeVM executor)
         {
             return CreateObject(value, executor);
         }
 
         public abstract object CreateString(T obj, ObjectSerializer serializer);
-        public abstract T? CreateObject(object value, InstructionExecutor executor);
+        public abstract T? CreateObject(object value, WinterForgeVM executor);
     }
 }

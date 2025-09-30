@@ -10,9 +10,9 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
 {
     internal class TypeValueProvider : CustomValueProvider<Type>
     {
-        public override Type? CreateObject(object value, InstructionExecutor executor)
+        public override Type? CreateObject(object value, WinterForgeVM executor)
         {
-            return InstructionExecutor.ResolveType((string)value);
+            return WinterForgeVM.ResolveType((string)value);
         }
         public override object CreateString(Type obj, ObjectSerializer serializer)
         {

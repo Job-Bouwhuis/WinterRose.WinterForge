@@ -11,6 +11,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
+using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Containers;
 using WinterRose.WinterForgeSerializing.Instructions;
 using WinterRose.WinterForgeSerializing.Logging;
@@ -21,7 +22,7 @@ namespace WinterRose.WinterForgeSerializing.Workers;
 /// <summary>
 /// Used to deserialize a collection of <see cref="Instruction"/>
 /// </summary>
-public class InstructionExecutor : IDisposable
+public class WinterForgeVM : IDisposable
 {
     /// <summary>
     /// Enables some 
@@ -144,6 +145,18 @@ public class InstructionExecutor : IDisposable
             {
                 Instruction instruction = instructionCollection[instructionIndexStack.Peek()];
                 long startTicks = 0;
+
+                if (CurrentContext.constructingScopes.TryPeek(out Scope cs)
+                    && cs is Template templ
+                    && instruction.OpCode is not OpCode.TEMPLATE_CREATE and not OpCode.TEMPLATE_END
+                    and not OpCode.CONTAINER_START and not OpCode.CONTAINER_END
+                    and not OpCode.VAR_DEF_START
+                    and not OpCode.VAR_DEF_END)
+                {
+                    templ.Instructions.Add(instruction);
+                    continue;
+                }
+
                 if (Debug)
                     startTicks = Stopwatch.GetTimestamp();
 
@@ -283,16 +296,16 @@ public class InstructionExecutor : IDisposable
                             Template t = new Template((string)instruction.Args[0], templateArgs);
                             CurrentContext.constructingScopes.Push(t);
 
-                            while (NextInstruction(out instruction))
-                            {
-                                if (instruction.OpCode is OpCode.TEMPLATE_END or OpCode.CONSTRUCTOR_END)
-                                    if (isConstructor)
-                                        goto case OpCode.CONSTRUCTOR_END;
-                                    else
-                                        goto case OpCode.TEMPLATE_END;
+                            //while (NextInstruction(out instruction))
+                            //{
+                            //    if (instruction.OpCode is OpCode.TEMPLATE_END or OpCode.CONSTRUCTOR_END)
+                            //        if (isConstructor)
+                            //            goto case OpCode.CONSTRUCTOR_END;
+                            //        else
+                            //            goto case OpCode.TEMPLATE_END;
 
-                                t.Instructions.Add(instruction);
-                            }
+                            //    t.Instructions.Add(instruction);
+                            //}
                         }
                         break;
 
@@ -412,12 +425,19 @@ ExpressionBuilding:
                         scopeStack.Pop();
                         break;
 
+                    case OpCode.VOID_STACK_ITEM:
+                        CurrentContext.ValueStack.Pop();
+                        break;
+
                     default:
                         throw new WinterForgeExecutionException($"Opcode: {instruction.OpCode} not supported");
                 }
 
                 if (Debug)
                 {
+                    if (instruction.OpCode is OpCode.IMPORT or OpCode.CALL)
+                        continue;
+
                     long endTicks = Stopwatch.GetTimestamp();
                     long elapsedTicks = endTicks - startTicks;
 
@@ -506,9 +526,9 @@ ExpressionBuilding:
     }
 
     /// <summary>
-    /// Create a new instance of the <see cref="InstructionExecutor"/> to deserialize objects
+    /// Create a new instance of the <see cref="WinterForgeVM"/> to deserialize objects
     /// </summary>
-    public InstructionExecutor()
+    public WinterForgeVM()
     {
         instanceIDStack = new Stack<int>();
 
@@ -540,9 +560,16 @@ ExpressionBuilding:
         Validate();
 
         var arg0 = instruction.Args[0];
-
         object returnVal = GetArgumentValue(arg0, 0, typeof(Any));
-        Type t = returnVal.GetType();
+
+        if (arg0 is string arg && returnVal is string ret && ret == arg)
+        {
+            if (arg.All(char.IsLetter))
+            {
+                throw new WinterForgeExecutionException($"Identifier {arg} not found!");
+            }
+        }
+
         if (!isBody)
         {
             if (returnVal is int parsedId)
@@ -636,11 +663,37 @@ ExpressionBuilding:
 
     private unsafe void HandleImport(Instruction instruction)
     {
-        object? val = WinterForge.DeserializeFromFile((string)instruction.Args[0]);
+        string fileName = (string)instruction.Args[0];
+        if (fileName.StartsWith('"') && fileName.EndsWith('"'))
+            fileName = fileName[1..^1];
+
+        using FileStream stream = File.OpenRead(fileName);
+        var instr = ByteToOpcodeParser.Parse(stream);
+        var VM = new WinterForgeVM();
+
+        object? val = VM.Execute(instr, true);
+
         int id = TypeConverter.Convert<int>(instruction.Args[1]);
         CurrentContext.AddObject(id, ref val);
-        if (val is Container c)
+        if (val is Container c && !c.isInstance)
             CurrentContext.Containers[c.Name] = c;
+
+        if (Debug)
+        {
+            var timings = VM.opcodeTimings;
+            foreach (var timing in timings)
+            {
+                if (!(opcodeTimings ??= []).TryGetValue(timing.Key, out var t))
+                    t = (0, 0);
+
+                (long ticks, int count) = timing.Value;
+                t.totalTicks += ticks;
+                t.count += count;
+
+                opcodeTimings[timing.Key] = t;
+            }
+
+        }
     }
 
     #region benchmark methods
@@ -894,10 +947,20 @@ ExpressionBuilding:
         object b = CurrentContext.ValueStack.Pop();
         object a = CurrentContext.ValueStack.Pop();
 
-        a = GetArgumentValue(a, 0, typeof(decimal), null);
+        if (a is not decimal and IConvertible)
+        {
+            a = Convert.ChangeType(a, typeof(decimal));
+        }
+        else
+            a = GetArgumentValue(a, 0, typeof(decimal), null);
         if (a is Dispatched) throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
 
-        b = GetArgumentValue(b, 0, typeof(decimal), null);
+        if (b is not decimal and IConvertible)
+        {
+            b = Convert.ChangeType(b, typeof(decimal));
+        }
+        else
+            b = GetArgumentValue(b, 0, typeof(decimal), null);
         if (b is Dispatched) throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
 
         return ((decimal)a, (decimal)b);
@@ -1041,15 +1104,15 @@ ExpressionBuilding:
             instanceIDStack.Push(id);
             CurrentContext.ObjectTable[id] = inst;
 
-            if (!inst.Constructors.TryCall(out _, constrArgs, this, true))
-                throw new WinterForgeExecutionException($"Template overload for args {string.Join(", ", constrArgs.Select(x => x.ToString()))}");
+            if (!inst.CreateInstance(constrArgs, this))
+                throw new WinterForgeExecutionException($"Constructor overload for args {string.Join(", ", constrArgs.Select(x => x.ToString()))} doesnt exist on container {inst.Name}");
             return;
         }
 
 
         Type type = ResolveType(typeName);
         if (type is null)
-            throw new WinterForgeExecutionException($"Type with name {typeName} does not exist either as C# type, or imported container. Cant create instance.");
+            throw new WinterForgeExecutionException($"Type with name '{typeName}' does not exist either as C# type, or (imported) container. Cant create instance.");
 
 
         object instance = DynamicObjectCreator.CreateInstanceWithArguments(type, constrArgs)!;
@@ -1171,7 +1234,10 @@ ExpressionBuilding:
                 args[i] = arg;
         }
 
-        var target = CurrentContext.ValueStack.Pop();
+
+        object target = null;
+        if (CurrentContext.ValueStack.Count > 0)
+            target = CurrentContext.ValueStack.Pop();
 
         // If the target is a Scope (container), try resolving templates on that scope first.
         if (target is Scope scopeTarget)
@@ -1200,16 +1266,34 @@ ExpressionBuilding:
         if (CurrentScope is not null)
         {
             var id = CurrentScope.GetIdentifier(methodName);
+            if (id is Variable v && v.Value is TemplateGroup tmplsg)
+            {
+                id = tmplsg;
+            }
             if (id is TemplateGroup tg)
             {
                 if (tg.TryCall(out object returnVal, args.ToList(), this))
                 {
                     // the target was not the call target, reinstigate it on the stack before the actual return value
-                    CurrentContext.ValueStack.Push(target); 
+                    if (target is not null)
+                        CurrentContext.ValueStack.Push(target);
                     CurrentContext.ValueStack.Push(returnVal);
                     return;
                 }
-                
+
+            }
+        }
+
+        if (methodName.StartsWith("#ref(")
+            && GetObjectFromContexts(int.Parse(methodName[5..^1])) is TemplateGroup templg)
+        {
+            if (templg.TryCall(out object returnVal, args.ToList(), this))
+            {
+                // the target was not the call target, reinstigate it on the stack before the actual return value
+                if (target is not null)
+                    CurrentContext.ValueStack.Push(target);
+                CurrentContext.ValueStack.Push(returnVal);
+                return;
             }
         }
 
@@ -1436,7 +1520,6 @@ ExpressionBuilding:
         _ when float.TryParse(raw.Replace('.', ','), out var b) => b,
         _ when double.TryParse(raw.Replace('.', ','), out var b) => b,
         _ when decimal.TryParse(raw.Replace('.', ','), out var b) => b,
-        _ when char.TryParse(raw, out var b) => b,
         _ when ResolveType(raw) is Type t => t,
         _ => raw // fallback: return original string
     };
@@ -1494,7 +1577,8 @@ ExpressionBuilding:
             resolvedType = TypeWorker.FindType(typeName);
         }
 
-        typeCache[typeName] = resolvedType;
+        if (resolvedType is not null)
+            typeCache[typeName] = resolvedType;
 
         return resolvedType;
     }

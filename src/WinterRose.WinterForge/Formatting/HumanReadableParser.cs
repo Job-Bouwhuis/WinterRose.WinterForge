@@ -53,7 +53,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         //  .ToDictionary(op => op.ToString(), op => op.ToString());
 
         /// <summary>
-        /// Parses the human readable format of WinterForge into the opcodes that the <see cref="InstructionParser"/> understands. so that the <see cref="InstructionExecutor"/> can deserialize
+        /// Parses the human readable format of WinterForge into the opcodes that the <see cref="InstructionParser"/> understands. so that the <see cref="WinterForgeVM"/> can deserialize
         /// </summary>
         /// <param name="input">The source of human readable format</param>
         /// <param name="output">The destination where the WinterForge opcodes will end up</param>
@@ -118,30 +118,38 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 if (!int.TryParse(idRaw, out int idNum))
                 {
-                    // textual id -> create a variable and assign created instance to it
-                    string varName = idRaw;
                     int assignedId = GetAutoID();
                     foundIds.Add(assignedId);
-
-                    // ensure variable exists first
-                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
 
                     var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                     foreach (string arg in args)
                         WriteLine($"{opcodeMap[OpCode.PUSH]} " + arg);
                     WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} {args.Length}");
                     depth++;
+
                     ParseBlock(assignedId.ToString(), isBody);
 
-                    // after the block finishes, assign the created instance to the variable
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
-                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
-                    variables.Add(varName);
+                    bool isGlobal = false;
+                    if (idRaw.StartsWith("global"))
+                    {
+                        idRaw = idRaw["global".Length..].Trim();
+                        isGlobal = true;
+                    }
+
+                    string varName = idRaw;
+                    if (!isGlobal)
+                    {
+                        WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+                        WriteLine($"{opcodeMap[OpCode.SET]} {varName} #ref({assignedId})");
+                        variables.Add(varName);
+                    }
+                    else
+                    {
+                        aliasMap.Add(varName, assignedId);
+                    }
                 }
                 else
                 {
-                    // numeric id path (unchanged)
-                    if (idNum == GetAutoID()) { /* noop - unreachable but keeps parity */ }
                     foundIds.Add(idNum);
 
                     var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -171,12 +179,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 if (!int.TryParse(idRaw, out int idNum))
                 {
-                    string varName = idRaw;
                     int assignedId = GetAutoID();
                     foundIds.Add(assignedId);
-
-                    // ensure variable exists before define
-                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
 
                     var args = arguments.Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                     foreach (string arg in args)
@@ -184,10 +188,24 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} {args.Length}");
                     WriteLine($"{opcodeMap[OpCode.END]} {assignedId}");
 
-                    // assign created instance to variable
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
-                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
-                    variables.Add(varName);
+                    bool isGlobal = false;
+                    if (idRaw.StartsWith("global"))
+                    {
+                        idRaw = idRaw["global".Length..].Trim();
+                        isGlobal = true;
+                    }
+
+                    string varName = idRaw;
+                    if (!isGlobal)
+                    {
+                        WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+                        WriteLine($"{opcodeMap[OpCode.SET]} {varName} #ref({assignedId})");
+                        variables.Add(varName);
+                    }
+                    else
+                    {
+                        aliasMap.Add(varName, assignedId);
+                    }
                 }
                 else
                 {
@@ -201,7 +219,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     WriteLine($"{opcodeMap[OpCode.END]} {idNum}");
                 }
             }
-
             // Definition: Type : ID {
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
             {
@@ -219,21 +236,31 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 if (!int.TryParse(idRaw, out int idNum))
                 {
-                    string varName = idRaw;
                     int assignedId = GetAutoID();
                     foundIds.Add(assignedId);
-
-                    // ensure variable exists
-                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
 
                     WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} 0");
                     depth++;
                     ParseBlock(assignedId.ToString(), isBody);
 
-                    // assign created instance
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
-                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
-                    variables.Add(varName);
+                    bool isGlobal = false;
+                    if (idRaw.StartsWith("global"))
+                    {
+                        idRaw = idRaw["global".Length..].Trim();
+                        isGlobal = true;
+                    }
+
+                    string varName = idRaw;
+                    if (!isGlobal)
+                    {
+                        WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+                        WriteLine($"{opcodeMap[OpCode.SET]} {varName} #ref({assignedId})");
+                        variables.Add(varName);
+                    }
+                    else
+                    {
+                        aliasMap.Add(varName, assignedId);
+                    }
                 }
                 else
                 {
@@ -243,7 +270,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     ParseBlock(idNum.ToString(), isBody);
                 }
             }
-
             // Definition: Type : ID;
             else if (ContainsSequenceOutsideQuotes(line, ":") != -1 && line.EndsWith(';'))
             {
@@ -261,24 +287,33 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 if (!int.TryParse(idRaw, out int idNum))
                 {
-                    string varName = idRaw;
                     int assignedId = GetAutoID();
                     foundIds.Add(assignedId);
-
-                    // ensure variable exists
-                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
 
                     WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} 0");
                     WriteLine($"{opcodeMap[OpCode.END]} {assignedId}");
 
-                    // assign created instance
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
-                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
-                    variables.Add(varName);
+                    bool isGlobal = false;
+                    if (idRaw.StartsWith("global"))
+                    {
+                        idRaw = idRaw["global".Length..].Trim();
+                        isGlobal = true;
+                    }
+
+                    string varName = idRaw;
+                    if (!isGlobal)
+                    {
+                        WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+                        WriteLine($"{opcodeMap[OpCode.SET]} {varName} #ref({assignedId})");
+                        variables.Add(varName);
+                    }
+                    else
+                    {
+                        aliasMap.Add(varName, assignedId);
+                    }
                 }
                 else
                 {
-                    if (idNum == GetAutoID()) { /* noop */ }
                     foundIds.Add(idNum);
 
                     WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {idNum} 0");
@@ -303,28 +338,35 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 if (!int.TryParse(idRaw, out int idNum))
                 {
-                    string varName = idRaw;
                     int assignedId = GetAutoID();
                     foundIds.Add(assignedId);
 
                     ReadNextLineExpecting("{");
-
-                    // ensure variable exists
-                    WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
 
                     WriteLine($"{opcodeMap[OpCode.DEFINE]} {type} {assignedId} 0");
                     depth++;
 
                     ParseBlock(assignedId.ToString(), isBody);
 
-                    // assign created instance
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({assignedId})");
-                    WriteLine($"{opcodeMap[OpCode.SET]} {varName} #stack()");
-                    variables.Add(varName);
+                    bool isGlobal = false;
+                    if (idRaw.StartsWith("global"))
+                    {
+                        idRaw = idRaw["global".Length..].Trim();
+                        isGlobal = true;
+                    }
+
+                    string varName = idRaw;
+                    if (!isGlobal)
+                    {
+                        WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+                        WriteLine($"{opcodeMap[OpCode.SET]} {varName} #ref({assignedId})");
+                        variables.Add(varName);
+                    }
+                    else
+                        aliasMap.Add(varName, assignedId);
                 }
                 else
                 {
-                    if (idNum == GetAutoID()) { /* noop */ }
                     foundIds.Add(idNum);
                     ReadNextLineExpecting("{");
 
@@ -344,9 +386,23 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
                 WriteLine($"{opcodeMap[OpCode.SET]} {varName} {tempVar}");
             }
+            else if (line.StartsWith("global ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI2)
+            {
+                string varName = line["global".Length..eqI2].Trim();
+                string rhs = line[(eqI2 + 1)..].Trim();
+                if (rhs.EndsWith(';'))
+                    rhs = rhs[..^1];
+                int nextid = GetAutoID();
+                string tempVar = ValidateValue(rhs, isBody);
+                if (tempVar is not "#stack()")
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} {tempVar}");
+                WriteLine($"{opcodeMap[OpCode.AS]} {nextid}");
+                foundIds.Add(nextid);
+                aliasMap.Add(varName, nextid);
+            }
             else if (line.StartsWith("return"))
             {
-                HandleReturn(line, isBody);
+                HandleReturn(line, isBody, null);
             }
             else if (line.Contains("->"))
             {
@@ -391,33 +447,45 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             else if (line.StartsWith("#container"))
             {
-                ContainerParser.ParseContainers(this, reader, writer);
+                ContainerParser.ParseContainers(this, writer);
+            }
+            else if (line.StartsWith("#template "))
+            {
+                line = line["#template".Length..].Trim();
+                ContainerParser.ParseContainers(this, writer);
+            }
+            else if(ContainsSequenceOutsideQuotes(line, "(") != -1 && EndsWithParenOrParenSemicolon(line))
+            {
+                ParseMethodCall(null, line, isBody);
+                WriteLine($"{opcodeMap[OpCode.VOID_STACK_ITEM]}");
             }
             else
                 throw new Exception($"Unexpected top-level line: {line}");
         }
 
-        // Call when currentLine starts with "if", "else if" or "else"
-        // id and isBody forwarded to ValidateValue/ParseBlock like your other handlers.
+        public static bool EndsWithParenOrParenSemicolon(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return false;
+
+            int len = input.Length;
+
+            // Check last char
+            if (input[len - 1] == ')')
+                return true;
+
+            // Check last two chars
+            if (len > 1 && input[len - 2] == ')' && input[len - 1] == ';')
+                return true;
+
+            return false;
+        }
+
+
         private void ParseIfChain(string? id, bool isBody)
         {
-            // unique end label for the whole chain
             string endLabel = "L" + GetAutoID();
 
-            // Helper: get next non-empty trimmed line without advancing parser (implement according to your parser)
-            string PeekNextNonEmptyLine()
-            {
-                return PeekNonEmptyLine(); // <-- replace with your real peek
-            }
-
-            // Helper: advance parser to next non-empty trimmed line and return it
-            string AdvanceToNextNonEmptyLine()
-            {
-                // Replace with your real advance implementation
-                return ReadNonEmptyLine(); // <-- replace with your real advance
-            }
-
-            // Loop over branches: first branch must be 'if', subsequent ones may be 'else if' or 'else'.
             while (true)
             {
                 string raw = currentLine.Trim();
@@ -432,44 +500,34 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 string conditionExpr = null;
                 bool hasCondition = false;
 
-                // figure out condition text if applicable
                 if (isIf || isElseIf)
                 {
-                    int kwLen = isIf ? 2 : 7; // "if" or "else if"
+                    int kwLen = isIf ? 2 : 7;
                     int braceIndex = raw.IndexOf('{');
 
                     if (braceIndex >= 0)
                     {
-                        // "if cond {"
                         conditionExpr = raw[kwLen..braceIndex].Trim();
                     }
                     else
                     {
-                        // "if cond" (brace on next line), take remainder of line
                         conditionExpr = raw[kwLen..].Trim();
                     }
 
-                    // allow optional parentheses or extra whitespace; leave ValidateValue to handle it
                     hasCondition = !string.IsNullOrEmpty(conditionExpr);
                     if (!hasCondition)
                         throw new WinterForgeFormatException("Missing condition on if/else if");
                 }
 
-                // create label that marks the start of the "next" branch (or end for an if that fails)
                 string nextBranchLabel = "L" + GetAutoID();
-
-                // if there's a condition, emit code to evaluate it and jump to nextBranchLabel when false
                 if (hasCondition)
                 {
-                    string condToken = ValidateValue(conditionExpr, isBody, id); // e.g. pushes #stack() or literal form
-                                                                                 // push condition result
+                    string condToken = ValidateValue(conditionExpr, isBody, id);
                     if (condToken is not "#stack()")
                         WriteLine($"{opcodeMap[OpCode.PUSH]} {condToken}");
-                    // if false -> skip this branch, go to nextBranchLabel
                     WriteLine($"{opcodeMap[OpCode.JUMP_IF_FALSE]} {nextBranchLabel}");
                 }
 
-                // ensure we have a block open brace. If '{' is on the same line we can proceed; otherwise expect it next.
                 if (!raw.Contains('{'))
                 {
                     ReadNextLineExpecting("{");
@@ -477,7 +535,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 WriteLine($"{opcodeMap[OpCode.SCOPE_PUSH]}");
 
-                // parse the block body (assumes ParseBlock consumes whole { ... } and leaves currentLine at the line after the closing '}')
                 while ((currentLine = ReadNonEmptyLine()?.Trim()) != null)
                 {
                     if (currentLine == "}")
@@ -487,41 +544,27 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 WriteLine($"{opcodeMap[OpCode.SCOPE_POP]}");
 
-                // after a branch body executes we must jump to the end of the whole if/else chain
-                // but only if this branch had a condition (i.e. it is not 'else').
                 if (hasCondition)
                 {
                     WriteLine($"{opcodeMap[OpCode.JUMP]} {endLabel}");
                 }
-                else
-                {
-                    // 'else' branch executes and should be last — after running else we jump to end implicitly,
-                    // so no need to add a jump; still we'll break from the loop below.
-                }
 
-                // place label for the next branch (this is where JUMP_IF_FALSE landed)
-                
-
-                // look ahead to see if next non-empty line is 'else if' or 'else'
-                string next = PeekNextNonEmptyLine()?.Trim() ?? "";
+                string next = PeekNonEmptyLine()?.Trim() ?? "";
                 if (next.StartsWith("else if ") || next == "else" || next.StartsWith("else "))
                 {
                     WriteLine($"{opcodeMap[OpCode.LABEL]} {nextBranchLabel}");
-                    // advance so that currentLine becomes that else/else-if — loop will handle it
-                    currentLine = AdvanceToNextNonEmptyLine();
+                    currentLine = ReadNonEmptyLine();
                     continue;
                 }
                 else
                 {
-                    // no more branches; emit final end label and stop
                     WriteLine($"{opcodeMap[OpCode.LABEL]} {endLabel}");
                     break;
                 }
-            } // end while
+            }
         }
 
-
-        private void HandleReturn(string line, bool isBody)
+        private void HandleReturn(string line, bool isBody, string? id)
         {
             int trimoffEnd = line.EndsWith(';') ? 1 : 0;
             string rawID = line[6..^trimoffEnd].Trim();
@@ -546,12 +589,17 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 if (rawID.All(char.IsDigit))
                     rawID = $"#ref({rawID})";
-
+                if(ContainsSequenceOutsideQuotes(rawID, "->") != -1)
+                {
+                    HandleAccessing(id, isBody, rawID, true);
+                    rawID = "#stack()";
+                }
                 string result = $"{opcodeMap[OpCode.RET]} {rawID}";
                 WriteLine(result);
             }
             else
             {
+                rawID = ValidateValue(rawID, isBody, id);
                 string result = $"{opcodeMap[OpCode.RET]} {rawID}";
                 WriteLine(result);
             }
@@ -665,7 +713,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             else if (isBody && currentLine.StartsWith("return"))
             {
-                HandleReturn(currentLine, isBody);
+                HandleReturn(currentLine, isBody, id);
             }
             else if (line.StartsWith("if "))
             {
@@ -709,6 +757,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 string[] parts = line.Split(' ');
                 int aliasid = int.Parse(parts[0]);
                 WriteLine($"{opcodeMap[OpCode.ALIAS]} {aliasid} {parts[1]}");
+            }
+            else if(line.StartsWith("#template "))
+            {
+                line = line["#template".Length..].Trim();
+                ContainerParser.ParseContainers(this, writer);
             }
             else if (line.StartsWith("var ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI)
             {
@@ -795,9 +848,9 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
         internal int ParseRHSAccess(string rhs, string? id, bool isBody)
         {
-            var rhsParts = rhs.Split("->", StringSplitOptions.RemoveEmptyEntries);
+            var rhsParts = SplitPreserveParentheses(rhs);
 
-            if (rhsParts.Length > 0)
+            if (rhsParts.Count > 0)
             {
                 string firstRhs = rhsParts[0];
 
@@ -815,7 +868,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 else // assume value is a type literal
                     WriteLine($"{opcodeMap[OpCode.PUSH]} #type({firstRhs})");
 
-                for (int i = 1; i < rhsParts.Length; i++)
+                for (int i = 1; i < rhsParts.Count; i++)
                 {
                     string part = rhsParts[i];
                     if (string.IsNullOrWhiteSpace(part))
@@ -865,7 +918,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         }
 
 
-        private void HandleAccessing(string? id, bool isBody, string? line = null)
+        private void HandleAccessing(string? id, bool isBody, string? line = null, bool allowNoRHS = false)
         {
             string[] assignmentParts = (line ?? currentLine).Split('=', 2, StringSplitOptions.TrimEntries);
             string accessPart = assignmentParts[0];
@@ -878,7 +931,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             // If there's no RHS, only allow that when the LHS contains a function call (parentheses).
             // Otherwise it's an error (missing RHS).
             if (rhs is null && !(accessPart.Contains('(') && accessPart.Contains(')')))
-                throw new WinterForgeFormatException("Missing right-hand side for assignment and left-hand side is not a function call.");
+                if(!allowNoRHS)
+                    throw new WinterForgeFormatException("Missing right-hand side for assignment and left-hand side is not a function call.");
 
             string val = "";
             if (rhs != null && rhs.Contains("->"))
@@ -967,6 +1021,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             var closeParen = part.LastIndexOf(')');
 
             var methodName = part[..openParen].Trim();
+            if (aliasMap.TryGetValue(methodName, out int key))
+            {
+                methodName = $"#ref({key})";
+            }
             var argList = part.Substring(openParen + 1, closeParen - openParen - 1);
             var args = argList.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
 
@@ -978,10 +1036,14 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     continue; // assumed stack value exists from elsewhere
 
                 if (arg.Contains("->"))
-                    HandleAccessing(id, isBody, arg);
-                else if(ContainsExpressionOutsideQuotes(arg))
+                    HandleAccessing(id, isBody, arg, true);
+                else if (ContainsExpressionOutsideQuotes(arg))
                 {
                     ParseExpression(arg, id, isBody);
+                }
+                else if (aliasMap.TryGetValue(arg, out int aliasID))
+                {
+                    WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({aliasID})");
                 }
                 else
                     WriteLine($"{opcodeMap[OpCode.PUSH]} {arg}");
@@ -1236,7 +1298,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 // identifiers (variables, function names, etc.)
                 if (char.IsLetter(c) || c == '_')
                 {
-                    while (i < input.Length && (char.IsLetterOrDigit(input[i]) || input[i] == '_')) i++;
+                    while (i < input.Length && (char.IsLetterOrDigit(input[i]) || input[i] == '_' || input[i] == '(' || input[i] == ')')) i++;
                     lastToken = TokenType.Identifier;
                     identifierCount++;
                     i--;
@@ -1260,6 +1322,13 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     {
                         lastToken = TokenType.None;
                         i = end; // skip this single character
+                        continue;
+                    }
+
+                    if(opToken is "->")
+                    {
+                        lastToken = TokenType.Identifier;
+                        i = end - 1;
                         continue;
                     }
 
@@ -1304,7 +1373,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             else if (ContainsSequenceOutsideQuotes(value, "->") != -1)
             {
-                HandleAccessing(null, isBody);
+                HandleAccessing(null, isBody, value);
                 return "#stack()";
             }
 
@@ -1355,7 +1424,16 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 return Convert.ChangeType(result, Enum.GetUnderlyingType(e)).ToString()!;
             }
+            if(IsMethodCall(value))
+            {
+                ParseMethodCall(id, value, isBody);
+                return "#stack()";
+            }
             return value;
+        }
+        private bool IsMethodCall(string line)
+        {
+            return ContainsSequenceOutsideQuotes(line, "(") != -1 && line.EndsWith(')');
         }
         private void ParseExpression(string value, string? id, bool isBody)
         {
@@ -1373,7 +1451,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                             ParseRHSAccess(token.Text, id, isBody);
                             break;
                         }
-                        else if(token.Text.EndsWith(')') && token.Text.Contains('('))
+                        else if (token.Text.EndsWith(')') && token.Text.Contains('('))
                         {
                             ParseMethodCall(id, token.Text, isBody);
                         }
@@ -1570,7 +1648,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 }
             }
         }
-        private string? ReadNonEmptyLine(bool allowEmptyLines = false)
+        internal string? ReadNonEmptyLine(bool allowEmptyLines = false)
         {
             string? line;
             do
@@ -1640,7 +1718,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return line;
         }
-
 
         private void ReadNextLineExpecting(string expected)
         {

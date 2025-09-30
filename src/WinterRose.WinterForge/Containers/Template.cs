@@ -27,7 +27,7 @@ public class Template : Scope
         return copy;
     }
 
-    internal object? Call(object[] args, InstructionExecutor executor)
+    internal object? Call(object[] args, WinterForgeVM executor)
     {
         if (args.Length != Parameters.Count)
             throw new WinterForgeExecutionException($"Parameter count mismatch. Expected " +

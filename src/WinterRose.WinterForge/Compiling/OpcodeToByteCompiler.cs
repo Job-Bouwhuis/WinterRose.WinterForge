@@ -177,7 +177,7 @@ public class OpcodeToByteCompiler
             // Illegal opcode detected for optimized rehydration
 
             allowCustomCompilers = false;
-            Type t = InstructionExecutor.ResolveType(bufferedObject[0].Split(' ')[1]);
+            Type t = WinterForgeVM.ResolveType(bufferedObject[0].Split(' ')[1]);
             //instanceStack.Push(t);
 
             foreach (string bufferedLine in bufferedObject)
@@ -270,7 +270,7 @@ public class OpcodeToByteCompiler
     {
         if (opcode is OpCode.DEFINE)
         {
-            Type t = InstructionExecutor.ResolveType(parts[1]);
+            Type t = WinterForgeVM.ResolveType(parts[1]);
 
             if (allowCustomCompilers)
                 if (CustomValueCompilerRegistry.TryGetByType(t, out ICustomValueCompiler customCompiler))
@@ -320,11 +320,15 @@ public class OpcodeToByteCompiler
 
             case OpCode.END:
                 instanceStack.Pop();
-                goto case OpCode.RET;
-            case OpCode.RET:
+                goto case OpCode.AS;
             case OpCode.AS:
                 WritePrefered(writer, parts[1], ValuePrefix.INT);
                 break;
+
+            case OpCode.RET:
+                WritePrefered(writer, parts[1], ValuePrefix.INT);
+                break;
+
 
             case OpCode.PUSH:
                 WritePrefered(writer, parts[1], ValuePrefix.STRING);
@@ -362,9 +366,9 @@ public class OpcodeToByteCompiler
                     WriteString(writer, parts[1]); // type
                     WriteString(writer, parts[2]); // field
 
-                    Type fieldDeclarerType = InstructionExecutor.ResolveType(parts[1]);
+                    Type fieldDeclarerType = WinterForgeVM.ResolveType(parts[1]);
                     ReflectionHelper rh = new(fieldDeclarerType);
-                    Type fieldType = InstructionExecutor.ResolveType(parts[1]);
+                    Type fieldType = WinterForgeVM.ResolveType(parts[1]);
                     ValuePrefix prefix = GetNumericValuePrefix(fieldType);
                     if (prefix is ValuePrefix.NONE)
                         WriteAny(writer, parts[3]);
@@ -402,6 +406,7 @@ public class OpcodeToByteCompiler
             case OpCode.DEFINE:
             case OpCode.SCOPE_PUSH:
             case OpCode.SCOPE_POP:
+            case OpCode.VOID_STACK_ITEM:
                 // no args
                 break;
 
@@ -520,7 +525,7 @@ public class OpcodeToByteCompiler
             if (line[i] == '"')
             {
                 int end = line.IndexOf('"', i + 1);
-                parts.Add(line.Substring(i + 1, end - i - 1));
+                parts.Add(line.Substring(i, end - i + 1));
                 i = end + 1;
             }
             else
@@ -620,6 +625,10 @@ public class OpcodeToByteCompiler
                     {
                         writer.Write((byte)ValuePrefix.DEFAULT);
                     }
+                    //else if (raw[0] == '"' && raw[^1] == '"')
+                    //{
+                    //    WriteString(writer, raw[1..^1]);
+                    //}
                     else
                         WriteString(writer, raw);
                 }

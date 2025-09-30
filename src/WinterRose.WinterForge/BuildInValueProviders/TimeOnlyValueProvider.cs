@@ -4,7 +4,7 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
 {
     class TimeOnlyValueProvider : CustomValueProvider<TimeOnly>
     {
-        public override TimeOnly CreateObject(object value, InstructionExecutor executor)
+        public override TimeOnly CreateObject(object value, WinterForgeVM executor)
         {
             return TimeOnly.Parse((string)value);
         }

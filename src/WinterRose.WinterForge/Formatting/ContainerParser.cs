@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using WinterRose.WinterForgeSerializing.Containers;
@@ -12,23 +14,19 @@ namespace WinterRose.WinterForgeSerializing.Formatting;
 /// </summary>
 internal static class ContainerParser
 {
-    public static bool ParseContainers(HumanReadableParser parser, StreamReader raw, StreamWriter output)
+    public static bool ParseContainers(HumanReadableParser parser, StreamWriter output)
     {
-        if (raw == null) throw new ArgumentNullException(nameof(raw));
         if (output == null) throw new ArgumentNullException(nameof(output));
 
         string? line = parser.currentLine;
         while (string.IsNullOrWhiteSpace(line))
         {
-            line = raw.ReadLine();
+            line = parser.ReadNonEmptyLine();
             if (line == null) break; // EOF
             line = line.Trim();
         }
 
-        // 'line' now contains either:
-        // - null (end of file)
-        // - a valid, non-whitespace line
-
+        if (line == null) return true;
 
         if (line.StartsWith("#container"))
         {
@@ -52,16 +50,38 @@ internal static class ContainerParser
             // consume opening brace if not present on same line
             if (!openBraceOnSameLine)
             {
-                SeekToNextNonEmptyLineExpecting("{", raw);
+                SeekToNextNonEmptyLineExpecting("{", parser);
             }
 
             // Now read the entire container block
-            List<string> containerBlock = ReadBlockContent(raw);
+            List<string> containerBlock = ReadBlockContent(parser);
 
             ProcessContainerBlock(containerName, containerBlock, output, parser);
 
             WriteOpcode(output, OpCode.CONTAINER_END, containerName);
         }
+        else if (line.StartsWith("#template"))
+        {
+            // Top-level single-template parse
+            string header = line["#template".Length..].Trim();
+            bool hasBrace = header.EndsWith("{");
+            if (hasBrace) header = header[..^1].Trim();
+
+            if (!hasBrace)
+            {
+                // Expect an opening brace on the next non-empty line
+                SeekToNextNonEmptyLineExpecting("{", parser);
+            }
+
+            // Read the body of the template (inner lines)
+            List<string> body = ReadBlockContent(parser);
+            // Keep consistent with other callers that append a trailing "}" token
+            body.Add("}");
+
+            // Reuse the public ParseTemplate helper
+            ParseTemplate(parser, header, body, output);
+        }
+
         return true;
     }
 
@@ -139,20 +159,11 @@ internal static class ContainerParser
             List<string> body = ExtractSubBlock(blockLines, ref lineIndex, headerLine: rawLine);
             body.Add("}");
 
-            // Emit opcodes
-            var args = new List<string> { blockName, paramTuples.Count.ToString() };
-            foreach (var p in paramTuples)
-            {
-                args.Add(p.type);
-                args.Add(p.name);
-            }
-
-            WriteOpcode(output, blockTypeName == "#template" ? OpCode.TEMPLATE_CREATE : OpCode.CONSTRUCTOR_START, args.ToArray());
-
-            parser.EnqueueLines(body);
-            parser.ContinueWithBody();
-
-            WriteOpcode(output, blockTypeName == "#template" ? OpCode.TEMPLATE_END : OpCode.CONSTRUCTOR_END, blockName);
+            // Emit opcodes (reuse ParseTemplate/ParseConstructor to avoid duplication)
+            if (blockTypeName == "#template")
+                ParseTemplate(parser, blockName, paramTuples, body, output);
+            else
+                ParseConstructor(parser, blockName, paramTuples, body, output);
 
             return true;
         }
@@ -178,7 +189,7 @@ internal static class ContainerParser
                 parser.ParseRHSAccess(expr, null, true);
             }
             else
-                WriteOpcode(output, OpCode.VAR_DEFAULT_VALUE, expr); // put value as raw since its not a access expression. VM will handle this raw value
+                WriteOpcode(output, OpCode.VAR_DEFAULT_VALUE, expr); // put value as raw since its not an access expression. VM will handle this raw value
 
             WriteOpcode(output, OpCode.VAR_DEF_END, name);
         }
@@ -189,14 +200,73 @@ internal static class ContainerParser
         }
     }
 
+    /// <summary>
+    /// Public helper to parse a single template. Header is the content after "#template" (e.g. "Foo int n").
+    /// bodyLines should be the inner lines (ReadBlockContent result) + typically a trailing "}" if caller expects it.
+    /// This emits TEMPLATE_CREATE, enqueues the body into the parser and emits TEMPLATE_END.
+    /// </summary>
+    public static void ParseTemplate(HumanReadableParser parser, string header, List<string> bodyLines, StreamWriter output)
+    {
+        // header may be like "Foo int n" or "Foo" (no params)
+        List<string> headerTokens = TokenizeHeader(header);
+        if (headerTokens.Count == 0) throw new InvalidDataException("Template header empty.");
+
+        string templateName = headerTokens[0];
+        var paramTuples = headerTokens.Count > 1 ? ParseParamTuples(headerTokens.Skip(1).ToList()) : new List<(string type, string name)>();
+
+        ParseTemplate(parser, templateName, paramTuples, bodyLines, output);
+    }
+
+    /// <summary>
+    /// Overload accepting already-parsed name + param tuples (avoids re-tokenizing).
+    /// </summary>
+    public static void ParseTemplate(HumanReadableParser parser, string templateName, List<(string type, string name)> paramTuples, List<string> bodyLines, StreamWriter output)
+    {
+        // prepare opcode args: name, paramCount, [type, name]...
+        var args = new List<string> { templateName, paramTuples.Count.ToString() };
+        foreach (var p in paramTuples)
+        {
+            args.Add(p.type);
+            args.Add(p.name);
+        }
+
+        WriteOpcode(output, OpCode.TEMPLATE_CREATE, args.ToArray());
+
+        // give the template body to the parser (so ParseBlock/ParseObjectOrAssignment will run)
+        parser.EnqueueLines(bodyLines);
+        parser.ContinueWithBody();
+
+        WriteOpcode(output, OpCode.TEMPLATE_END, templateName);
+    }
+
+    /// <summary>
+    /// Parse a single constructor (container-named block) given parsed param tuples.
+    /// </summary>
+    public static void ParseConstructor(HumanReadableParser parser, string constructorName, List<(string type, string name)> paramTuples, List<string> bodyLines, StreamWriter output)
+    {
+        var args = new List<string> { constructorName, paramTuples.Count.ToString() };
+        foreach (var p in paramTuples)
+        {
+            args.Add(p.type);
+            args.Add(p.name);
+        }
+
+        WriteOpcode(output, OpCode.CONSTRUCTOR_START, args.ToArray());
+
+        parser.EnqueueLines(bodyLines);
+        parser.ContinueWithBody();
+
+        WriteOpcode(output, OpCode.CONSTRUCTOR_END, constructorName);
+    }
+
     // Reads a block's inner lines including nested braces. Caller must be positioned AFTER the initial opening brace.
     // This reads until the matching closing brace for the first opening brace encountered.
-    private static List<string> ReadBlockContent(StreamReader reader)
+    private static List<string> ReadBlockContent(HumanReadableParser parser)
     {
         var result = new List<string>();
         int depth = 1; // caller consumed the initial opening brace
         string? line;
-        while ((line = reader.ReadLine()) != null)
+        while ((line = parser.ReadNonEmptyLine()) != null)
         {
             string trimmed = line;
             // We must count braces in the raw line (handles same-line braces)
@@ -346,18 +416,11 @@ internal static class ContainerParser
         return "\"" + escaped + "\"";
     }
 
-    // Escape a line for STR opcode content: keep the line unchanged but escape sequences that would break a single-line representation.
-    private static string EscapeLineForStr(string line)
-    {
-        // STR lines are written after the opcode token; to keep parsing simple, we escape backslashes and trailing control chars.
-        return line.Replace("\\", "\\\\").Replace("\r", "\\r").Replace("\n", "\\n");
-    }
-
     // Advances the reader until it finds a non-empty line that equals expected. Throws if not found.
-    private static void SeekToNextNonEmptyLineExpecting(string expected, StreamReader reader)
+    private static void SeekToNextNonEmptyLineExpecting(string expected, HumanReadableParser parser)
     {
         string? l;
-        while ((l = reader.ReadLine()) != null)
+        while ((l = parser.ReadNonEmptyLine()) != null)
         {
             if (string.IsNullOrWhiteSpace(l)) continue;
             if (l.Trim() == expected) return;

@@ -2,9 +2,9 @@
 {
     internal class ScopePusher : IDisposable
     {
-        private readonly InstructionExecutor executor;
+        private readonly WinterForgeVM executor;
         private bool disposed = false;
-        public ScopePusher(InstructionExecutor executor)
+        public ScopePusher(WinterForgeVM executor)
         {
             this.executor = executor;
         }

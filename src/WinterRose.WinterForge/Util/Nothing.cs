@@ -8,7 +8,7 @@ using WinterRose.WinterForgeSerializing.Workers;
 namespace WinterRose.WinterForgeSerializing
 {
     /// <summary>
-    /// <see cref="InstructionExecutor"/> has no specific object to return. 
+    /// <see cref="WinterForgeVM"/> has no specific object to return. 
     /// </summary>
     public class Nothing
     {
