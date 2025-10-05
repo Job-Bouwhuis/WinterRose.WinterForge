@@ -30,7 +30,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         /// <summary>
         /// Bytecode format optimized for speed.
         /// </summary>
-        Optimized
+        Optimized,
+        ReadableIntermediateRepresentation
     }
 
 }

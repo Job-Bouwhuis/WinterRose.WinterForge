@@ -572,7 +572,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// </summary>
         /// <param name="elementType"></param>
         /// <returns></returns>
-        public string ParseTypeName(Type elementType)
+        public static string ParseTypeName(Type elementType)
         {
             if (elementType == typeof(Anonymous)
                 || elementType == typeof(AnonymousTypeBuilder)

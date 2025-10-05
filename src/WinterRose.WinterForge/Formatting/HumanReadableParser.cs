@@ -47,6 +47,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
         int ldI = 0;
         int ldD = 0;
+        private List<(string start, string end)> flowLabels = [];
 
         //private static readonly Dictionary<string, string> opcodeMap = Enum
         //  .GetValues<OpCode>()
@@ -72,7 +73,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             WriteLine("");
             WriteLine("");
 
-            while ((currentLine = ReadNonEmptyLine()) != null)
+            while ((currentLine = ReadLine()) != null)
                 ParseObjectOrAssignment(false);
 
             if (output is NetworkStream)
@@ -80,15 +81,18 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             writer.Flush();
         }
 
-        internal void ContinueWithBody()
+        internal void ContinueWithBlock(string? id, bool asBody, string? line = null)
         {
-            while ((currentLine = ReadNonEmptyLine()?.Trim()) != null)
+            currentLine = line ??= ReadLine()?.Trim();
+            if (line is null)
+                return;
+            do
             {
                 if (currentLine == "}")
                     break;
-                ParseBlockLine(null, true, currentLine);
+                ParseBlockLine(id, asBody, currentLine);
             }
-
+            while ((currentLine = ReadLine()?.Trim()) != null);
         }
 
         internal void ParseObjectOrAssignment(bool isBody)
@@ -100,8 +104,18 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             if (TryParseFirstParts())
                 return;
+            if (line.EndsWith(':') && !line.Contains('='))
+            {
+                WriteLine($"{opcodeMap[OpCode.LABEL]} {line.Trim()[..^1]}");
+            }
+            else if (line.StartsWith("goto "))
+            {
+                if (line.EndsWith(';'))
+                    line = line[..^1];
+                WriteLine($"{opcodeMap[OpCode.JUMP]} {line["goto".Length..].Trim()}");
+            }
             // Constructor Definition: Type(arguments) : ID {
-            if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
+            else if (line.Contains('(') && line.Contains(')') && ContainsSequenceOutsideQuotes(line, ":") != -1 && line.Contains('{'))
             {
                 int openParenIndex = line.IndexOf('(');
                 int closeParenIndex = line.IndexOf(')');
@@ -378,27 +392,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             else if (line.StartsWith("var ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI)
             {
-                string varName = line[4..eqI].Trim();
-                string rhs = line[(eqI + 1)..].Trim();
-                if (rhs.EndsWith(';'))
-                    rhs = rhs[..^1];
-                string tempVar = ValidateValue(rhs, isBody);
-                WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
-                WriteLine($"{opcodeMap[OpCode.SET]} {varName} {tempVar}");
+                ParseVarCreation(isBody, line, eqI);
             }
             else if (line.StartsWith("global ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI2)
             {
-                string varName = line["global".Length..eqI2].Trim();
-                string rhs = line[(eqI2 + 1)..].Trim();
-                if (rhs.EndsWith(';'))
-                    rhs = rhs[..^1];
-                int nextid = GetAutoID();
-                string tempVar = ValidateValue(rhs, isBody);
-                if (tempVar is not "#stack()")
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} {tempVar}");
-                WriteLine($"{opcodeMap[OpCode.AS]} {nextid}");
-                foundIds.Add(nextid);
-                aliasMap.Add(varName, nextid);
+                ParseGlobalVarCreation(isBody, line, eqI2);
             }
             else if (line.StartsWith("return"))
             {
@@ -454,13 +452,47 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 line = line["#template".Length..].Trim();
                 ContainerParser.ParseContainers(this, writer);
             }
-            else if(ContainsSequenceOutsideQuotes(line, "(") != -1 && EndsWithParenOrParenSemicolon(line))
+            else if (line.StartsWith("while"))
+            {
+                ParseWhileLoop(null, isBody);
+            }
+            else if (line.StartsWith("for "))
+            {
+                ParseForLoop(null, isBody);
+            }
+            else if (ContainsSequenceOutsideQuotes(line, "(") != -1 && EndsWithParenOrParenSemicolon(line))
             {
                 ParseMethodCall(null, line, isBody);
                 WriteLine($"{opcodeMap[OpCode.VOID_STACK_ITEM]}");
             }
             else
                 throw new Exception($"Unexpected top-level line: {line}");
+        }
+
+        private void ParseGlobalVarCreation(bool isBody, string line, int eqI2)
+        {
+            string varName = line["global".Length..eqI2].Trim();
+            string rhs = line[(eqI2 + 1)..].Trim();
+            if (rhs.EndsWith(';'))
+                rhs = rhs[..^1];
+            int nextid = GetAutoID();
+            string tempVar = ValidateValue(rhs, isBody);
+            if (tempVar is not "#stack()")
+                WriteLine($"{opcodeMap[OpCode.PUSH]} {tempVar}");
+            WriteLine($"{opcodeMap[OpCode.AS]} {nextid}");
+            foundIds.Add(nextid);
+            aliasMap.Add(varName, nextid);
+        }
+
+        private void ParseVarCreation(bool isBody, string line, int eqI)
+        {
+            string varName = line[4..eqI].Trim();
+            string rhs = line[(eqI + 1)..].Trim();
+            if (rhs.EndsWith(';'))
+                rhs = rhs[..^1];
+            string tempVar = ValidateValue(rhs, isBody);
+            WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
+            WriteLine($"{opcodeMap[OpCode.SET]} {varName} {tempVar}");
         }
 
         public static bool EndsWithParenOrParenSemicolon(string input)
@@ -480,7 +512,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             return false;
         }
-
 
         private void ParseIfChain(string? id, bool isBody)
         {
@@ -506,13 +537,9 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     int braceIndex = raw.IndexOf('{');
 
                     if (braceIndex >= 0)
-                    {
                         conditionExpr = raw[kwLen..braceIndex].Trim();
-                    }
                     else
-                    {
                         conditionExpr = raw[kwLen..].Trim();
-                    }
 
                     hasCondition = !string.IsNullOrEmpty(conditionExpr);
                     if (!hasCondition)
@@ -529,31 +556,34 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 }
 
                 if (!raw.Contains('{'))
-                {
-                    ReadNextLineExpecting("{");
-                }
+                    raw = currentLine = ReadLine()?.Trim();
 
                 WriteLine($"{opcodeMap[OpCode.SCOPE_PUSH]}");
 
-                while ((currentLine = ReadNonEmptyLine()?.Trim()) != null)
+                if (currentLine == null)
+                    throw new WinterForgeFormatException("Unexpected EOF in if statement body");
+
+                if (raw.Contains('{'))
                 {
-                    if (currentLine == "}")
-                        break;
-                    ParseObjectOrAssignment(isBody);
+                    ContinueWithBlock(id, isBody);
+                }
+                else
+                {
+                    ParseBlockLine(id, isBody, currentLine);
                 }
 
                 WriteLine($"{opcodeMap[OpCode.SCOPE_POP]}");
 
                 if (hasCondition)
-                {
                     WriteLine($"{opcodeMap[OpCode.JUMP]} {endLabel}");
-                }
+
+                WriteLine($"{opcodeMap[OpCode.LABEL]} {nextBranchLabel}");
 
                 string next = PeekNonEmptyLine()?.Trim() ?? "";
                 if (next.StartsWith("else if ") || next == "else" || next.StartsWith("else "))
                 {
-                    WriteLine($"{opcodeMap[OpCode.LABEL]} {nextBranchLabel}");
-                    currentLine = ReadNonEmptyLine();
+
+                    currentLine = ReadLine();
                     continue;
                 }
                 else
@@ -589,7 +619,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 if (rawID.All(char.IsDigit))
                     rawID = $"#ref({rawID})";
-                if(ContainsSequenceOutsideQuotes(rawID, "->") != -1)
+                if (ContainsSequenceOutsideQuotes(rawID, "->") != -1)
                 {
                     HandleAccessing(id, isBody, rawID, true);
                     rawID = "#stack()";
@@ -679,7 +709,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         {
             if (id is "1")
                 ;
-            while ((currentLine = ReadNonEmptyLine()) != null)
+            while ((currentLine = ReadLine()) != null)
             {
                 string line = currentLine.Trim();
                 bool? flowControl = ParseBlockLine(id, isBody, line);
@@ -689,6 +719,102 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     case true: return;
                 }
             }
+        }
+
+        private void ParseWhileLoop(string? id, bool isBody)
+        {
+            string labelStart = "WHILE" + GetAutoID();
+            string labelEnd = "WHILE" + GetAutoID();
+            string expr = currentLine["while".Length..].Trim();
+
+            flowLabels.Add((labelStart, labelEnd));
+
+            WriteLine($"{opcodeMap[OpCode.LABEL]} {labelStart}");
+            // emits opcodes to compute the expression, hence why start label comes first so this is re-evaluated each iteration
+            expr = ValidateValue(expr, isBody, id);
+            WriteLine($"{opcodeMap[OpCode.JUMP_IF_FALSE]} {labelEnd}");
+            WriteLine($"{opcodeMap[OpCode.SCOPE_PUSH]}");
+
+            currentLine = ReadLine();
+            if ((currentLine ?? throw new WinterForgeFormatException("End of file not expected in 'while' definition")).Trim() != "{")
+                ParseBlockLine(id, isBody, currentLine);
+            else
+                ContinueWithBlock(id, isBody);
+
+            WriteLine($"{opcodeMap[OpCode.SCOPE_POP]}");
+            WriteLine($"{opcodeMap[OpCode.JUMP]} {labelStart}");
+            WriteLine($"{opcodeMap[OpCode.LABEL]} {labelEnd}");
+
+        }
+
+        private void ParseForLoop(string? id, bool isBody)
+        {
+            string labelStart = "FOR" + GetAutoID();
+            string labelEnd = "FOR" + GetAutoID();
+            string[] expressions = SplitForLoopContent(currentLine["for".Length..].Trim());
+
+            flowLabels.Add((labelStart, labelEnd));
+
+            WriteLine($"{opcodeMap[OpCode.SCOPE_PUSH]}");
+
+            if (!string.IsNullOrWhiteSpace(expressions[0]))
+                ParseBlockLine(id, isBody, expressions[0]);
+
+            WriteLine($"{opcodeMap[OpCode.LABEL]} {labelStart}");
+            if (string.IsNullOrWhiteSpace(expressions[1]))
+                throw new WinterForgeFormatException("For loop requires condition expression, initializer and iteration expression can be empty. eg: for ; true;");
+
+            // emits opcodes to compute the expression, hence why start label comes first so this is re-evaluated each iteration
+            ValidateValue(expressions[1], isBody, id);
+            WriteLine($"{opcodeMap[OpCode.JUMP_IF_FALSE]} {labelEnd}");
+
+            currentLine = ReadLine();
+            if ((currentLine ?? throw new WinterForgeFormatException("End of file not expected in 'while' definition")).Trim() != "{")
+                ParseBlockLine(id, isBody, currentLine);
+            else
+                ContinueWithBlock(id, isBody);
+
+            if (!string.IsNullOrWhiteSpace(expressions[2]))
+                ParseBlockLine(id, isBody, expressions[2]); // iterator expression
+
+            WriteLine($"{opcodeMap[OpCode.JUMP]} {labelStart}");
+            WriteLine($"{opcodeMap[OpCode.LABEL]} {labelEnd}");
+            WriteLine($"{opcodeMap[OpCode.SCOPE_POP]}");
+        }
+
+        public static string[] SplitForLoopContent(string loopContent)
+        {
+            string[] parts = new string[3] { "", "", "" };
+            int lastIndex = 0;
+            int semicolonCount = 0;
+
+            for (int i = 0; i < loopContent.Length; i++)
+            {
+                if (loopContent[i] == ';')
+                {
+                    parts[semicolonCount] = loopContent[lastIndex..(i + 1)].Trim();
+                    lastIndex = i + 1;
+                    semicolonCount++;
+
+                    if (semicolonCount == 2)
+                        break;
+                }
+            }
+
+            if (parts[1] is ";")
+                parts[1] = "";
+
+            parts[2] = loopContent[lastIndex..].Trim();
+            if (string.IsNullOrWhiteSpace(parts[1]) && !string.IsNullOrWhiteSpace(parts[2]) && parts[2] is not ";" and { Length: > 1})
+            {
+                (parts[1], parts[2]) = (parts[2], parts[1]);
+            }
+            if (parts[2].Length > 1 && !parts[2].EndsWith(';'))
+                parts[2] += ';';
+            if (parts[2] is ";")
+                parts[2] = "";
+
+            return parts;
         }
 
         /// <summary>
@@ -711,6 +837,16 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 WriteLine($"{opcodeMap[OpCode.END]} {id}");
                 return true;
             }
+            else if (line.EndsWith(':') && !line.Contains('='))
+            {
+                WriteLine($"{opcodeMap[OpCode.LABEL]} {line.Trim()[..^1]}");
+            }
+            else if (line.StartsWith("goto "))
+            {
+                if (line.EndsWith(';'))
+                    line = line[..^1];
+                WriteLine($"{opcodeMap[OpCode.JUMP]} {line["goto".Length..].Trim()}");
+            }
             else if (isBody && currentLine.StartsWith("return"))
             {
                 HandleReturn(currentLine, isBody, id);
@@ -719,8 +855,15 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             {
                 ParseIfChain(line, isBody);
             }
-            else if (ContainsExpressionOutsideQuotes(line) &&
-                line.Contains(" = ") && line.EndsWith(';'))
+            else if (line.StartsWith("var ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI)
+            {
+                ParseVarCreation(isBody, line, eqI);
+            }
+            else if (line.StartsWith("global ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI2)
+            {
+                ParseGlobalVarCreation(isBody, line, eqI2);
+            }
+            else if (ContainsExpressionOutsideQuotes(line) && line.Contains(" = ") && line.EndsWith(';'))
                 ParseAssignment(line, id, isBody);
             else if (line.Contains("->"))
                 HandleAccessing(id, isBody);
@@ -758,20 +901,42 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 int aliasid = int.Parse(parts[0]);
                 WriteLine($"{opcodeMap[OpCode.ALIAS]} {aliasid} {parts[1]}");
             }
-            else if(line.StartsWith("#template "))
+            else if (line.StartsWith("#template "))
             {
                 line = line["#template".Length..].Trim();
                 ContainerParser.ParseContainers(this, writer);
             }
-            else if (line.StartsWith("var ") && ContainsSequenceOutsideQuotes(line, "=") is int eqI)
+            else if (line.StartsWith("#container"))
             {
-                string varName = line[4..eqI].Trim();
-                string rhs = line[(eqI + 1)..].Trim();
-                if (rhs.EndsWith(';'))
-                    rhs = rhs[..^1];
-                string tempVar = ValidateValue(rhs, isBody);
-                WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
-                WriteLine($"{opcodeMap[OpCode.SET]} {varName} {tempVar}");
+                ContainerParser.ParseContainers(this, writer);
+            }
+            else if (line.StartsWith("continue") && flowLabels.Count > 0)
+            {
+                if (line.EndsWith(';'))
+                    line = line[..^1];
+
+                string countstr = line["continue".Length..].Trim();
+                int count;
+                if (!int.TryParse(countstr, out count))
+                    count = 1;
+
+                WriteLine($"{opcodeMap[OpCode.JUMP]} {flowLabels[^count].start}");
+            }
+            else if (line.StartsWith("break") && flowLabels.Count > 0)
+            {
+                if (line.EndsWith(';'))
+                    line = line[..^1];
+
+                string countstr = line["break".Length..].Trim();
+                int count;
+                if (!int.TryParse(countstr, out count))
+                    count = 1;
+
+                WriteLine($"{opcodeMap[OpCode.JUMP]} {flowLabels[^count].end}");
+            }
+            else if (line.StartsWith("for "))
+            {
+                ParseForLoop(id, isBody);
             }
             else if (TryParseCollection(line, out _, isBody) is var colres && colres is not CollectionParseResult.Failed and not CollectionParseResult.NotACollection)
             {
@@ -931,7 +1096,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             // If there's no RHS, only allow that when the LHS contains a function call (parentheses).
             // Otherwise it's an error (missing RHS).
             if (rhs is null && !(accessPart.Contains('(') && accessPart.Contains(')')))
-                if(!allowNoRHS)
+                if (!allowNoRHS)
                     throw new WinterForgeFormatException("Missing right-hand side for assignment and left-hand side is not a function call.");
 
             string val = "";
@@ -1119,7 +1284,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 if (collectingDefinition)
                     currentElement.Append('\n');
                 debugOutput.AppendLine();
-            } while ((cur = ReadNonEmptyLine()) != null);
+            } while ((cur = ReadLine()) != null);
 
             // Dump debug output to file and open Notepad
             string tempFile = Path.Combine(Path.GetTempPath(), "WinterForgeDebugOutput.txt");
@@ -1325,7 +1490,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                         continue;
                     }
 
-                    if(opToken is "->")
+                    if (opToken is "->")
                     {
                         lastToken = TokenType.Identifier;
                         i = end - 1;
@@ -1364,28 +1529,24 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     return "#stack()";
                 }
             }
-
-            if (ContainsExpressionOutsideQuotes(value))
+            else if (HasValidGenericFollowedByBracket(value))
+            {
+                TryParseCollection(value, out string name, isBody);
+                return name;
+            }
+            else if (ContainsExpressionOutsideQuotes(value))
             {
                 ParseExpression(value, id, isBody);
                 return "#stack()";
             }
-
             else if (ContainsSequenceOutsideQuotes(value, "->") != -1)
             {
                 HandleAccessing(null, isBody, value);
                 return "#stack()";
             }
-
-            if (value.StartsWith("#type"))
+            else if (value.StartsWith("#type"))
                 return value;
-
-            if (HasValidGenericFollowedByBracket(value))
-            {
-                TryParseCollection(value, out string name, isBody);
-                return name;
-            }
-            if (value.Contains('.') && !IsValidNumericString(value) && !value.Contains('<'))
+            else if (value.Contains('.') && !IsValidNumericString(value) && !value.Contains('<'))
             {
                 string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 string enumType;
@@ -1424,7 +1585,17 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 return Convert.ChangeType(result, Enum.GetUnderlyingType(e)).ToString()!;
             }
-            if(IsMethodCall(value))
+            else if (value is "true")
+            {
+                WriteLine($"{opcodeMap[OpCode.PUSH]} true");
+                return "#stack()";
+            }
+            else if (value is "false")
+            {
+                WriteLine($"{opcodeMap[OpCode.PUSH]} false");
+                return "#stack()";
+            }
+            else if (IsMethodCall(value))
             {
                 ParseMethodCall(id, value, isBody);
                 return "#stack()";
@@ -1437,6 +1608,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         }
         private void ParseExpression(string value, string? id, bool isBody)
         {
+            if (value.EndsWith(';'))
+                value = value[..^1];
             var tokens = ExpressionTokenizer.Tokenize(value);
 
             foreach (var token in tokens)
@@ -1604,7 +1777,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             // Keep reading until we find the closing 5x quote
             while (true)
             {
-                string? nextLine = ReadNonEmptyLine(allowEmptyLines: true);
+                string? nextLine = ReadLine(allowEmptyLines: true);
                 if (nextLine == null)
                     throw new InvalidOperationException("Unexpected end of stream while reading multiline string.");
 
@@ -1648,7 +1821,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 }
             }
         }
-        internal string? ReadNonEmptyLine(bool allowEmptyLines = false)
+        internal string? ReadLine(bool allowEmptyLines = false)
         {
             string? line;
             do
@@ -1721,7 +1894,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
         private void ReadNextLineExpecting(string expected)
         {
-            currentLine = ReadNonEmptyLine();
+            currentLine = ReadLine();
             if (currentLine == null || currentLine.Trim() != expected)
                 throw new Exception($"Expected '{expected}' but got: {currentLine}");
         }
@@ -1916,7 +2089,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                         for (int i = 0; i < lines.Length; i++)
                             lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
-                        currentLine = ReadNonEmptyLine();
+                        currentLine = ReadLine();
                         int colonIndex = currentLine.IndexOf(':');
                         int braceIndex = currentLine.IndexOf('{');
 
@@ -1942,7 +2115,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                         for (int i = 0; i < lines.Length; i++)
                             lineBuffers.Peek().PushEnd(lines[i].Trim() + '\n');
 
-                        currentLine = ReadNonEmptyLine();
+                        currentLine = ReadLine();
                         int colonIndex = currentLine.IndexOf(':');
                         int braceIndex = currentLine.IndexOf('{');
 
@@ -1968,7 +2141,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     foreach (var line in lines)
                         lineBuffers.Peek().PushEnd(line.Trim() + '\n');
 
-                    currentLine = ReadNonEmptyLine();
+                    currentLine = ReadLine();
                     int colonIndex = currentLine.IndexOf(':');
                     int braceIndex = currentLine.IndexOf('{');
 

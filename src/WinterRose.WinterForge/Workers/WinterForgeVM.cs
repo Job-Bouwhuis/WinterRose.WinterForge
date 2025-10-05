@@ -74,7 +74,7 @@ public class WinterForgeVM : IDisposable
     private readonly Stack<int> instanceIDStack;
     private readonly Stack<CollectionDefinition> listStack = new();
     private readonly List<DispatchedReference> dispatchedReferences = [];
-    private Dictionary<string, int>? labelCache;
+    private Stack<Dictionary<string, (int Index, int Depth)>>? labelCache = new();
     private StringBuilder? sb;
     private Instruction current;
 
@@ -132,6 +132,7 @@ public class WinterForgeVM : IDisposable
             progressTracker?.Report("Starting...");
 
             contextStack.Push(new DeserializationContext());
+            labelCache.Push(null);
 
             Variable? buildingVariable = null;
             int scopesCreated = 0;
@@ -162,6 +163,9 @@ public class WinterForgeVM : IDisposable
 
                 switch (instruction.OpCode)
                 {
+                    case OpCode.LABEL:
+                        break; // nop
+
                     case OpCode.DEFINE:
                         HandleDefine(instruction.Args);
                         break;
@@ -295,17 +299,6 @@ public class WinterForgeVM : IDisposable
 
                             Template t = new Template((string)instruction.Args[0], templateArgs);
                             CurrentContext.constructingScopes.Push(t);
-
-                            //while (NextInstruction(out instruction))
-                            //{
-                            //    if (instruction.OpCode is OpCode.TEMPLATE_END or OpCode.CONSTRUCTOR_END)
-                            //        if (isConstructor)
-                            //            goto case OpCode.CONSTRUCTOR_END;
-                            //        else
-                            //            goto case OpCode.TEMPLATE_END;
-
-                            //    t.Instructions.Add(instruction);
-                            //}
                         }
                         break;
 
@@ -327,6 +320,8 @@ public class WinterForgeVM : IDisposable
                             s.DefineTemplate(t);
                         }
                         break;
+
+
 
                     case OpCode.CONTAINER_START: // 39
                         Container newContainer = new((string)instruction.Args[0]);
@@ -474,7 +469,7 @@ ExpressionBuilding:
             progressTracker?.Report("Finishing up");
             instructionIndexStack.Pop();
             contextStack.Pop();
-
+            labelCache.Pop();
 
             if (clearInternals)
             {
@@ -495,22 +490,55 @@ ExpressionBuilding:
 
     private void HandleJump(string label, List<Instruction> instructionCollection)
     {
-        if (labelCache == null)
+        if (labelCache!.Peek() is null)
         {
-            labelCache = new Dictionary<string, int>();
+            labelCache.Pop();
+            labelCache.Push([]);
+
+            int depth = 1;
             for (int i = 0; i < instructionCollection.Count; i++)
             {
-                if (instructionCollection[i].OpCode == OpCode.LABEL)
+                var instr = instructionCollection[i];
+
+                switch (instr.OpCode)
                 {
-                    string name = (string)instructionCollection[i].Args[0];
-                    if (!labelCache.ContainsKey(name))
-                        labelCache[name] = i;
+                    case OpCode.SCOPE_PUSH:
+                    case OpCode.CONTAINER_START:
+                        depth++;
+                        break;
+
+                    case OpCode.SCOPE_POP:
+                    case OpCode.CONTAINER_END:
+                        depth = Math.Max(0, depth - 1);
+                        break;
+                }
+
+                if (instr.OpCode == OpCode.LABEL)
+                {
+                    string name = (string)instr.Args[0];
+                    if (!labelCache.Peek().ContainsKey(name))
+                        labelCache.Peek()[name] = (i, depth);
                 }
             }
         }
 
-        if (!labelCache.TryGetValue(label, out int targetIndex))
+        if (!labelCache.Peek().TryGetValue(label, out var target))
             throw new WinterForgeExecutionException($"Unknown label '{label}'");
+
+        int targetIndex = target.Index;
+        int targetDepth = target.Depth;
+
+        // unwind runtime scopes until we match the target label's depth
+        int currentDepth = scopeStack.Count;
+        while (currentDepth > targetDepth)
+        {
+            // mirror the behavior of OpCode.SCOPE_POP / CONTAINER_END cleanup
+            scopeStack.Pop();
+            currentDepth--;
+        }
+
+        if (currentDepth < targetDepth)
+            throw new WinterForgeExecutionException($"Attempted to jump into a deeper scope ('{label}'). Jumps into deeper scope are not allowed.");
 
         // set next instruction index to the target
         instructionIndexStack.Pop();
@@ -1306,15 +1334,12 @@ ExpressionBuilding:
             targetType: target is Type t ? t : target.GetType(),
             methodName,
             target: target is Type ? null : target,
-            arguments: args);
+            args: [.. args]);
 
-        if (val is null)
-        {
-            CurrentContext.ValueStack.Push(null);
+        if (val is Type rett && rett == typeof(void))
             return;
-        }
 
-        if (!val.GetType().IsClass && !val.GetType().IsPrimitive)
+        if (val is not null && !val.GetType().IsClass && !val.GetType().IsPrimitive)
         {
             object* ptr = &val;
             var v = new StructReference(ptr);
@@ -1356,6 +1381,9 @@ ExpressionBuilding:
     {
         onDispatch ??= delegate { };
         object? value;
+
+        if(arg is string stringArg && stringArg.StartsWith('"') && stringArg.EndsWith('"'))
+            return stringArg[1..^1];
 
         // Quick scope-name resolution for simple identifier strings (scope-first).
         if (arg is string plain && !plain.StartsWith("#") && !plain.StartsWith("_"))

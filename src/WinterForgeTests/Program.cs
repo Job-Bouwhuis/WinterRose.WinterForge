@@ -47,8 +47,7 @@ internal class Program
         WinterForge.AllowCustomCompilers = false;
         WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
 
-        //WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin", TargetFormat.IntermediateRepresentation);
-        //return;
+        WinterForge.ConvertFromFileToFile("human.txt", "opcodesAsText.txt", TargetFormat.ReadableIntermediateRepresentation);
 
         WinterForgeVM.Debug = true;
         using FileStream stream = File.OpenRead("bytes.wfbin");

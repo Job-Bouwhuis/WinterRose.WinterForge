@@ -586,6 +586,14 @@ namespace WinterRose.WinterForgeSerializing
                 if (target is TargetFormat.IntermediateRepresentation)
                 {
                     new HumanReadableParser().Parse(serialized, opcodes);
+
+                }
+                else if(target is TargetFormat.ReadableIntermediateRepresentation)
+                {
+                    using MemoryStream mem = new();
+                    new HumanReadableParser().Parse(serialized, mem);
+                    mem.Position = 0;
+                    new OpcodeToReadableOpcodeParser().Parse(mem, opcodes);
                 }
                 else
                 {

@@ -21,7 +21,7 @@ internal static class ContainerParser
         string? line = parser.currentLine;
         while (string.IsNullOrWhiteSpace(line))
         {
-            line = parser.ReadNonEmptyLine();
+            line = parser.ReadLine();
             if (line == null) break; // EOF
             line = line.Trim();
         }
@@ -234,7 +234,7 @@ internal static class ContainerParser
 
         // give the template body to the parser (so ParseBlock/ParseObjectOrAssignment will run)
         parser.EnqueueLines(bodyLines);
-        parser.ContinueWithBody();
+        parser.ContinueWithBlock(null, true);
 
         WriteOpcode(output, OpCode.TEMPLATE_END, templateName);
     }
@@ -254,7 +254,7 @@ internal static class ContainerParser
         WriteOpcode(output, OpCode.CONSTRUCTOR_START, args.ToArray());
 
         parser.EnqueueLines(bodyLines);
-        parser.ContinueWithBody();
+        parser.ContinueWithBlock(null, true);
 
         WriteOpcode(output, OpCode.CONSTRUCTOR_END, constructorName);
     }
@@ -266,7 +266,7 @@ internal static class ContainerParser
         var result = new List<string>();
         int depth = 1; // caller consumed the initial opening brace
         string? line;
-        while ((line = parser.ReadNonEmptyLine()) != null)
+        while ((line = parser.ReadLine()) != null)
         {
             string trimmed = line;
             // We must count braces in the raw line (handles same-line braces)
@@ -420,7 +420,7 @@ internal static class ContainerParser
     private static void SeekToNextNonEmptyLineExpecting(string expected, HumanReadableParser parser)
     {
         string? l;
-        while ((l = parser.ReadNonEmptyLine()) != null)
+        while ((l = parser.ReadLine()) != null)
         {
             if (string.IsNullOrWhiteSpace(l)) continue;
             if (l.Trim() == expected) return;

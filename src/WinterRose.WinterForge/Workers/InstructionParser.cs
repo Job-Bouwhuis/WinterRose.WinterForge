@@ -12,17 +12,6 @@ namespace WinterRose.WinterForgeSerializing
 {
     public static class InstructionParser
     {
-        private static int Find(this List<string> strings, string element)
-        {
-            for (int i = 0; i < strings.Count; i++)
-            {
-                string s = strings[i];
-                if (s == element)
-                    return i;
-            }
-            return -1;
-        }
-
         /// <summary>
         /// Parses opcodes into instructions. inserting a progress mark every <paramref name="progressInterval"/>. <br></br>
         /// eg: if <paramref name="progressInterval"/> is 20, 3 will be inserted

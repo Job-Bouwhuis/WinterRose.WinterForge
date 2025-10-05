@@ -6,21 +6,27 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using WinterRose.WinterForgeSerializing;
+using WinterRose.WinterForgeSerializing.Formatting;
 
 namespace WinterRose.WinterForgeSerializing.Workers
 {
     public class DynamicMethodInvoker
     {
-        public static object? InvokeMethodWithArguments(Type targetType, string methodName, object? target, object[] arguments)
+        public static object? InvokeMethodWithArguments(Type targetType, string methodName, object? target, object[] args)
         {
             MethodInfo[] methods = targetType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
 
-            MethodInfo matchedMethod = GetBestMatchingMethod(methods, methodName, arguments, out arguments);
+            MethodInfo matchedMethod = GetBestMatchingMethod(methods, methodName, args, out object[] arguments);
 
             if (matchedMethod == null)
-                throw new Exception($"No matching method found for method '{methodName}' with the given arguments.");
+            {
+                string argsString = args.Length == 0 ? "[]" : "[" + string.Join(", ", args.Select(a => ObjectSerializer.ParseTypeName(a.GetType()))) + "]";
+                throw new Exception($"No matching method found for method '{methodName}' with the given argument types: {argsString} ");
+            }
 
             object? result = matchedMethod.Invoke(target, arguments);
+            if(matchedMethod.ReturnType == typeof(void))
+                return typeof(void);
             return result;
         }
 
