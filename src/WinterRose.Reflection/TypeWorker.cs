@@ -256,7 +256,6 @@ namespace WinterRose
                     if (type is null || type.IsAbstract || type.IsInterface)
                         continue;
 
-                    // Check all base types and interfaces
                     Type? current = type;
                     while (current != null && current != typeof(object))
                     {
@@ -308,7 +307,7 @@ namespace WinterRose
                     bool implements = false;
                     foreach (var i in interfaces)
                     {
-                        if (i.IsAssignableFrom(target))
+                        if (target.IsAssignableTo(i))
                         {
                             implements = true;
                         }
