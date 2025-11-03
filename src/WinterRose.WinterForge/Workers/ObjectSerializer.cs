@@ -478,9 +478,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             if (value is string s)
             {
+                if(s.Contains('\\'))
+                    s = s.Replace("\\", "\\\\");
                 if (s.Contains('\n'))
                     return $"\"\"\"\"\"{s}\"\"\"\"\"";
-                return $"\"{value}\"";
+                return $"\"{s}\"";
             }
 
             // Check if the value is a primitive or string

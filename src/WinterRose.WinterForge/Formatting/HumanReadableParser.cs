@@ -1546,6 +1546,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             else if (value.StartsWith("#type"))
                 return value;
+            else if (value.StartsWith("#ref"))
+                return value;
+            else if (value.StartsWith("#stack"))
+                return value;
             else if (value.Contains('.') && !IsValidNumericString(value) && !value.Contains('<'))
             {
                 string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -1743,7 +1747,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                         '\\' => '\\',
                         'n' => '\n',
                         't' => '\t',
-                        _ => '\\' + c.ToString()
+                        _ => throw new WinterForgeFormatException("Invalid escape character \\" + c)
                     });
 
                     inEscape = false;
