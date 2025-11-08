@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices.ObjectiveC;
 using System.Text;
@@ -36,6 +37,7 @@ namespace WinterRose.Reflection
             CACHE[field] = data;
             return data;
         }
+
         public static MemberData FromProperty(PropertyInfo property)
         {
             if (CACHE.TryGetValue(property, out var cached))
@@ -60,7 +62,9 @@ namespace WinterRose.Reflection
             throw new InvalidOperationException("Only fields and properties are supported");
         }
 
-        protected MemberData() { }
+        protected MemberData()
+        {
+        }
 
         public static implicit operator MemberData(FieldInfo field) => FromField(field);
         public static implicit operator MemberData(PropertyInfo property) => FromProperty(property);
@@ -68,27 +72,40 @@ namespace WinterRose.Reflection
         /// <summary>
         /// The identifier of the field or property.
         /// </summary>
-        public virtual string Name => fieldsource?.Name ?? propertysource?.Name ?? throw new InvalidOperationException("No field or property found.");
+        public virtual string Name => fieldsource?.Name ??
+                                      propertysource?.Name ??
+                                      throw new InvalidOperationException("No field or property found.");
+
         /// <summary>
         /// The kind of member this is.
         /// </summary>
         public virtual MemberTypes MemberType => fieldsource is not null ? MemberTypes.Field : MemberTypes.Property;
+
         /// <summary>
         /// The type of the field or property.
         /// </summary>
-        public virtual Type Type => fieldsource?.FieldType ?? propertysource?.PropertyType ?? throw new InvalidOperationException("No field or property found.");
+        public virtual Type Type => fieldsource?.FieldType ?? propertysource?.PropertyType ??
+            throw new InvalidOperationException("No field or property found.");
+
         /// <summary>
         /// The custom attributes on the field or property.
         /// </summary>
         public Attribute[] Attributes { get; private set; }
+
         /// <summary>
         /// Field attributes, if this is a field. Otherwise, throws an <see cref="InvalidOperationException"/>.
         /// </summary>
-        public virtual FieldAttributes FieldAttributes => fieldsource?.Attributes ?? throw new InvalidOperationException("No field or property found.");
+        public virtual FieldAttributes FieldAttributes => fieldsource?.Attributes ??
+                                                          throw new InvalidOperationException(
+                                                              "No field or property found.");
+
         /// <summary>
         /// Property attributes, if this is a property. Otherwise, throws an <see cref="InvalidOperationException"/>.
         /// </summary>
-        public virtual PropertyAttributes PropertyAttributes => propertysource?.Attributes ?? throw new InvalidOperationException("No field or property found.");
+        public virtual PropertyAttributes PropertyAttributes => propertysource?.Attributes ??
+                                                                throw new InvalidOperationException(
+                                                                    "No field or property found.");
+
         /// <summary>
         /// Indicates if the field or property is public.
         /// </summary>
@@ -109,10 +126,12 @@ namespace WinterRose.Reflection
                 throw new InvalidOperationException("No field or property found.");
             }
         }
+
         /// <summary>
         /// Indicates if the property has a setter.
         /// </summary>
         public virtual bool PropertyHasSetter => propertysource?.GetSetMethod(true) != null;
+
         /// <summary>
         /// Indicates if the field or property is static.
         /// </summary>
@@ -141,11 +160,17 @@ namespace WinterRose.Reflection
         /// <summary>
         /// Indicates if the field is readonly. eg const or readonly
         /// </summary>
-        public virtual bool IsInitOnly => fieldsource?.IsInitOnly ?? throw new InvalidOperationException("This Memberdata object represents a property");
+        public virtual bool IsInitOnly => fieldsource?.IsInitOnly ??
+                                          throw new InvalidOperationException(
+                                              "This Memberdata object represents a property");
+
         /// <summary>
         /// Indicates if the field is a literal. eg const or static readonly
         /// </summary>
-        public virtual bool IsLiteral => fieldsource?.IsLiteral ?? throw new InvalidOperationException("This MemberData object represents a property.");
+        public virtual bool IsLiteral => fieldsource?.IsLiteral ??
+                                         throw new InvalidOperationException(
+                                             "This MemberData object represents a property.");
+
         /// <summary>
         /// Indicates if the field or property can be written to.
         /// </summary>
@@ -153,6 +178,8 @@ namespace WinterRose.Reflection
         {
             get
             {
+                if (HasAttribute<ReadOnlyAttribute>())
+                    return false;
                 if (fieldsource is not null)
                 {
                     return !fieldsource.IsInitOnly && !fieldsource.IsLiteral;
@@ -167,6 +194,7 @@ namespace WinterRose.Reflection
                 }
             }
         }
+
         /// <summary>
         /// Whether or not the type is a reference type
         /// </summary>
@@ -237,7 +265,7 @@ namespace WinterRose.Reflection
         /// </summary>
         /// <returns>The object stored in the field or property</returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public virtual unsafe object? GetValue<TTarget>(ref TTarget? obj)
+        public virtual object? GetValue<TTarget>(ref TTarget? obj)
         {
             if (propertysource is null && fieldsource is null)
                 throw new InvalidOperationException("This MemberData object is invalid");
@@ -254,6 +282,112 @@ namespace WinterRose.Reflection
             return propertysource!.GetValue(obj);
         }
 
+        public delegate ref TField FieldRefGetter<TTarget, TField>(TTarget target);
+
+        public delegate ref TField FieldRefGetterByRef<TTarget, TField>(ref TTarget target);
+
+        /// <summary>
+        /// Returns a by-ref reference to a field on the provided target object.
+        /// Only fields are supported (not properties). Uses DynamicMethod + IL generation.
+        /// </summary>
+        /// <typeparam name="TTarget">Type of the target object (owner of the field).</typeparam>
+        /// <typeparam name="TField">Type of the field to return by ref.</typeparam>
+        /// <param name="obj">Target instance (passed by ref for value-type owners).</param>
+        /// <returns>Reference to the field value.</returns>
+        public ref TField GetValueRef<TTarget, TField>(ref TTarget? obj)
+        {
+            if (propertysource is not null)
+                throw new InvalidOperationException("Cannot return a ref for a property; only fields are supported.");
+
+            if (fieldsource is null)
+                throw new InvalidOperationException("This MemberData object is invalid (no field info).");
+
+            var field = fieldsource; // FieldInfo
+            var fieldType = field.FieldType;
+            var wantedFieldType = typeof(TField);
+            if (fieldType != wantedFieldType)
+                throw new InvalidOperationException(
+                    $"Field type mismatch. Field is '{fieldType}', requested '{wantedFieldType}'.");
+
+            Type ownerType = field.DeclaringType ?? typeof(TTarget);
+
+            // Static field: produce a dynamic method with no owner parameter
+            if (field.IsStatic)
+            {
+                if (field.IsInitOnly)
+                    throw new InvalidOperationException("Cannot return a ref to an init-only (readonly) static field.");
+
+                var dm = new DynamicMethod(
+                    $"__get_stc_field_ref_{ownerType.Name}_{field.Name}",
+                    wantedFieldType.MakeByRefType(),
+                    Type.EmptyTypes,
+                    ownerType,
+                    true);
+
+                var il = dm.GetILGenerator();
+                il.Emit(OpCodes.Ldsflda, field); // load static field address
+                il.Emit(OpCodes.Ret);
+
+                var del = (FuncRefWrapper<TField>)dm.CreateDelegate(typeof(FuncRefWrapper<TField>));
+                // helper delegate wrapper to call the no-arg dynamic method and get ref
+                return ref del.Invoke();
+            }
+
+            // Instance field: two cases: owner is value-type or reference-type
+            if (ownerType.IsValueType)
+            {
+                // DM signature: ref TField Method(ref TTarget owner)
+                var dm = new DynamicMethod(
+                    $"__get_vt_field_ref_{ownerType.Name}_{field.Name}",
+                    wantedFieldType.MakeByRefType(),
+                    new Type[] { ownerType.MakeByRefType() },
+                    ownerType,
+                    true);
+
+                var il = dm.GetILGenerator();
+                il.Emit(OpCodes.Ldarg_0); // load managed reference to value-type owner (TTarget&)
+                il.Emit(OpCodes.Ldflda, field); // load field address within value type
+                il.Emit(OpCodes.Ret);
+
+                var typedDel =
+                    (FieldRefGetterByRef<TTarget, TField>)dm.CreateDelegate(
+                        typeof(FieldRefGetterByRef<TTarget, TField>));
+                if (obj is null)
+                    throw new NullReferenceException("Target is null.");
+                // call and return the ref
+                return ref typedDel(ref obj!);
+            }
+            else
+            {
+                // owner is reference type
+                // DM signature: ref TField Method(TTarget owner)
+                var dm = new DynamicMethod(
+                    $"__get_ref_field_ref_{ownerType.Name}_{field.Name}",
+                    wantedFieldType.MakeByRefType(),
+                    new Type[] { ownerType },
+                    ownerType,
+                    true);
+
+                var il = dm.GetILGenerator();
+                il.Emit(OpCodes.Ldarg_0); // push object reference
+                il.Emit(OpCodes.Ldflda, field); // load address of instance field
+                il.Emit(OpCodes.Ret);
+
+                var typedDel =
+                    (FieldRefGetter<TTarget, TField>)dm.CreateDelegate(typeof(FieldRefGetter<TTarget, TField>));
+                if (obj is null)
+                    throw new NullReferenceException("Target is null.");
+
+                // For reference-type owners we pass the instance (not byref)
+                return ref typedDel(obj!);
+            }
+        }
+
+        // helper delegate type & wrapper used for static-field no-arg dynamicmethod case
+        // it's necessary because a dynamic method returning ref needs a delegate type that returns ref.
+        // we create a small strongly typed delegate on the fly.
+        public delegate ref TField FuncRefWrapper<TField>();
+
         /// <summary>
         /// For a static value.
         /// </summary>
@@ -268,6 +402,7 @@ namespace WinterRose.Reflection
                 return fieldsource.GetValue(null);
             return propertysource!.GetValue(null);
         }
+
         /// <summary>
         /// Writes the value to the field or property. If the field or property is readonly, an <see cref="InvalidOperationException"/> is thrown.
         /// </summary>
@@ -301,7 +436,7 @@ namespace WinterRose.Reflection
             object actualValue = value;
             if (Type.IsEnum)
             {
-                if(value.GetType() != Type)
+                if (value.GetType() != Type)
                 {
                     if (value.GetType() != Enum.GetUnderlyingType(Type))
                     {
@@ -310,9 +445,8 @@ namespace WinterRose.Reflection
 
                     actualValue = Enum.ToObject(Type, actualValue);
                 }
-                
             }
-            else if(value != null && value.GetType() != Type)
+            else if (value != null && value.GetType() != Type)
             {
                 actualValue = CastValue(value, Type);
             }
@@ -323,8 +457,8 @@ namespace WinterRose.Reflection
         private static object CastValue<T>(T value, Type target)
         {
             if (TypeWorker.SupportedPrimitives.Contains(target)
-                                && TypeWorker.SupportedPrimitives.Contains(value.GetType())
-                                && target != value.GetType())
+                && TypeWorker.SupportedPrimitives.Contains(value.GetType())
+                && target != value.GetType())
                 return TypeWorker.CastPrimitive(value, target);
             else if (TypeWorker.FindImplicitConversionMethod(target, value.GetType()) is MethodInfo conversionMethod)
                 return conversionMethod.Invoke(null, [value])!;
@@ -377,6 +511,7 @@ namespace WinterRose.Reflection
                 if (attr is T)
                     return true;
             }
+
             return false;
         }
 
@@ -392,6 +527,7 @@ namespace WinterRose.Reflection
                 if (attr is T a)
                     return a;
             }
+
             return null;
         }
 
@@ -407,6 +543,7 @@ namespace WinterRose.Reflection
                 if (attr.GetType().IsAssignableTo(attrType))
                     return attr;
             }
+
             return null;
         }
 
@@ -418,7 +555,10 @@ namespace WinterRose.Reflection
             return $"{publicOrPrivate} {propOrField} <{{{Name}}} = {writable}>";
         }
 
-        public static implicit operator FieldInfo(MemberData d) => d.fieldsource ?? throw new InvalidCastException("Member was not a field");
-        public static implicit operator PropertyInfo(MemberData d) => d.propertysource ?? throw new InvalidCastException("Member was not a property");
+        public static implicit operator FieldInfo(MemberData d) =>
+            d.fieldsource ?? throw new InvalidCastException("Member was not a field");
+
+        public static implicit operator PropertyInfo(MemberData d) =>
+            d.propertysource ?? throw new InvalidCastException("Member was not a property");
     }
 }
