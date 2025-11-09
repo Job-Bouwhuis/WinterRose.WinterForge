@@ -294,7 +294,7 @@ namespace WinterRose.Reflection
         /// <typeparam name="TField">Type of the field to return by ref.</typeparam>
         /// <param name="obj">Target instance (passed by ref for value-type owners).</param>
         /// <returns>Reference to the field value.</returns>
-        public ref TField GetValueRef<TTarget, TField>(ref TTarget? obj)
+        public ref TField GetValueRef<TTarget, TField>(ref TTarget obj)
         {
             if (propertysource is not null)
                 throw new InvalidOperationException("Cannot return a ref for a property; only fields are supported.");
@@ -309,7 +309,8 @@ namespace WinterRose.Reflection
                 throw new InvalidOperationException(
                     $"Field type mismatch. Field is '{fieldType}', requested '{wantedFieldType}'.");
 
-            Type ownerType = field.DeclaringType ?? typeof(TTarget);
+            Type ownerParamType = typeof(TTarget); // used for the dynamic-method parameter types (must match delegate)
+            Type ownerForAccess = field.DeclaringType ?? typeof(TTarget); // used as 'owner' for DynamicMethod ctor
 
             // Static field: produce a dynamic method with no owner parameter
             if (field.IsStatic)
@@ -318,10 +319,10 @@ namespace WinterRose.Reflection
                     throw new InvalidOperationException("Cannot return a ref to an init-only (readonly) static field.");
 
                 var dm = new DynamicMethod(
-                    $"__get_stc_field_ref_{ownerType.Name}_{field.Name}",
+                    $"__get_stc_field_ref_{ownerForAccess.Name}_{field.Name}",
                     wantedFieldType.MakeByRefType(),
                     Type.EmptyTypes,
-                    ownerType,
+                    ownerForAccess,
                     true);
 
                 var il = dm.GetILGenerator();
@@ -334,14 +335,14 @@ namespace WinterRose.Reflection
             }
 
             // Instance field: two cases: owner is value-type or reference-type
-            if (ownerType.IsValueType)
+            if (ownerParamType.IsValueType)
             {
                 // DM signature: ref TField Method(ref TTarget owner)
                 var dm = new DynamicMethod(
-                    $"__get_vt_field_ref_{ownerType.Name}_{field.Name}",
+                    $"__get_vt_field_ref_{ownerParamType.Name}_{field.Name}",
                     wantedFieldType.MakeByRefType(),
-                    new Type[] { ownerType.MakeByRefType() },
-                    ownerType,
+                    new Type[] { ownerParamType.MakeByRefType() },  // must match FieldRefGetterByRef<TTarget,TField>
+                    ownerForAccess,
                     true);
 
                 var il = dm.GetILGenerator();
@@ -362,10 +363,10 @@ namespace WinterRose.Reflection
                 // owner is reference type
                 // DM signature: ref TField Method(TTarget owner)
                 var dm = new DynamicMethod(
-                    $"__get_ref_field_ref_{ownerType.Name}_{field.Name}",
+                    $"__get_ref_field_ref_{ownerParamType.Name}_{field.Name}",
                     wantedFieldType.MakeByRefType(),
-                    new Type[] { ownerType },
-                    ownerType,
+                    new Type[] { ownerParamType }, // must match FieldRefGetter<TTarget,TField>
+                    ownerForAccess,
                     true);
 
                 var il = dm.GetILGenerator();
