@@ -9,35 +9,35 @@
 - [Flow Hooks](FlowHooks.md)  
 - [Access Restrictions](Access_Restrictions.md)  
 
-## \_ref(int)
+## \#ref(int)
 
 Gets a reference to the object with the given integer ID.
 In most places within the format, it is allowed that the requested ID is not yet available. 
 eg:
 ```
 Transform : 0 {
-	Position = _ref(1);
+	Position = #ref(1);
 }
 
 Vector3(1, 2, 3) : 1;
 ```
 
 
-## \_stack()
+## \#stack()
 
 Gets and pops the top element on the stack. Used for collections.
 
 eg:
 ```
 <int>[1, 2, 3]
-return _stack();
+return #stack();
 ```
 
 
-## \_type()
+## \#type()
 Represents a type literal
 
 eg:
 ```
-someType = _type(System.Math);
+someType = #type(System.Math);
 ```
