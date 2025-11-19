@@ -143,7 +143,7 @@ WinterForge.SerializeToFile(foo, "foo.txt");
 Person fooClone = WinterForge.DeserializeFromFile<Person>("foo.txt");
 ```
 #### **Human Readable**
-```
+```text
 Person : 0 {
     name = "Roza";
     age = 21;
@@ -165,7 +165,7 @@ Person : 0 {
 
 #### **Opcodes**
 Opcode format may change in the future. Backwards compatibility between this format and the potential new one will exist if the format ever changes
-```
+```text
 0 Person 0 0
 1 name "Roza"
 1 age 21
@@ -188,12 +188,11 @@ Opcode format may change in the future. Backwards compatibility between this for
 ```
 
 #### **Binary Opcodes**
-    This feature is work in progress. Backwards compatibility to the textual opcodes as shown above will forever remain.
+    WinterForge compiles the IR opcodes as shown above into a bytestream optimized for the combination of speed, size, and data completeness
 
 
 ## Default Field/Property Inclusion Rules
-
-    Here’s how Winterforge decides what to include by default during serialization:
+    Hereâ€™s how Winterforge decides what to include by default during serialization:
 
     ```csharp
     public class Example
