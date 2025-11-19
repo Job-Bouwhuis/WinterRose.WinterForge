@@ -25,19 +25,18 @@ Vector3(1, 2, 3) : 1;
 
 ## \#stack()
 
-Gets and pops the top element on the stack. Used for collections.
+Gets and pops the top element on the stack. Mostly used for collections.
 
 eg:
 ```
 <int>[1, 2, 3]
-return #stack();
+var numbers = #stack();
 ```
-
 
 ## \#type()
 Represents a type literal
 
 eg:
 ```
-someType = #type(System.Math);
+var someType = #type(System.Math);
 ```
