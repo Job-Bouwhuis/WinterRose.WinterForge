@@ -1255,16 +1255,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             string cur = currentLine[(typeOpen + start.Length + 1)..];
 
             bool lastCharWasClose = false;
-            var debugOutput = new StringBuilder();
 
             do
             {
                 foreach (char c in cur)
                 {
-                    if (cur == "Name = \"Level 1\";")
-                        ;
-                    debugOutput.Append(c); // capture every character processed
-
                     int res = HandleChar(
                         ref insideFunction,
                         ref collectingString,
@@ -1283,16 +1278,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 if (collectingDefinition)
                     currentElement.Append('\n');
-                debugOutput.AppendLine();
             } while ((cur = ReadLine()) != null);
-
-            // Dump debug output to file and open Notepad
-            string tempFile = Path.Combine(Path.GetTempPath(), "WinterForgeDebugOutput.txt");
-
-            debugOutput.AppendLine($"\n\n\nListDepth details:\nIncremented: {ldI}\nDecremeted: {ldD}");
-
-            File.WriteAllText(tempFile, debugOutput.ToString());
-            Process.Start(new ProcessStartInfo("notepad.exe", tempFile) { UseShellExecute = true });
 
             throw new WinterForgeFormatException("Expected ']' to close list.");
         }

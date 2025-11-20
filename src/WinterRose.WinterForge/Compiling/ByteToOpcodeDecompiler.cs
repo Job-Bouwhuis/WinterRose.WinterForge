@@ -5,7 +5,7 @@ using WinterRose.WinterForgeSerializing.Instructions;
 
 namespace WinterRose.WinterForgeSerializing.Compiling;
 
-public class ByteToOpcodeParser
+public class ByteToOpcodeDecompiler
 {
     public static bool WaitIndefinitelyForData { get; set; } = false;
 
@@ -244,6 +244,26 @@ public class ByteToOpcodeParser
     private static object? ReadAny(BinaryReader reader)
     {
         ValuePrefix type = (ValuePrefix)reader.ReadByte();
+
+        if(type is ValuePrefix.NONE)
+        {
+            // see if theres a custom value compiler, if so, use it
+            int isCustomCompiler = reader.PeekChar();
+            if (isCustomCompiler != 0)
+                throw new InvalidDataException($"Unknown type prefix {(byte)type}");
+
+            reader.ReadByte(); // consume marker
+
+            uint compilerID = reader.ReadUInt32();
+            int objectId = reader.ReadInt32();
+            if (CustomValueCompilerRegistry.TryGetById(compilerID, out var compiler))
+            {
+                return compiler.Decompile(reader);
+            }
+            else
+                throw new InvalidOperationException($"Expected compiler with id {compilerID} to exist, but it didn't");
+        }
+
         return type switch
         {
             ValuePrefix.STRING => ReadString(reader, true),

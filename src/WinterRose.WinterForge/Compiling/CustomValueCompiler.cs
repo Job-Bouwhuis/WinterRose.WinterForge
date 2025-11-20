@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using WinterRose.WinterForgeSerializing.Workers;
 
 namespace WinterRose.WinterForgeSerializing.Compiling;
+
 public abstract class CustomValueCompiler<T> : ICustomValueCompiler
 {
     // This hash is used as the unique identifier for the compiled form
@@ -33,7 +35,29 @@ public abstract class CustomValueCompiler<T> : ICustomValueCompiler
     void ICustomValueCompiler.Compile(BinaryWriter writer, object value)
     {
         if (value.GetType() != typeof(T))
-            throw new InvalidOperationException($"Compiler expects type {typeof(T).FullName} but got {value.GetType().FullName}");
+        {
+            try
+            {
+                if (CustomValueProviderCache.Get(typeof(T), out var provider))
+                {
+                    object val = provider._CreateObject(value, null);
+                    if (val?.GetType() != typeof(T))
+                        throw new InvalidOperationException($"Compiler expects type {typeof(T).FullName} but got {value.GetType().FullName}");
+                    value = val;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Compiler expects type {typeof(T).FullName} but got {value.GetType().FullName}");
+                }
+            }
+            catch { } // best effort
+        }
+
+        if(value is not T)
+        {
+
+        }
+
         Compile(writer, (T)value);
     }
     object? ICustomValueCompiler.Decompile(BinaryReader reader) => Decompile(reader);

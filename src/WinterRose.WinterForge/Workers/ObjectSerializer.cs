@@ -272,6 +272,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     continue;
                 }
 
+                bool cw = member.CanWrite;
+
                 if (InclusionRuleset.CheckMember(member))
                 {
                     progressTracker?.OnField(member.Name, 0, 0);
@@ -494,6 +496,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 using var str = new MemoryStream();
                 SerializeEnum(value, str);
                 return Encoding.UTF8.GetString(str.ToArray());
+            }
+
+            if(CustomValueProviderCache.Get(valueType, out var provider))
+            {
+                return (string)provider._CreateString(value, this);
             }
 
             // Handle arrays, lists, and collections (nested objects)

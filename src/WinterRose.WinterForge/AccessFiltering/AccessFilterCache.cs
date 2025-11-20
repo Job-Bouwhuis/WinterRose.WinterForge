@@ -16,6 +16,7 @@ using System.Transactions;
 using System.Xml.Serialization;
 using WinterRose.Reflection;
 using WinterRose.WinterForgeSerializing;
+using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Workers;
 
@@ -77,6 +78,8 @@ namespace WinterRose.WinterForgeSerializing
             GetFilter(typeof(ObjectSerializer), AccessFilterKind.Whitelist);
             GetFilter(typeof(HumanReadableParser), AccessFilterKind.Whitelist);
             GetFilter(typeof(HumanReadableIndenter), AccessFilterKind.Whitelist);
+            GetFilter(typeof(OpcodeToByteCompiler), AccessFilterKind.Whitelist);
+            GetFilter(typeof(ByteToOpcodeDecompiler), AccessFilterKind.Whitelist);
             GetFilter(typeof(WinterForgeVM), AccessFilterKind.Whitelist);
             GetFilter(typeof(InstructionParser), AccessFilterKind.Whitelist);
 

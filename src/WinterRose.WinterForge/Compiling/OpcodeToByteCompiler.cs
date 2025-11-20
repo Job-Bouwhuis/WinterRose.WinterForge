@@ -186,6 +186,7 @@ public class OpcodeToByteCompiler
                 EmitOpcode(writer, reader, bufferedLine, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
             }
 
+            // this loose scope is intentional to not interfere with the above foreach loop
             {
                 ValidateLine(writer, line, out var bufferedParts, out var bufferedOpcodeByte);
                 EmitOpcode(writer, reader, line, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
@@ -308,7 +309,16 @@ public class OpcodeToByteCompiler
                         MemberData mem = rh.GetMember(parts[1]);
                         Type fieldType = mem.Type;
                         ValuePrefix prefix = GetNumericValuePrefix(fieldType);
-                        if (prefix is ValuePrefix.NONE)
+
+                        if(parts[2] is not "#stack()" && CustomValueCompilerRegistry.TryGetByType(fieldType, out ICustomValueCompiler compiler))
+                        {
+                            writer.Write((byte)0x00);
+                            writer.Write((byte)0x00);
+                            writer.Write(compiler.CompilerId);
+                            writer.Write(-1);
+                            compiler.Compile(writer, parts[2]);
+                        }
+                        else if (prefix is ValuePrefix.NONE)
                             WriteAny(writer, parts[2]);
                         else
                             WritePrefered(writer, parts[2], prefix);

@@ -696,7 +696,7 @@ ExpressionBuilding:
             fileName = fileName[1..^1];
 
         using FileStream stream = File.OpenRead(fileName);
-        var instr = ByteToOpcodeParser.Parse(stream);
+        var instr = ByteToOpcodeDecompiler.Parse(stream);
         var VM = new WinterForgeVM();
 
         object? val = VM.Execute(instr, true);
@@ -1238,8 +1238,8 @@ ExpressionBuilding:
         if (value is Dispatched)
             return; // value has been dispatched to be set later
 
-        if (member.Type.IsArray)
-            value = ((IList)value).GetInternalArray();
+        if (member.Type.IsArray && value is IList l && !value.GetType().IsArray)
+            value = l.GetInternalArray();
 
 
         member.SetValue(ref actualTarget, value);

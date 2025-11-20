@@ -224,7 +224,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <returns></returns>
         public static object? DeserializeFromStream(Stream stream, WinterForgeProgressTracker? progressTracker = null)
         {
-            var instr = ByteToOpcodeParser.Parse(stream);
+            var instr = ByteToOpcodeDecompiler.Parse(stream);
             object? result = null;
             DoDeserialization(out result, typeof(Nothing), instr, progressTracker);
             return result;
@@ -279,7 +279,7 @@ namespace WinterRose.WinterForgeSerializing
             new HumanReadableParser().Parse(serialized, opcodes);
             opcodes.Seek(0, SeekOrigin.Begin);
 
-            var instructions = ByteToOpcodeParser.Parse(serialized);
+            var instructions = ByteToOpcodeDecompiler.Parse(serialized);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -308,7 +308,7 @@ namespace WinterRose.WinterForgeSerializing
             new HumanReadableParser().Parse(humanReadable, opcodes);
             opcodes.Seek(0, SeekOrigin.Begin);
 
-            var instructions = ByteToOpcodeParser.Parse(opcodes);
+            var instructions = ByteToOpcodeDecompiler.Parse(opcodes);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -339,7 +339,7 @@ namespace WinterRose.WinterForgeSerializing
             using var opcodes = new MemoryStream();
             new OpcodeToByteCompiler(AllowCustomCompilers).Compile(mem, opcodes);
             opcodes.Position = 0;
-            var instructions = ByteToOpcodeParser.Parse(opcodes);
+            var instructions = ByteToOpcodeDecompiler.Parse(opcodes);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -362,7 +362,7 @@ namespace WinterRose.WinterForgeSerializing
         public static object? DeserializeFromFile(string path, WinterForgeProgressTracker? progressTracker = null)
         {
             using Stream opcodes = File.OpenRead(path);
-            var instructions = ByteToOpcodeParser.Parse(opcodes);
+            var instructions = ByteToOpcodeDecompiler.Parse(opcodes);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -371,11 +371,13 @@ namespace WinterRose.WinterForgeSerializing
         /// Deserializes from the file that has the opcodes
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="path"></param>
         /// <returns></returns>
         public static T? DeserializeFromFile<T>(string path, WinterForgeProgressTracker? progressTracker = null)
         {
-            return (T?)DeserializeFromFile(path, progressTracker);
+            object? res = DeserializeFromFile(path, progressTracker);
+            if (res is not T t)
+                throw new InvalidCastException($"Deserialized object is of type {res?.GetType().FullName ?? "null"}, cannot cast to {typeof(T).FullName}");
+            return t;
         }
 
         /// <summary>
