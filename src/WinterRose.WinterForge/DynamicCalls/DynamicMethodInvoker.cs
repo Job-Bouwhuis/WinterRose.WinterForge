@@ -26,7 +26,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 BindingFlags.Instance |
                 BindingFlags.FlattenHierarchy);
 
-            MethodInfo matchedMethod = GetBestMatchingMethod(methods, methodName, args, out object[] arguments);
+            MethodInfo matchedMethod = GetBestMatchingMethod(methods, methodName, args.Reverse().ToArray(), out object[] arguments);
 
             if (matchedMethod == null)
             {

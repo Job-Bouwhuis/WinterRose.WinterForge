@@ -608,53 +608,6 @@ ExpressionBuilding:
         if (returnVal is Dispatched)
             throw new WinterForgeExecutionException("Can not dispatch a return value!");
         return returnVal;
-
-        //if (arg0 == "null")
-        //    return null;
-
-        //if (arg0 is string stackTok && stackTok == "#stack()")
-        //    return CurrentContext.ValueStack.Peek();
-
-        //// if arg is a string name, prefer the top scope (variable/template) first
-        //if (arg0 is string name)
-        //{
-        //    if (CurrentScope is not null)
-        //    {
-        //        var id = CurrentScope.GetIdentifier(name);
-        //        if (id is Variable v)
-        //            return v.Value;
-
-        //        if (id is TemplateGroup tg)
-        //            return tg;
-        //    }
-
-        //    // not found on the top scope — try containers across contexts
-        //    if (TryGetContainerFromContexts(name, out Container c))
-        //        return c;
-
-        //    // maybe it's a numeric id encoded as string (e.g. "123")
-        //    if (int.TryParse(name, out int parsedId))
-        //    {
-        //        object val = GetObjectFromContexts(parsedId) ?? throw new Exception($"object with ID {parsedId} not found");
-        //        return val;
-        //    }
-
-        //    throw new Exception($"Identifier or container with name '{name}' not found");
-        //}
-
-        //// If arg is already an integer id (boxed int)
-        //if (arg0 is int intId)
-        //{
-        //    object val = GetObjectFromContexts(intId) ?? throw new Exception($"object with ID {intId} not found");
-        //    return val;
-        //}
-
-        //// If it's another numeric type (rare) try convert to int and lookup
-        //if (arg0 is long longId)
-        //{
-        //    object val = GetObjectFromContexts((int)longId) ?? throw new Exception($"object with ID {longId} not found");
-        //    return val;
-        //}
     }
 
     private void HandleAccess(Instruction instruction)
@@ -948,8 +901,8 @@ ExpressionBuilding:
         if (arg is Dispatched)
             throw new Exception("Other opcodes rely on PUSH having pushed its value, cant differ reference till later");
 
-        Type t = arg.GetType();
-        if (!arg.GetType().IsClass && !arg.GetType().IsPrimitive && arg.GetType() != typeof(decimal))
+        Type t = arg?.GetType() ?? typeof(object);
+        if (!t.IsClass && !t.IsPrimitive && t != typeof(decimal))
         {
             object* ptr = &arg;
             var v = new StructReference(ptr);

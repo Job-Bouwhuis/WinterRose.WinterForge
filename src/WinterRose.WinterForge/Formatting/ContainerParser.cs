@@ -114,9 +114,13 @@ internal static class ContainerParser
             }
 
             if (TryParseBlock(rawLine, blockLines, ref lineIndex, containerName))
+            {
+                lineIndex++;
                 continue;
-
-            lineIndex++;
+            }
+            else
+                throw new WinterForgeFormatException(rawLine, "Unknown line in container definition");
+                
         }
 
         bool TryParseBlock(string rawLine, List<string> blockLines, ref int lineIndex, string containerName = null)

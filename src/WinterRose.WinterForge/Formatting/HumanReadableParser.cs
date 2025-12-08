@@ -486,6 +486,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
         private void ParseVarCreation(bool isBody, string line, int eqI)
         {
+            if (eqI == -1 && line.EndsWith(';'))
+            {
+                eqI = line.Length - 1;
+                line += "null;";
+            }
             string varName = line[4..eqI].Trim();
             string rhs = line[(eqI + 1)..].Trim();
             if (rhs.EndsWith(';'))
@@ -493,6 +498,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             string tempVar = ValidateValue(rhs, isBody);
             WriteLine($"{opcodeMap[OpCode.FORCE_DEF_VAR]} {varName}");
             WriteLine($"{opcodeMap[OpCode.SET]} {varName} {tempVar}");
+            variables.Add(varName);
         }
 
         public static bool EndsWithParenOrParenSemicolon(string input)
@@ -1124,6 +1130,60 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             return parts;
         }
 
+        public static List<string> SplitPreserveQuotesAndParentheses(string input, char separator)
+        {
+            List<string> parts = new List<string>();
+            StringBuilder current = new StringBuilder();
+
+            bool inQuotes = false;
+            bool escape = false;
+            int parenDepth = 0;
+
+            foreach (char c in input)
+            {
+                if (escape)
+                {
+                    current.Append(c);
+                    escape = false;
+                }
+                else if (c == '\\')
+                {
+                    escape = true;
+                }
+                else if (c == '"')
+                {
+                    inQuotes = !inQuotes;
+                    current.Append(c);
+                }
+                else if (c == '(' && !inQuotes)
+                {
+                    parenDepth++;
+                    current.Append(c);
+                }
+                else if (c == ')' && !inQuotes)
+                {
+                    parenDepth--;
+                    current.Append(c);
+                }
+                else if (c == separator && !inQuotes && parenDepth == 0)
+                {
+                    // Split only if we're not in quotes and not inside parentheses
+                    parts.Add(current.ToString().Trim());
+                    current.Clear();
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+
+            // add the last part
+            if (current.Length > 0)
+                parts.Add(current.ToString().Trim());
+
+            return parts;
+        }
+
         private void HandleAccessing(string? id, bool isBody, string? line = null, bool allowNoRHS = false)
         {
             string[] assignmentParts = (line ?? currentLine).Split('=', 2, StringSplitOptions.TrimEntries);
@@ -1232,7 +1292,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 methodName = $"#ref({key})";
             }
             var argList = part.Substring(openParen + 1, closeParen - openParen - 1);
-            var args = SplitPreserveQuotes(argList, ',');
+            var args = SplitPreserveQuotesAndParentheses(argList, ',');
             for (int j = args.Count - 1; j >= 0; j--)
             {
                 string arg = args[j];
