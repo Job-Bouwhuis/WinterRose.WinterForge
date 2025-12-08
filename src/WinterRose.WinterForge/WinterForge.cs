@@ -21,11 +21,22 @@ namespace WinterRose.WinterForgeSerializing
 {
     /// <summary>
     /// The main delegation class for the WinterForge serialization system. <br></br>
-    /// First use tends to take a whole lot longer due to caching.<br></br><br></br>
+    /// First use tends to take a whole lot longer due to caching and JIT.<br></br><br></br>
     /// Do you have feedback, or are you hitting a wall? Feel free to reach out on Discord: '<b>thesnowowl</b>'
     /// </summary>
     public static class WinterForge
     {
+        /// <summary>
+        /// The working directory WinterForge uses. accessd by "#WorkingDir"
+        /// </summary>
+        public static string WorkingDir { get; set; } = Directory.GetCurrentDirectory();
+        /// <summary>
+        /// The directory scripts will be imported from when using a #import statement
+        /// </summary>
+        public static string ImportDir { get; set; } = WorkingDir;
+
+        public static bool NoAccessFilter { get; set; } = false;
+
         /// <summary>
         /// The primitive types that are handled as-is by WinterForge
         /// </summary>
@@ -97,8 +108,16 @@ namespace WinterRose.WinterForgeSerializing
             ObjectSerializer serializer = new(progressTracker);
 
             DoSerialization(serializer, o, serialized, formatted, targetFormat);
-
             byte[] bytes = formatted.ToArray();
+
+            if (targetFormat is TargetFormat.HumanReadable or TargetFormat.FormattedHumanReadable)
+            {
+                StringBuilder sb = new StringBuilder();
+                foreach (byte b in bytes)
+                    sb.Append((char)b);
+                return sb.ToString();
+            }
+            
             return Convert.ToBase64String(bytes);
         }
         /// <summary>
@@ -305,19 +324,16 @@ namespace WinterRose.WinterForgeSerializing
         {
             using var opcodes = new MemoryStream();
 
-            new HumanReadableParser().Parse(humanReadable, opcodes);
-            opcodes.Seek(0, SeekOrigin.Begin);
+            FinishSerialization(humanReadable, opcodes, TargetFormat.Optimized);
+            opcodes.Position = 0;
 
-            var instructions = ByteToOpcodeDecompiler.Parse(opcodes);
-            DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
-            return res;
+            return DeserializeFromStream(opcodes, progressTracker);
         }
         /// <summary>
         /// Deserializes from the given human readable stream
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="humanReadable"></param>
-        /// <param name="progress"></param>
         /// <returns></returns>
         public static T? DeserializeFromHumanReadableStream<T>(Stream humanReadable, WinterForgeProgressTracker? progressTracker = null)
         {

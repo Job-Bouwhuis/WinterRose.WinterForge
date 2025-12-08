@@ -480,7 +480,6 @@ ExpressionBuilding:
                 dispatchedReferences.Clear();
                 listStack.Clear();
                 instanceIDStack.Clear();
-
             }
 
             if (DebugAutoPrint)
@@ -695,7 +694,10 @@ ExpressionBuilding:
         if (fileName.StartsWith('"') && fileName.EndsWith('"'))
             fileName = fileName[1..^1];
 
-        using FileStream stream = File.OpenRead(fileName);
+        FileInfo? fileInf = new DirectoryInfo(WinterForge.ImportDir).GetFiles($"{fileName}.*").FirstOrDefault();
+        if (fileInf is null)
+            throw new WinterForgeExecutionException($"Import for file {fileName} can not be found in the WinterForge import directory: {WinterForge.ImportDir}");
+        using FileStream stream = fileInf.OpenRead();
         var instr = ByteToOpcodeDecompiler.Parse(stream);
         var VM = new WinterForgeVM();
 
@@ -1158,7 +1160,8 @@ ExpressionBuilding:
     {
         var field = (string)args[0];
         var rawValue = args[1];
-
+        if (field == "Name")
+            ;
         // --- Determine target object or global scope ---
         object? target = null;
         int? instanceID = instanceIDStack.Count > 0 ? instanceIDStack.Peek() : null;
@@ -1397,6 +1400,10 @@ ExpressionBuilding:
             {
                 return tg;
             }
+
+            Container[] containers = CurrentContext.Containers.Values.Where(c => c.Name == plain).ToArray();
+            if (containers.Length >= 1)
+                return containers[0];
         }
 
         switch (arg)
@@ -1508,6 +1515,9 @@ ExpressionBuilding:
         if (o.GetType() == target)
             return o;
 
+        if (target == typeof(object))
+            return o;
+
         if (target == typeof(Any) && o is string s)
         {
             return ParseToAny(s);
@@ -1561,7 +1571,7 @@ ExpressionBuilding:
     private static Type ParseTypeLiteral(string raw)
     {
         var inner = raw[6..^1];
-        return TypeWorker.FindType(inner);
+        return ResolveType(inner);
     }
 
     /// <summary>
@@ -1600,7 +1610,7 @@ ExpressionBuilding:
 
             resolvedType = baseType.MakeGenericType(resolvedGenericArgs);
         }
-        else // parse non generic types
+        else
         {
             resolvedType = TypeWorker.FindType(typeName);
         }

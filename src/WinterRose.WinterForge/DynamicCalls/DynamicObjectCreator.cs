@@ -14,47 +14,91 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         public static object CreateInstanceWithArguments(Type targetType, List<object> argumentStrings)
         {
-            if (argumentStrings.Count == 0 && targetType.IsValueType)
+            argumentStrings = ResolveArgumentTypes(argumentStrings);
+
+            if (argumentStrings.Count == 0)
                 return Activator.CreateInstance(targetType);
 
-            if (WinterForge.SupportedPrimitives.Contains(targetType)
-                && argumentStrings.Count == 1)
-            {
+            if (WinterForge.SupportedPrimitives.Contains(targetType) && argumentStrings.Count == 1)
                 return TypeWorker.CastPrimitive(argumentStrings[0], targetType);
-            }
 
-            if(!constructorCache.TryGetValue(targetType, out ConstructorInfo[] constructors))
-                    constructorCache[targetType] = constructors = targetType.GetConstructors(
-                        BindingFlags.Instance | BindingFlags.Public |
-                        BindingFlags.NonPublic | BindingFlags.CreateInstance);
+            if (!constructorCache.TryGetValue(targetType, out ConstructorInfo[] constructors))
+                constructorCache[targetType] = constructors = targetType.GetConstructors(
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.CreateInstance);
 
-            if(argumentStrings.Count == 0)
-                foreach(var c in constructors)
-                    if (c.GetParameters().Length == 0)
-                        return c.Invoke([]);
+            ConstructorInfo? bestMatch = null;
+            object[] bestConvertedArgs = Array.Empty<object>();
+            int bestScore = -1;
 
             foreach (var constructor in constructors)
             {
                 ParameterInfo[] parameters = constructor.GetParameters();
+                if (argumentStrings.Count > parameters.Length)
+                    continue;
 
-                if (parameters.Length == argumentStrings.Count)
-                    if (TryConvertArguments(argumentStrings, parameters, out object[] convertedArgs))
-                        return constructor.Invoke(convertedArgs);
+                object[] tempConverted = new object[parameters.Length];
+                bool match = true;
+                int score = 0;
+
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    Type paramType = parameters[i].ParameterType;
+
+                    if (i < argumentStrings.Count)
+                    {
+                        object arg = argumentStrings[i];
+
+                        if (paramType == typeof(object))
+                        {
+                            tempConverted[i] = arg;
+                            continue;
+                        }
+
+                        if (arg != null && arg.GetType() == paramType)
+                        {
+                            tempConverted[i] = arg;
+                            score++;
+                            continue;
+                        }
+
+                        if (!TryConvertArgument(arg, paramType, out object convertedArg))
+                        {
+                            match = false;
+                            break;
+                        }
+
+                        tempConverted[i] = convertedArg;
+                    }
+                    else
+                    {
+                        // Argument missing, try default value
+                        if (parameters[i].HasDefaultValue)
+                            tempConverted[i] = parameters[i].DefaultValue;
+                        else
+                        {
+                            match = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (match && score > bestScore)
+                {
+                    bestMatch = constructor;
+                    bestConvertedArgs = tempConverted;
+                    bestScore = score;
+                }
             }
 
-            string s = $"No matching constructor found for type '{targetType.Name}' that takes these arguments: ";
-            bool first = true;
-            foreach (var arg in argumentStrings)
-            {
-                if (!first)
-                    s += ", ";
-                if (arg is not string)
-                    s += arg.GetType().Name;
-                else
-                    s += arg;
+            if (bestMatch != null)
+                return bestMatch.Invoke(bestConvertedArgs);
 
-                first = false;
-            }
+            // fallback: zero-arg constructor
+            foreach (var c in constructors)
+                if (c.GetParameters().Length == 0)
+                    return c.Invoke(Array.Empty<object>());
+
+            string s = $"No matching constructor found for type '{targetType.Name}' with arguments: {string.Join(", ", argumentStrings.Select(a => a?.GetType().Name ?? "null"))}";
             throw new WinterForgeSerializeException(targetType, s);
         }
 
@@ -149,6 +193,46 @@ namespace WinterRose.WinterForgeSerializing.Workers
             }
 
             return true;
+        }
+
+        private static bool TryConvertArgument(object? input, Type targetType, out object converted)
+        {
+            converted = null!;
+
+            if (targetType == typeof(object))
+            {
+                converted = input!;
+                return true;
+            }
+
+            if (input == null)
+            {
+                if (!targetType.IsValueType || Nullable.GetUnderlyingType(targetType) != null)
+                {
+                    converted = null!;
+                    return true;
+                }
+                return false; // cannot assign null to non-nullable value type
+            }
+
+            Type inputType = input.GetType();
+
+            // exact match or assignable
+            if (targetType.IsAssignableFrom(inputType))
+            {
+                converted = input;
+                return true;
+            }
+
+            try
+            {
+                converted = Convert.ChangeType(input, targetType);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

@@ -535,7 +535,14 @@ public class OpcodeToByteCompiler
             if (line[i] == '"')
             {
                 int end = line.IndexOf('"', i + 1);
-                parts.Add(line.Substring(i, end - i + 1));
+                try
+                {
+                    parts.Add(line.Substring(i, end - i + 1));
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    throw new WinterForgeFormatException(line);
+                }
                 i = end + 1;
             }
             else

@@ -24,7 +24,11 @@ public class CacheReader : Stream
     /// Creates a new stream that holds the same information of this one.
     /// </summary>
     /// <returns></returns>
-    public DualStreamReader CreateFallbackReader() => new(CacheStream, sourceStream);
+    public DualStreamReader CreateFallbackReader()
+    {
+        CacheStream.Position = 0; // <-- rewind to read everything
+        return new DualStreamReader(CacheStream, sourceStream);
+    }
 
     public override bool CanRead => sourceStream.CanRead;
     public override bool CanSeek => sourceStream.CanSeek;

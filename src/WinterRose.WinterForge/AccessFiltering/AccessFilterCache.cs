@@ -35,6 +35,9 @@ namespace WinterRose.WinterForgeSerializing
 
         static AccessFilterCache()
         {
+            if (WinterForge.NoAccessFilter)
+                return;
+
             GetFilter(typeof(File), AccessFilterKind.Whitelist);
             GetFilter(typeof(FileInfo), AccessFilterKind.Whitelist);
             GetFilter(typeof(Directory), AccessFilterKind.Whitelist);

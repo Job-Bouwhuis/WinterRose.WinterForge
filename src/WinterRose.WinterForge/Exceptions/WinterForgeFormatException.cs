@@ -12,7 +12,7 @@ namespace WinterRose.WinterForgeSerializing
     public class WinterForgeFormatException : Exception
     {
         public WinterForgeFormatException(string syntaxPart, string reason = "") 
-            : base($"Syntax '{syntaxPart}' is not correct: " + reason)
+            : base($"Syntax '{syntaxPart}' is not correct" + (string.IsNullOrEmpty(reason) ? (": " + reason) : ""))
         {
         }
 

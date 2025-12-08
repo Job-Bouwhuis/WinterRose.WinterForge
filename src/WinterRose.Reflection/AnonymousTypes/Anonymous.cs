@@ -2,6 +2,7 @@
 using System.Dynamic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using WinterRose.Reflection;
 
 namespace WinterRose.AnonymousTypes;
@@ -99,4 +100,42 @@ public class Anonymous() : DynamicObject
     public override IEnumerable<string> GetDynamicMemberNames() => [.. new ReflectionHelper(this).GetMembers()
             .Where(m => m.Name is not "runtimeVariables" and not "Item")
             .Select(m => m.Name)];
+
+    public override string ToString()
+    {
+        return ToStringIndented(0);
+    }
+
+    private string ToStringIndented(int indentLevel)
+    {
+        StringBuilder sb = new();
+        string indent = new string(' ', indentLevel * 4);
+
+        sb.AppendLine("Anonymous {");
+
+        ReflectionHelper helper = new ReflectionHelper(this);
+        foreach (MemberData member in helper.GetMembers())
+        {
+            string fieldName = member.Name;
+            if (fieldName == nameof(runtimeVariables))
+                continue;
+            object value = member.GetValue(this);
+
+            sb.Append(indent).Append("    ").Append(fieldName).Append(": ");
+
+            if (value is Anonymous nested)
+            {
+                sb.AppendLine();
+                sb.Append(nested.ToStringIndented(indentLevel + 1));
+            }
+            else
+            {
+                sb.AppendLine(value?.ToString() ?? "null");
+            }
+        }
+
+        sb.Append(indent).AppendLine("}");
+
+        return sb.ToString();
+    }
 }

@@ -22,7 +22,11 @@ public class ByteToOpcodeDecompiler
             using DualStreamReader cache = cacheStream.CreateFallbackReader();
             try
             {
-                return InstructionParser.ParseOpcodes(cache);
+                using MemoryStream opcodes = new MemoryStream();
+                WinterForge.ConvertFromStreamToStream(cache, opcodes, TargetFormat.Optimized);
+                opcodes.Position = 0;
+                using var reader = new BinaryReader(opcodes, System.Text.Encoding.UTF8, leaveOpen: false);
+                return InternalParse(reader);
             }
             catch
             {

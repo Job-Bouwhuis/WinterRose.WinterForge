@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using WinterRose.WinterForgeSerializing;
 
-namespace WinterRose.WinterForgeSerializing.Formatting
+namespace WinterRose.WinterForgeSerializing
 {
     /// <summary>
     /// What format should <see cref="WinterForge"/> serialize to

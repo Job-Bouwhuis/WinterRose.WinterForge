@@ -1082,6 +1082,47 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             return parts;
         }
 
+        public static List<string> SplitPreserveQuotes(string input, char separator)
+        {
+            List<string> parts = new List<string>();
+            StringBuilder current = new StringBuilder();
+
+            bool inQuotes = false;
+            bool escape = false;
+
+            foreach (char c in input)
+            {
+                if (escape)
+                {
+                    current.Append(c);
+                    escape = false;
+                }
+                else if (c == '\\')
+                {
+                    escape = true;
+                }
+                else if (c == '"')
+                {
+                    inQuotes = !inQuotes;
+                    current.Append(c);
+                }
+                else if (c == separator && !inQuotes)
+                {
+                    parts.Add(current.ToString());
+                    current.Clear();
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+
+            // add the last part
+            if (current.Length > 0)
+                parts.Add(current.ToString());
+
+            return parts;
+        }
 
         private void HandleAccessing(string? id, bool isBody, string? line = null, bool allowNoRHS = false)
         {
@@ -1191,8 +1232,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 methodName = $"#ref({key})";
             }
             var argList = part.Substring(openParen + 1, closeParen - openParen - 1);
-            var args = argList.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).ToList();
-
+            var args = SplitPreserveQuotes(argList, ',');
             for (int j = args.Count - 1; j >= 0; j--)
             {
                 string arg = args[j];

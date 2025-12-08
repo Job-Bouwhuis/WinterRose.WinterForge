@@ -457,6 +457,8 @@ namespace WinterRose.Reflection
 
         private static object CastValue<T>(T value, Type target)
         {
+            if (target == typeof(object))
+                return value;
             if (TypeWorker.SupportedPrimitives.Contains(target)
                 && TypeWorker.SupportedPrimitives.Contains(value.GetType())
                 && target != value.GetType())
