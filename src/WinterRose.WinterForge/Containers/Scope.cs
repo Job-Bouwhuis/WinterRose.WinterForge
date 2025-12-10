@@ -7,6 +7,7 @@ public abstract class Scope
     public string Name { get; set; }
     public Dictionary<string, Variable> Variables { get; set; } = [];
     public Dictionary<string, TemplateGroup> Templates { get; set; } = [];
+    public Dictionary<string, Container> Containers { get; set; } = [];
 
     public void DefineTemplate(Template template)
     {

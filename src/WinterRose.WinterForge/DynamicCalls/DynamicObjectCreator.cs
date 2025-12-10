@@ -16,8 +16,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
         {
             argumentStrings = ResolveArgumentTypes(argumentStrings);
 
-            if (argumentStrings.Count == 0)
-                return Activator.CreateInstance(targetType);
 
             if (WinterForge.SupportedPrimitives.Contains(targetType) && argumentStrings.Count == 1)
                 return TypeWorker.CastPrimitive(argumentStrings[0], targetType);
@@ -25,6 +23,11 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (!constructorCache.TryGetValue(targetType, out ConstructorInfo[] constructors))
                 constructorCache[targetType] = constructors = targetType.GetConstructors(
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.CreateInstance);
+
+            if (argumentStrings.Count == 0)
+            foreach (var c in constructors)
+                if (c.GetParameters().Length == 0)
+                    return c.Invoke(Array.Empty<object>());
 
             ConstructorInfo? bestMatch = null;
             object[] bestConvertedArgs = Array.Empty<object>();
@@ -92,11 +95,6 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
             if (bestMatch != null)
                 return bestMatch.Invoke(bestConvertedArgs);
-
-            // fallback: zero-arg constructor
-            foreach (var c in constructors)
-                if (c.GetParameters().Length == 0)
-                    return c.Invoke(Array.Empty<object>());
 
             string s = $"No matching constructor found for type '{targetType.Name}' with arguments: {string.Join(", ", argumentStrings.Select(a => a?.GetType().Name ?? "null"))}";
             throw new WinterForgeSerializeException(targetType, s);

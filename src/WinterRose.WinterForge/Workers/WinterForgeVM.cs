@@ -1,13 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
-using System.ComponentModel.Design.Serialization;
 using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq.Expressions;
-using System.Numerics;
-using System.Reflection.PortableExecutable;
-using System.Runtime.InteropServices;
 using System.Text;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
@@ -102,7 +97,9 @@ public class WinterForgeVM : IDisposable
 
     private bool TryGetContainerFromContexts(string name, out Container container)
     {
-        foreach (var ctx in contextStack)
+        
+
+        foreach (var ctx in scopeStack)
         {
             if (ctx.Containers.TryGetValue(name, out container))
                 return true;
@@ -333,9 +330,13 @@ public class WinterForgeVM : IDisposable
                         {
                             if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Container c)
                                 throw new WinterForgeExecutionException("Tried ending a container but just ended scope was not a container");
-
-                            CurrentContext.Containers[c.Name] = c;
                             scopeStack.Pop();
+
+                            CurrentContext.constructingScopes.TryPeek(out Scope owner);
+                            if (owner is null)
+                                owner = scopeStack.Peek();
+                            owner.Containers.Add(c.Name, c);
+                            //CurrentContext.Containers[c.Name] = c;
                         }
                         break;
 
@@ -659,7 +660,7 @@ ExpressionBuilding:
         int id = TypeConverter.Convert<int>(instruction.Args[1]);
         CurrentContext.AddObject(id, ref val);
         if (val is Container c && !c.isInstance)
-            CurrentContext.Containers[c.Name] = c;
+            scopeStack.Peek().Containers[c.Name] = c;
 
         if (Debug)
         {
@@ -1354,7 +1355,7 @@ ExpressionBuilding:
                 return tg;
             }
 
-            Container[] containers = CurrentContext.Containers.Values.Where(c => c.Name == plain).ToArray();
+            Container[] containers = scopeStack.Peek().Containers.Values.Where(c => c.Name == plain).ToArray();
             if (containers.Length >= 1)
                 return containers[0];
         }

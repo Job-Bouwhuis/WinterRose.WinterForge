@@ -18,7 +18,7 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
 
         public override object CreateString(DateOnly obj, ObjectSerializer serializer)
         {
-            return obj.ToString();
+            return $"\"{obj}\"";
         }
     }
 }

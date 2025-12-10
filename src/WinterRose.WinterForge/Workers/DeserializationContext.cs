@@ -10,7 +10,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
     {
         internal Stack<Scope> constructingScopes = [];
 
-        internal Dictionary<string, Container> Containers { get; set; } = [];
+        //internal Dictionary<string, Container> Containers { get; set; } = [];
         internal Dictionary<int, object> ObjectTable { get; } = [];
         internal Stack<object> ValueStack { get; } = new();
         internal List<DeferredObject> DeferredObjects { get; } = [];
