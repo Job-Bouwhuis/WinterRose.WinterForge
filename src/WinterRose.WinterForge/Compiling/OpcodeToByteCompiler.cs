@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -38,7 +39,7 @@ public enum ValuePrefix : byte
 
 
 
-public class OpcodeToByteCompiler
+public class OpcodeToByteCompiler : Stream
 {
     private Stack<Type> instanceStack = new Stack<Type>();
     List<string>? bufferedObject = null;
@@ -51,6 +52,21 @@ public class OpcodeToByteCompiler
     private bool SeenEndOfDataMark = false;
     private int _maxParallelismDefault = Math.Max(1, Environment.ProcessorCount);
 
+    private readonly Decoder decoder = Encoding.UTF8.GetDecoder();
+    private readonly StringBuilder writeBuffer = new();
+    private readonly System.Collections.Concurrent.BlockingCollection<string> lineQueue = new();
+    private readonly Task? backgroundProcessingTask;
+    private readonly CancellationTokenSource cancellation = new();
+    private readonly Stream? bytesDestinationStream;
+
+    private readonly ObjectPool<MemoryStream> memoryStreamPool = new(resetAction: ms => ms.SetLength(0));
+
+    public override bool CanRead => false;
+    public override bool CanSeek => false;
+    public override bool CanWrite => true;
+    public override long Length => throw new NotSupportedException();
+    public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
     private string? peekedLine = null;
 
     private string? Peek(StreamReader reader)
@@ -59,6 +75,10 @@ public class OpcodeToByteCompiler
         return peekedLine;
     }
 
+    public override void Flush()
+    {
+        // no-op — we flush to destination in the background consumer
+    }
 
     private string? ReadLine(StreamReader reader)
     {
@@ -89,9 +109,11 @@ public class OpcodeToByteCompiler
     }
 
 
-    internal OpcodeToByteCompiler(bool allowCustomCompilers)
+    internal OpcodeToByteCompiler(Stream bytesDestination, bool allowCustomCompilers = true)
     {
         this.allowCustomCompilers = allowCustomCompilers;
+        this.bytesDestinationStream = bytesDestination ?? throw new ArgumentNullException(nameof(bytesDestination));
+        backgroundProcessingTask = Task.Run(() => BackgroundProcessLinesAsync(cancellation.Token));
     }
 
     private ValuePrefix GetNumericValuePrefix(Type value)
@@ -120,16 +142,71 @@ public class OpcodeToByteCompiler
 
     object Rehydrate(List<string> lines, Type type)
     {
-        using var stream = new MemoryStream();
+        using var stream = memoryStreamPool.Using();
         using var writer = new StreamWriter(stream);
         foreach (string l in lines)
             writer.WriteLine(l);
         writer.WriteLine($"8 {lines[^1].Split(' ')[^1]}");
         writer.Flush();
-        stream.Position = 0;
+        stream.Item.Position = 0;
 
         List<Instruction> instructions = InstructionParser.ParseOpcodes(stream);
         return WinterForge.DeserializeFromInstructions(instructions);
+    }
+
+    public override void Write(byte[] buffer, int offset, int count)
+    {
+        if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+        if (offset < 0 || count < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException();
+
+        // decode bytes into chars and append to writeBuffer
+        int charCount = decoder.GetCharCount(buffer, offset, count);
+        char[] chars = new char[charCount];
+        decoder.GetChars(buffer, offset, count, chars, 0);
+        writeBuffer.Append(chars);
+
+        // extract full lines (support \n and \r\n)
+        for (; ; )
+        {
+            int newlineIdx = IndexOf(writeBuffer, "\n");
+            if (newlineIdx < 0) break;
+
+            // capture the line (strip trailing '\r' if present)
+            string fullLine = writeBuffer.ToString(0, newlineIdx + 1);
+            string line = fullLine.EndsWith("\r\n") ? fullLine[..^2] : fullLine.EndsWith("\n") ? fullLine[..^1] : fullLine;
+            line = line.TrimEnd('\r', '\n');
+
+            // remove consumed part from buffer
+            writeBuffer.Remove(0, newlineIdx + 1);
+
+            // enqueue the line for processing
+            lineQueue.Add(line);
+        }
+    }
+
+    public static int IndexOf(StringBuilder sb, string value)
+    {
+        if (sb == null || value == null)
+            throw new ArgumentNullException();
+
+        if (value.Length == 0)
+            return 0; // empty string is always at index 0
+
+        for (int i = 0; i <= sb.Length - value.Length; i++)
+        {
+            bool match = true;
+            for (int j = 0; j < value.Length; j++)
+            {
+                if (sb[i + j] != value[j])
+                {
+                    match = false;
+                    break;
+                }
+            }
+            if (match)
+                return i;
+        }
+        return -1; // not found
     }
 
 
@@ -234,7 +311,7 @@ public class OpcodeToByteCompiler
                         object instance = Rehydrate(localBuffered, localType);
 
                         // compile into a memory stream (same output format original used)
-                        using var ms = new MemoryStream();
+                        using var ms = memoryStreamPool.Using();
                         using var bw = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true);
 
                         // header written by original code
@@ -246,7 +323,7 @@ public class OpcodeToByteCompiler
                         // custom compiler writes bytes representing the instance
                         localCompiler.Compile(bw, instance);
                         bw.Flush();
-                        return ms.ToArray();
+                        return ms.Item.ToArray();
                     });
 
                     queue.Add(compileTask);
@@ -256,16 +333,16 @@ public class OpcodeToByteCompiler
 
             // Non-custom or DEFINE-without-custom path:
             // Emit opcode to a temporary memory stream (so we can get its bytes), then enqueue an immediate Task
-            using (var ms = new MemoryStream())
+            using (var ms = memoryStreamPool.Using())
             {
                 using (var tempWriter = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
                 {
                     // reuse existing EmitOpcode logic which writes to BinaryWriter
-                    EmitOpcode(tempWriter, reader, line, parts, opcodeByte, opcode);
+                    EmitOpcode(tempWriter, line, parts, opcodeByte, opcode);
                     tempWriter.Flush();
                 }
 
-                byte[] bytes = ms.ToArray();
+                byte[] bytes = ms.Item.ToArray();
                 queue.Add(Task.FromResult(bytes));
             }
         }
@@ -276,7 +353,7 @@ public class OpcodeToByteCompiler
     }
 
 
-    private void ParseOptimizedCompile(BinaryWriter writer, StreamReader reader, string line, ref byte opcodeByte, OpCode opcode, ref bool bufferingActive)
+    private void ParseOptimizedCompile(BinaryWriter writer, string line, ref byte opcodeByte, OpCode opcode, ref bool bufferingActive)
     {
         if (opcode is not OpCode.SET and not OpCode.END)
         {
@@ -287,13 +364,13 @@ public class OpcodeToByteCompiler
             foreach (string bufferedLine in bufferedObject)
             {
                 ValidateLine(bufferedLine, out var bufferedParts, out var bufferedOpcodeByte);
-                EmitOpcode(writer, reader, bufferedLine, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
+                EmitOpcode(writer, bufferedLine, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
             }
 
             // this loose scope is intentional to not interfere with the above foreach loop
             {
                 ValidateLine(line, out var bufferedParts, out var bufferedOpcodeByte);
-                EmitOpcode(writer, reader, line, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
+                EmitOpcode(writer, line, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
             }
             allowCustomCompilers = true;
 
@@ -341,7 +418,6 @@ public class OpcodeToByteCompiler
         }
     }
 
-
     private bool ValidateLine(string line, out string[] parts, out byte opcodeByte)
     {
         parts = Array.Empty<string>();
@@ -369,8 +445,157 @@ public class OpcodeToByteCompiler
         return true;
     }
 
+    private async Task BackgroundProcessLinesAsync(CancellationToken ct)
+    {
+        if (bytesDestinationStream == null) throw new InvalidOperationException("No bytes destination attached for streaming compile.");
 
-    private void EmitOpcode(BinaryWriter writer, StreamReader reader, string line, string[] parts, byte opcodeByte, OpCode opcode)
+        var byteTaskQueue = new System.Collections.Concurrent.BlockingCollection<Task<byte[]>>();
+        var writeTask = Task.Run(async () =>
+        {
+            using var finalWriter = new BinaryWriter(bytesDestinationStream, Encoding.UTF8, leaveOpen: true);
+            try
+            {
+                foreach (var task in byteTaskQueue.GetConsumingEnumerable(ct))
+                {
+                    var bytes = await task.ConfigureAwait(false);
+                    if (bytes?.Length > 0)
+                        finalWriter.Write(bytes);
+                }
+
+                if (bytesDestinationStream is System.Net.Sockets.NetworkStream && !SeenEndOfDataMark)
+                {
+                    finalWriter.Write((byte)OpCode.END_OF_DATA);
+                }
+
+                finalWriter.Flush();
+            }
+            catch
+            {
+                throw;
+            }
+        }, ct);
+
+        try
+        {
+            // Temporary state used when encountering DEFINE with a custom compiler
+            List<string>? defineBuffer = null;
+            Type? defineType = null;
+            int defineNesting = 0;
+            int defineRefId = -1;
+            ICustomValueCompiler? defineCompiler = null;
+
+            foreach (var rawLine in lineQueue.GetConsumingEnumerable(ct))
+            {
+                if (ct.IsCancellationRequested) break;
+
+                string line = rawLine;
+
+                // handle explicit WF_ENDOFDATA line written by parser
+                if (line == "WF_ENDOFDATA")
+                {
+                    SeenEndOfDataMark = true;
+                    byteTaskQueue.Add(Task.FromResult(new byte[] { (byte)OpCode.END_OF_DATA }));
+                    continue;
+                }
+
+                if (!ValidateLine(line, out var parts, out var opcodeByte))
+                {
+                    continue;
+                }
+
+                var opcode = (OpCode)opcodeByte;
+
+                // DEFINE + custom compiler path: buffer subsequent lines until matching END found
+                if (opcode is OpCode.DEFINE)
+                {
+                    Type t = WinterForgeVM.ResolveType(parts[1]);
+
+                    if (allowCustomCompilers && CustomValueCompilerRegistry.TryGetByType(t, out ICustomValueCompiler foundCompiler))
+                    {
+                        // start or continue buffering DEFINE block
+                        defineBuffer = new List<string> { line };
+                        defineNesting = 1;
+                        defineType = t;
+                        defineRefId = int.Parse(parts[2]);
+                        defineCompiler = foundCompiler;
+
+                        // consume additional lines from the input queue until nesting ends
+                        while (defineNesting > 0)
+                        {
+                            // try to take next line (will throw InvalidOperationException when collection completed)
+                            if (!lineQueue.TryTake(out var innerLine, Timeout.Infinite, ct))
+                                break;
+
+                            if (innerLine == "WF_ENDOFDATA")
+                            {
+                                SeenEndOfDataMark = true;
+                                // put marker back for main loop to handle if necessary
+                                lineQueue.Add(innerLine);
+                            }
+
+                            // push the line into the buffer (verbatim)
+                            defineBuffer.Add(innerLine);
+
+                            if (innerLine.StartsWith(((byte)OpCode.END).ToString() + " "))
+                                defineNesting--;
+
+                            // if nested DEFINEs are possible, increment on new DEFINE lines
+                            if (innerLine.StartsWith(((byte)OpCode.DEFINE).ToString() + " "))
+                                defineNesting++;
+                        }
+
+                        // create a task that will rehydrate and compile the buffered block
+                        var localBuffer = defineBuffer.ToArray();
+                        var localType = defineType;
+                        var localCompiler = defineCompiler;
+                        var localRef = defineRefId;
+
+                        Task<byte[]> compileTask = Task.Run(() =>
+                        {
+                            object instance = Rehydrate(localBuffer.ToList(), localType!);
+
+                            using var ms = memoryStreamPool.Using();
+                            using var bw = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true);
+
+                            bw.Write((byte)0x00);
+                            bw.Write((byte)0x00);
+                            bw.Write(localCompiler!.CompilerId);
+                            bw.Write(localRef);
+
+                            localCompiler.Compile(bw, instance);
+                            bw.Flush();
+                            return ms.Item.ToArray();
+                        }, ct);
+
+                        byteTaskQueue.Add(compileTask);
+                        continue;
+                    }
+                }
+
+                using var ms = memoryStreamPool.Using();
+                using var writer = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true);
+                EmitOpcode(writer, line, parts, opcodeByte, opcode);
+                writer.Flush();
+
+                byteTaskQueue.Add(Task.FromResult(ms.Item.ToArray()));
+            }
+
+            // finished producing byte tasks
+            byteTaskQueue.CompleteAdding();
+
+            // wait for writer to finish writing all byte tasks
+            await writeTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            // ensure writer finishes if cancellation happened
+            try { byte[] endMarker = new byte[] { (byte)OpCode.END_OF_DATA }; }
+            catch { }
+        }
+    }
+
+
+    private void EmitOpcode(BinaryWriter writer, string line, string[] parts, byte opcodeByte, OpCode opcode)
     {
         if (opcode is OpCode.DEFINE)
         {
@@ -413,8 +638,8 @@ public class OpcodeToByteCompiler
                         Type fieldType = mem.Type;
                         ValuePrefix prefix = GetNumericValuePrefix(fieldType);
 
-                        if(parts[2] is not "#stack()" 
-                            && CustomValueCompilerRegistry.TryGetByType(fieldType, out ICustomValueCompiler compiler) 
+                        if (parts[2] is not "#stack()"
+                            && CustomValueCompilerRegistry.TryGetByType(fieldType, out ICustomValueCompiler compiler)
                             && parts[2].GetType() == compiler.CompilerType)
                         {
                             writer.Write((byte)0x00);
@@ -590,16 +815,7 @@ public class OpcodeToByteCompiler
                     // parts: [ "43", "<varName>" ]
                     if (parts.Length > 1)
                         WriteString(writer, parts[1]);
-                    if (Peek(reader) is string next)
-                    {
-                        string opcs = ((byte)OpCode.VAR_DEFAULT_VALUE).ToString();
-                        if (next.StartsWith(opcs))
-                        {
-                            Consume(reader, 1);
-                            writer.Write((byte)OpCode.VAR_DEFAULT_VALUE);
-                            WriteAny(writer, next[2..].Trim());
-                        }
-                    }
+                    // TODO: make default value work again now that we compile in parallel to parsing
                 }
                 break;
 
@@ -923,6 +1139,46 @@ public class OpcodeToByteCompiler
         var content = fullLine[2..].Trim();
         WriteString(writer, content);
     }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // if any leftover text exists that didn't end with newline, treat it as a final line
+            if (writeBuffer.Length > 0)
+            {
+                string leftover = writeBuffer.ToString();
+                writeBuffer.Clear();
+                lineQueue.Add(leftover);
+            }
+
+            // mark input complete
+            lineQueue.CompleteAdding();
+
+            // wait for processing to finish
+            try
+            {
+                backgroundProcessingTask?.GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // rethrow after disposing resources
+                cancellation.Cancel();
+                throw;
+            }
+            finally
+            {
+                cancellation.Cancel();
+                cancellation.Dispose();
+            }
+        }
+
+        base.Dispose(disposing);
+    }
+
+    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
 }
 
 

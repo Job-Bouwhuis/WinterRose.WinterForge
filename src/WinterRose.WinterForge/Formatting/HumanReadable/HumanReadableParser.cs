@@ -1176,6 +1176,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     currentElement.Append('\n');
             } while ((cur = ReadLine()) != null);
 
+            
             throw new WinterForgeFormatException("Expected ']' to close list.");
         }
 
@@ -1724,7 +1725,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             elementSB.Clear();
             if (string.IsNullOrWhiteSpace(currentElement))
                 return;
-            if (currentElement.Contains(':'))
+            string firstLine = currentElement.Split(['\n', '\r'], 2, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (firstLine.Contains(':'))
             {
                 if (isDictionary)
                 {

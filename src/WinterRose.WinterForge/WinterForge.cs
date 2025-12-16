@@ -272,10 +272,8 @@ namespace WinterRose.WinterForgeSerializing
                 }
                 else
                 {
-                    using MemoryStream mem = new();
-                    new HumanReadableParser().Parse(serialized, mem);
-                    mem.Position = 0;
-                    new OpcodeToByteCompiler(AllowCustomCompilers).Compile(mem, outputStream);
+                    using OpcodeToByteCompiler compiler = new(opcodes, AllowCustomCompilers);
+                    new HumanReadableParser().Parse(serialized, compiler);
                 }
             }
 
@@ -421,9 +419,9 @@ namespace WinterRose.WinterForgeSerializing
             new HumanReadableParser().Parse(humanReadable, mem);
             mem.Seek(0, SeekOrigin.Begin);
             using var opcodes = new MemoryStream();
-            new OpcodeToByteCompiler(AllowCustomCompilers).Compile(mem, opcodes);
-            opcodes.Position = 0;
-            var instructions = ByteToOpcodeDecompiler.Parse(opcodes);
+            using var compiled = new OpcodeToByteCompiler(opcodes, AllowCustomCompilers);
+            compiled.Position = 0;
+            var instructions = ByteToOpcodeDecompiler.Parse(compiled);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
