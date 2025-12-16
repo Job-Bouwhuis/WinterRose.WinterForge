@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -10,7 +11,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 {
     public static class DynamicObjectCreator
     {
-        static Dictionary<Type, ConstructorInfo[]> constructorCache = [];
+        static ConcurrentDictionary<Type, ConstructorInfo[]> constructorCache = [];
 
         public static object CreateInstanceWithArguments(Type targetType, List<object> argumentStrings)
         {
@@ -25,9 +26,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.CreateInstance);
 
             if (argumentStrings.Count == 0)
-            foreach (var c in constructors)
-                if (c.GetParameters().Length == 0)
-                    return c.Invoke(Array.Empty<object>());
+            {
+                foreach (var c in constructors)
+                    if (c.GetParameters().Length == 0)
+                        return c.Invoke(Array.Empty<object>());
+
+                if (targetType.IsValueType)
+                    return Activator.CreateInstance(targetType);
+            }
 
             ConstructorInfo? bestMatch = null;
             object[] bestConvertedArgs = Array.Empty<object>();

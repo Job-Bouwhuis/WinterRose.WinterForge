@@ -63,6 +63,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
 
         internal void Serialize(ref object obj, Stream destinationStream, bool isRootCall, bool emitReturn = true)
         {
+
             if (obj == null)
             {
                 if (isRootCall)
@@ -133,16 +134,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return;
             }
 
-            if (CustomValueProviderCache.Get(objType, out var provider))
+            if (TryCustomValueProvider(obj, objType, out var value))
             {
-                object val = provider._CreateString(obj, this);
-
-                string typePrefix = GetNumericTypeName(val);
-                string value;
-                if (typePrefix is "null")
-                    value = "null";
-                else
-                    value = typePrefix is "none" ? $"\"{val}\"" : $"|{typePrefix}|{val}";
                 WriteToStream(destinationStream, value);
                 return;
             }
@@ -172,6 +165,36 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (isRootCall)
                 WriteToStream(destinationStream, "\n\nreturn " + key);
             destinationStream.Flush();
+        }
+
+        private bool TryCustomValueProvider(object obj, Type objType, out string value)
+        {
+            if (CustomValueProviderCache.Get(objType, out var provider))
+            {
+                object val = provider._CreateString(obj, this);
+
+                string typePrefix = GetNumericTypeName(val);
+                if (typePrefix is "null")
+                    value = "null";
+                else if (typePrefix is "none" && val is string s)
+                {
+                    if (s.StartsWith('"') && s.EndsWith('"'))
+                        value = s;
+                    else
+                        value = $"\"{val}\"";
+                }
+                else
+                {
+                    if (typePrefix == "none")
+                        value = $"\"{val}\"";
+                    else
+                        value = $"|{typePrefix}|{val}";
+                }
+
+                return true;
+            }
+            value = "null";
+            return false;
         }
 
         private void SerializeEnum(object obj, Stream destinationStream)
@@ -387,7 +410,10 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (includeType)
                 WriteToStream(destinationStream, $"{ParseTypeName(member.Type)}:{member.Name} = {serializedString}");
             else
-                WriteToStream(destinationStream, $"{member.Name} = {serializedString}");
+            {
+                string val = $"{member.Name} = {serializedString}";
+                WriteToStream(destinationStream, val);
+            }
             if (!serializedString.Contains('['))
                 WriteToStream(destinationStream, ";\n");
         }
@@ -498,18 +524,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return Encoding.UTF8.GetString(str.ToArray());
             }
 
-            if(CustomValueProviderCache.Get(valueType, out var provider))
-            {
-                return (string)provider._CreateString(value, this);
-            }
+            if (TryCustomValueProvider(value, value.GetType(), out var v))
+                return v;
 
-            // Handle arrays, lists, and collections (nested objects)
             string? collection = TryCollection(value, destinationStream);
             if (collection is not null)
                 return collection;
 
-            // If the value is a nested object, recursively serialize it
-            return RecursiveSerialization(value); // We can reuse the same serializer method for nested objects
+            return RecursiveSerialization(value);
         }
         private string? TryCollection(object value, Stream destinationStream)
         {
@@ -580,9 +602,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// Gets the type name in a normal way
         /// </summary>
         /// <param name="elementType"></param>
+        /// <param name="allowNullTypeResolveToStringNull">When true, and <paramref name="elementType"/> is <see langword="null"/>, will return "Null-Type" as string</param>
         /// <returns></returns>
-        public static string ParseTypeName(Type elementType)
+        public static string ParseTypeName(Type elementType, bool allowNullTypeResolveToStringNull = false)
         {
+            if (elementType is null && allowNullTypeResolveToStringNull)
+                return "Null-Type";
+
             if (elementType == typeof(Anonymous)
                 || elementType == typeof(AnonymousTypeBuilder)
                 || elementType.IsAnonymousType())
@@ -592,7 +618,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return elementType.FullName;
 
             Type[] genericTypes = elementType.GenericTypeArguments;
-            string[] genericTypeNames = [.. genericTypes.Select(ParseTypeName)];
+            string[] genericTypeNames = [.. genericTypes.Select(t => ParseTypeName(t))];
 
             int indexOfTypeNameEnd = elementType.FullName.IndexOf('`');
             return elementType.FullName[0..indexOfTypeNameEnd] + "<" + string.Join(",", genericTypeNames) + ">";

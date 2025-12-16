@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net.Sockets;
 using System.Reflection;
@@ -10,11 +11,12 @@ using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
-using WinterRose.WinterForgeSerializing.Instructions;
-using WinterRose.WinterForgeSerializing.Util;
+using WinterRose.NetworkServer;
 using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Formatting;
+using WinterRose.WinterForgeSerializing.Instructions;
 using WinterRose.WinterForgeSerializing.Logging;
+using WinterRose.WinterForgeSerializing.Util;
 using WinterRose.WinterForgeSerializing.Workers;
 
 namespace WinterRose.WinterForgeSerializing
@@ -64,6 +66,11 @@ namespace WinterRose.WinterForgeSerializing
         /// Setting this to false can increase the load times of certain larger datasets, however the scripting side of WinterForge can have issues with this is enabled
         /// </summary>
         public static bool AllowCustomCompilers { get; set; } = true;
+        /// <summary>
+        /// When true, all serialization streams will be compressed using GZip compression.
+        /// It will also expect compressed streams when deserializing, but will also attempt to read it as uncompressed if that fails.
+        /// </summary>
+        public static bool CompressedStreams { get; set; }
 
         private static void EnsurePathExists(string path)
         {
@@ -234,6 +241,50 @@ namespace WinterRose.WinterForgeSerializing
         /// <returns></returns>
         public static WinterForgeSerializationTask SerializeStaticToStreamAsync(Type type, Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToStream(type, stream, format, progressTracker));
 
+        private static void FinishSerialization(Stream serialized, Stream opcodes, TargetFormat target)
+        {
+            Stream outputStream = opcodes;
+
+            if (CompressedStreams)
+                outputStream = new GZipStream(opcodes, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true);
+
+            if (target is TargetFormat.HumanReadable)
+            {
+                serialized.CopyTo(outputStream);
+                outputStream.Flush();
+            }
+            else if (target is TargetFormat.FormattedHumanReadable)
+            {
+                new HumanReadableIndenter().Process(serialized, outputStream);
+            }
+            else
+            {
+                if (target is TargetFormat.IntermediateRepresentation)
+                {
+                    new HumanReadableParser().Parse(serialized, outputStream);
+                }
+                else if (target is TargetFormat.ReadableIntermediateRepresentation)
+                {
+                    using MemoryStream mem = new();
+                    new HumanReadableParser().Parse(serialized, mem);
+                    mem.Position = 0;
+                    new OpcodeToReadableOpcodeParser().Parse(mem, outputStream);
+                }
+                else
+                {
+                    using MemoryStream mem = new();
+                    new HumanReadableParser().Parse(serialized, mem);
+                    mem.Position = 0;
+                    new OpcodeToByteCompiler(AllowCustomCompilers).Compile(mem, outputStream);
+                }
+            }
+
+            outputStream.Flush();
+
+            if (CompressedStreams)
+                outputStream.Dispose(); // flushes and closes GZip wrapper without closing underlying opcodes stream
+        }
+
 
         /// <summary>
         /// Deserializes from the given stream in which opcodes should exist
@@ -243,10 +294,27 @@ namespace WinterRose.WinterForgeSerializing
         /// <returns></returns>
         public static object? DeserializeFromStream(Stream stream, WinterForgeProgressTracker? progressTracker = null)
         {
-            var instr = ByteToOpcodeDecompiler.Parse(stream);
-            object? result = null;
-            DoDeserialization(out result, typeof(Nothing), instr, progressTracker);
-            return result;
+            using CacheReader cacheStream = new(stream, new MemoryStream());
+
+            try
+            {
+                using GZipStream compressStream = new GZipStream(cacheStream, CompressionMode.Decompress, leaveOpen: true);
+                using TempFileStream temp = new(compressStream);
+                return CommitDeserialize(progressTracker, temp);
+            }
+            catch (InvalidDataException e)
+            {
+                var backup = cacheStream.CreateFallbackReader();
+                return CommitDeserialize(progressTracker, backup);
+            }
+
+            static object? CommitDeserialize(WinterForgeProgressTracker? progressTracker, Stream compressStream)
+            {
+                InstructionStream instr = ByteToOpcodeDecompiler.Parse(compressStream);
+                object? result = null;
+                DoDeserialization(out result, typeof(Nothing), instr, progressTracker);
+                return result;
+            }
         }
         /// <summary>
         /// Deserializes from the given stream in which opcodes should exist
@@ -378,9 +446,7 @@ namespace WinterRose.WinterForgeSerializing
         public static object? DeserializeFromFile(string path, WinterForgeProgressTracker? progressTracker = null)
         {
             using Stream opcodes = File.OpenRead(path);
-            var instructions = ByteToOpcodeDecompiler.Parse(opcodes);
-            DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
-            return res;
+            return DeserializeFromStream(opcodes, progressTracker);
         }
 
         /// <summary>
@@ -392,7 +458,11 @@ namespace WinterRose.WinterForgeSerializing
         {
             object? res = DeserializeFromFile(path, progressTracker);
             if (res is not T t)
-                throw new InvalidCastException($"Deserialized object is of type {res?.GetType().FullName ?? "null"}, cannot cast to {typeof(T).FullName}");
+            {
+                if (res is Nothing)
+                    throw new WinterForgeExecutionException($"Requested data deserialzied into 'Nothing' meaning no result was returned. yet a result of type {ObjectSerializer.ParseTypeName(typeof(T))} is expected");
+                throw new InvalidCastException($"Deserialized object is of type {ObjectSerializer.ParseTypeName(res?.GetType(), true)}, cannot cast to {ObjectSerializer.ParseTypeName(typeof(T))}");
+            }
             return t;
         }
 
@@ -502,6 +572,41 @@ namespace WinterRose.WinterForgeSerializing
         public static WinterForgeDeserializationTask<T?> DeserializeFromHumanReadableFileAsync<T>(string path, WinterForgeProgressTracker? progressTracker = null) =>
             RunAsync(() => DeserializeFromHumanReadableFile<T>(path, progressTracker));
 
+        private static void DoDeserialization(out object? result, Type targetType, InstructionStream instructions, WinterForgeProgressTracker? progressTracker = null)
+        {
+            using var executor = new WinterForgeVM();
+            if (progressTracker is not null)
+                executor.progressTracker = progressTracker;
+            object? res = executor.Execute(instructions, true);
+
+            if (res is List<object> list)
+            {
+                if (targetType.IsArray)
+                {
+                    var array = Array.CreateInstance(targetType.GetElementType()!, list.Count);
+
+                    for (int i = 0; i < list.Count; i++)
+                        array.SetValue(list[i], i);
+
+                    result = array;
+                }
+
+                if (targetType.Name.Contains("List`1"))
+                {
+                    var targetList = CreateList(targetType.GetGenericArguments()[0]);
+
+                    for (int i = 0; i < list.Count; i++)
+                        targetList.Add(list[i]);
+
+                    result = targetList;
+                }
+
+                throw new Exception("invalid deserialization!");
+            }
+
+            result = res;
+        }
+
         /// <summary>
         /// Converts the human readable format into opcodes
         /// </summary>
@@ -590,80 +695,69 @@ namespace WinterRose.WinterForgeSerializing
             FinishSerialization(serialized, opcodes, target);
         }
 
-        private static void FinishSerialization(Stream serialized, Stream opcodes, TargetFormat target)
-        {
-            if (target is TargetFormat.HumanReadable)
-            {
-                serialized.CopyTo(opcodes);
-                opcodes.Flush();
-            }
-            else if (target is TargetFormat.FormattedHumanReadable)
-                new HumanReadableIndenter().Process(serialized, opcodes);
-            else
-            {
-                if (target is TargetFormat.IntermediateRepresentation)
-                {
-                    new HumanReadableParser().Parse(serialized, opcodes);
-
-                }
-                else if(target is TargetFormat.ReadableIntermediateRepresentation)
-                {
-                    using MemoryStream mem = new();
-                    new HumanReadableParser().Parse(serialized, mem);
-                    mem.Position = 0;
-                    new OpcodeToReadableOpcodeParser().Parse(mem, opcodes);
-                }
-                else
-                {
-                    using MemoryStream mem = new();
-                    new HumanReadableParser().Parse(serialized, mem);
-                    mem.Position = 0;
-                    new OpcodeToByteCompiler(AllowCustomCompilers).Compile(mem, opcodes);
-                }
-                opcodes.Flush();
-            }
-        }
-
-        private static void DoDeserialization(out object? result, Type targetType, List<Instruction> instructions, WinterForgeProgressTracker? progressTracker = null)
-        {
-            using var executor = new WinterForgeVM();
-            if (progressTracker is not null)
-                executor.progressTracker = progressTracker;
-            object? res = executor.Execute(instructions, true);
-
-            if (res is List<object> list)
-            {
-                if (targetType.IsArray)
-                {
-                    var array = Array.CreateInstance(targetType.GetElementType()!, list.Count);
-
-                    for (int i = 0; i < list.Count; i++)
-                        array.SetValue(list[i], i);
-
-                    result = array;
-                }
-
-                if (targetType.Name.Contains("List`1"))
-                {
-                    var targetList = CreateList(targetType.GetGenericArguments()[0]);
-
-                    for (int i = 0; i < list.Count; i++)
-                        targetList.Add(list[i]);
-
-                    result = targetList;
-                }
-
-                throw new Exception("invalid deserialization!");
-            }
-
-            result = res;
-        }
         internal static IList CreateList(Type t)
         {
             var list = typeof(List<>);
             var constructedListType = list.MakeGenericType(t);
 
             return (IList)Activator.CreateInstance(constructedListType);
+        }
+
+        public static WinterForgeStreamInfo InspectStream(Stream stream)
+        {
+            using CacheReader cacheStream = new(stream, new MemoryStream());
+
+            try
+            {
+                long compressedBytes = stream.CanSeek ? stream.Length : 0;
+
+                using GZipStream compressStream = new(cacheStream, CompressionMode.Decompress, leaveOpen: true);
+                using TempFileStream temp = new(compressStream);
+
+                return InspectInstructions(temp, compressedBytes);
+            }
+            catch (InvalidDataException)
+            {
+                var backup = cacheStream.CreateFallbackReader();
+                return InspectInstructions(backup, 0);
+            }
+
+            static WinterForgeStreamInfo InspectInstructions(Stream source, long compressedBytes)
+            {
+                long rawBytes = source.CanSeek ? source.Length : 0;
+
+                InstructionStream instr = ByteToOpcodeDecompiler.Parse(source);
+
+                Dictionary<Instructions.OpCode, int> histogram = new();
+                int total = 0;
+
+                for (int i = 0; ; i++)
+                {
+                    Instruction instruction;
+                    try
+                    {
+                        instruction = instr[i];
+                    }
+                    catch (IndexOutOfRangeException)
+                    {
+                        break;
+                    }
+
+                    total++;
+
+                    if (histogram.TryGetValue(instruction.Opcode, out int count))
+                        histogram[instruction.Opcode] = count + 1;
+                    else
+                        histogram[instruction.Opcode] = 1;
+                }
+
+                return new WinterForgeStreamInfo(
+                    total,
+                    rawBytes,
+                    compressedBytes,
+                    histogram
+                );
+            }
         }
 
         // ── helper runners ────────────────────────────────────────────────────────
@@ -708,7 +802,7 @@ namespace WinterRose.WinterForgeSerializing
             return (IDictionary)Activator.CreateInstance(constructedDictType)!;
         }
 
-        internal static object DeserializeFromInstructions(List<Instruction> instructions)
+        internal static object DeserializeFromInstructions(InstructionStream instructions)
         {
             DoDeserialization(out object? r, typeof(object), instructions, null);
             return r;

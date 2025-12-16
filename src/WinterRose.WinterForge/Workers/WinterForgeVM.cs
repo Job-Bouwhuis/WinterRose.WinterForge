@@ -116,15 +116,14 @@ public class WinterForgeVM : IDisposable
     internal readonly Stack<Scope> scopeStack = new();
     public Scope? CurrentScope => scopeStack.Count > 0 ? scopeStack.Peek() : null;
 
-    public unsafe object? Execute(List<Instruction> instructionCollection, bool clearInternals)
+    public unsafe object? Execute(InstructionStream instructionCollection, bool clearInternals)
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
         int instructionTotal = instructionCollection.Count;
 
-        instructionIndexStack.Push(0);
-
         try
         {
+            instructionIndexStack.Push(0);
             progressTracker?.Report(0);
             progressTracker?.Report("Starting...");
 
@@ -146,7 +145,7 @@ public class WinterForgeVM : IDisposable
 
                 if (CurrentContext.constructingScopes.TryPeek(out Scope cs)
                     && cs is Template templ
-                    && instruction.OpCode is not OpCode.TEMPLATE_CREATE and not OpCode.TEMPLATE_END
+                    && instruction.Opcode is not OpCode.TEMPLATE_CREATE and not OpCode.TEMPLATE_END
                     and not OpCode.CONTAINER_START and not OpCode.CONTAINER_END
                     and not OpCode.VAR_DEF_START
                     and not OpCode.VAR_DEF_END)
@@ -158,7 +157,7 @@ public class WinterForgeVM : IDisposable
                 if (Debug)
                     startTicks = Stopwatch.GetTimestamp();
 
-                switch (instruction.OpCode)
+                switch (instruction.Opcode)
                 {
                     case OpCode.LABEL:
                         break; // nop
@@ -333,8 +332,7 @@ public class WinterForgeVM : IDisposable
                             scopeStack.Pop();
 
                             CurrentContext.constructingScopes.TryPeek(out Scope owner);
-                            if (owner is null)
-                                owner = scopeStack.Peek();
+                            owner ??= scopeStack.Peek();
                             owner.Containers.Add(c.Name, c);
                             //CurrentContext.Containers[c.Name] = c;
                         }
@@ -360,7 +358,7 @@ public class WinterForgeVM : IDisposable
                         if (instruction.Args.Length == 1)
                         {
                             if (PeekInstruction(out Instruction instr)
-                                && instr.OpCode == OpCode.VAR_DEF_END)
+                                && instr.Opcode == OpCode.VAR_DEF_END)
                             {
                                 buildingVariable.defaultValue = null;
                                 buildingVariable.DefaultValueAsExpression = false;
@@ -380,7 +378,7 @@ ExpressionBuilding:
                         buildingVariable.DefaultValueAsExpression = true;
                         while (NextInstruction(out instruction))
                         {
-                            if (instruction.OpCode == OpCode.VAR_DEF_END)
+                            if (instruction.Opcode == OpCode.VAR_DEF_END)
                                 goto case OpCode.VAR_DEF_END;
                             buildingVariable.DefaultValueInstructions.Add(instruction);
                         }
@@ -426,20 +424,20 @@ ExpressionBuilding:
                         break;
 
                     default:
-                        throw new WinterForgeExecutionException($"Opcode: {instruction.OpCode} not supported");
+                        throw new WinterForgeExecutionException($"Opcode: {instruction.Opcode} not supported");
                 }
 
                 if (Debug)
                 {
-                    if (instruction.OpCode is OpCode.IMPORT or OpCode.CALL)
+                    if (instruction.Opcode is OpCode.IMPORT or OpCode.CALL)
                         continue;
 
                     long endTicks = Stopwatch.GetTimestamp();
                     long elapsedTicks = endTicks - startTicks;
 
-                    if (!(opcodeTimings ??= []).TryGetValue(instruction.OpCode, out var timing))
+                    if (!(opcodeTimings ??= []).TryGetValue(instruction.Opcode, out var timing))
                         timing = (0, 0);
-                    opcodeTimings[instruction.OpCode] = (timing.totalTicks + elapsedTicks, timing.count + 1);
+                    opcodeTimings[instruction.Opcode] = (timing.totalTicks + elapsedTicks, timing.count + 1);
                 }
             }
 
@@ -488,7 +486,7 @@ ExpressionBuilding:
         }
     }
 
-    private void HandleJump(string label, List<Instruction> instructionCollection)
+    private void HandleJump(string label, IReadOnlyList<Instruction> instructionCollection)
     {
         if (labelCache!.Peek() is null)
         {
@@ -500,7 +498,7 @@ ExpressionBuilding:
             {
                 var instr = instructionCollection[i];
 
-                switch (instr.OpCode)
+                switch (instr.Opcode)
                 {
                     case OpCode.SCOPE_PUSH:
                     case OpCode.CONTAINER_START:
@@ -513,7 +511,7 @@ ExpressionBuilding:
                         break;
                 }
 
-                if (instr.OpCode == OpCode.LABEL)
+                if (instr.Opcode == OpCode.LABEL)
                 {
                     string name = (string)instr.Args[0];
                     if (!labelCache.Peek().ContainsKey(name))
@@ -733,7 +731,7 @@ ExpressionBuilding:
     {
         (decimal a, decimal b) = PopTwoDecimals();
 
-        decimal result = instruction.OpCode switch
+        decimal result = instruction.Opcode switch
         {
             OpCode.ADD => a + b,
             OpCode.SUB => a - b,
@@ -741,7 +739,7 @@ ExpressionBuilding:
             OpCode.DIV => b == 0 ? throw new WinterForgeExecutionException("Division by zero") : a / b,
             OpCode.MOD => b == 0 ? throw new WinterForgeExecutionException("Modulo by zero") : a % b,
             OpCode.POW => (decimal)Math.Pow((double)a, (double)b),
-            _ => throw new InvalidOperationException($"Unsupported arithmetic opcode: {instruction.OpCode}")
+            _ => throw new InvalidOperationException($"Unsupported arithmetic opcode: {instruction.Opcode}")
         };
 
         CurrentContext.ValueStack.Push(result);
@@ -762,7 +760,7 @@ ExpressionBuilding:
         object b = CurrentContext.ValueStack.Pop();
         object a = CurrentContext.ValueStack.Pop();
 
-        bool result = instruction.OpCode switch
+        bool result = instruction.Opcode switch
         {
             OpCode.EQ => AreEqual(a, b),
             OpCode.NEQ => !AreEqual(a, b),
@@ -770,7 +768,7 @@ ExpressionBuilding:
             OpCode.LT => CompareObjs(a, b) < 0,
             OpCode.GTE => CompareObjs(a, b) >= 0,
             OpCode.LTE => CompareObjs(a, b) <= 0,
-            _ => throw new InvalidOperationException($"Unsupported comparison opcode: {instruction.OpCode}")
+            _ => throw new InvalidOperationException($"Unsupported comparison opcode: {instruction.Opcode}")
         };
 
         CurrentContext.ValueStack.Push(result);
@@ -835,12 +833,12 @@ ExpressionBuilding:
         bool b = PopBool();
         bool a = PopBool();
 
-        bool result = instruction.OpCode switch
+        bool result = instruction.Opcode switch
         {
             OpCode.AND => a && b,
             OpCode.OR => a || b,
             OpCode.XOR => a ^ b,
-            _ => throw new InvalidOperationException($"Unsupported boolean opcode: {instruction.OpCode}")
+            _ => throw new InvalidOperationException($"Unsupported boolean opcode: {instruction.Opcode}")
         };
 
         CurrentContext.ValueStack.Push(result);

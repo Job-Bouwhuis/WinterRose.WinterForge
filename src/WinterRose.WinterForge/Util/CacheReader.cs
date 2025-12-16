@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -16,7 +17,7 @@ public class CacheReader : Stream
     {
         this.sourceStream = sourceStream ?? throw new ArgumentNullException(nameof(sourceStream));
         CacheStream = cacheStream ?? throw new ArgumentNullException(nameof(cacheStream));
-        if(!CacheStream.CanWrite)
+        if (!CacheStream.CanWrite)
             throw new ArgumentException("CacheStream must be writable", nameof(cacheStream));
     }
 
@@ -74,63 +75,180 @@ public class CacheReader : Stream
 public class DualStreamReader : Stream
 {
     private readonly Stream firstStream;
-    private readonly Stream secondStream;
-    private bool firstStreamExhausted;
+    private readonly Stream secondStream; 
+    private readonly object sync = new();
+    private long _position = 0; 
+
+    private const int COPY_BUFFER_SIZE = 8192;
 
     public DualStreamReader(Stream firstStream, Stream secondStream)
     {
         this.firstStream = firstStream ?? throw new ArgumentNullException(nameof(firstStream));
         this.secondStream = secondStream ?? throw new ArgumentNullException(nameof(secondStream));
 
-        if (!firstStream.CanRead)
-            throw new ArgumentException("First stream must be readable", nameof(firstStream));
+        if (!firstStream.CanRead || !firstStream.CanSeek || !firstStream.CanWrite)
+            throw new ArgumentException("First stream (cache) must support Read, Seek and Write.", nameof(firstStream));
         if (!secondStream.CanRead)
             throw new ArgumentException("Second stream must be readable", nameof(secondStream));
     }
 
     public override bool CanRead => true;
-    public override bool CanSeek => false;
+    public override bool CanSeek => true;
     public override bool CanWrite => false;
-    public override long Length => throw new NotSupportedException();
+
+    public override long Length
+    {
+        get
+        {
+            lock (sync)
+            {
+                if (!secondStream.CanSeek)
+                    throw new NotSupportedException("Length is not available because the underlying source stream is not seekable.");
+                return firstStream.Length + (secondStream.Length - secondStream.Position);
+            }
+        }
+    }
+
     public override long Position
     {
-        get => throw new NotSupportedException();
-        set => throw new NotSupportedException();
+        get
+        {
+            lock (sync) { return _position; }
+        }
+        set
+        {
+            Seek(value, SeekOrigin.Begin);
+        }
     }
 
     public override void Flush() { /* no-op */ }
 
+    private long EnsureCached(long required)
+    {
+        lock (sync)
+        {
+            if (required <= firstStream.Length)
+                return firstStream.Length;
+
+            if (!secondStream.CanRead)
+                return firstStream.Length;
+
+            Span<byte> buffer = stackalloc byte[COPY_BUFFER_SIZE];
+
+            while (firstStream.Length < required)
+            {
+                int toRead = (int)Math.Min(COPY_BUFFER_SIZE, required - firstStream.Length);
+                int read;
+                // Use synchronous Read on second stream (we are inside lock)
+                read = secondStream.Read(buffer[..Math.Max(1, toRead)]);
+                if (read <= 0)
+                    break; // EOF reached on second stream
+
+                // Append into cache (firstStream)
+                long prevPos = firstStream.Position;
+                firstStream.Position = firstStream.Length; // append
+                firstStream.Write(buffer[..read]);
+                firstStream.Flush();
+                firstStream.Position = prevPos; // restore first stream position if somebody relies on it
+            }
+
+            return firstStream.Length;
+        }
+    }
+
     public override int Read(byte[] buffer, int offset, int count)
     {
-        if (!firstStreamExhausted)
+        if (buffer is null) throw new ArgumentNullException(nameof(buffer));
+        if (offset < 0 || count < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException();
+
+        lock (sync)
         {
+            // Ensure requested bytes are cached (or as many as possible until EOF)
+            long wantedEnd = _position + count;
+            EnsureCached(wantedEnd);
+
+            // Position firstStream to logical _position and read
+            firstStream.Position = _position;
             int read = firstStream.Read(buffer, offset, count);
-            if (read > 0)
-                return read;
-
-            // First stream done, switch to second
-            firstStreamExhausted = true;
+            _position += read;
+            return read;
         }
-
-        return secondStream.Read(buffer, offset, count);
     }
 
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
-        if (!firstStreamExhausted)
-        {
-            int read = await firstStream.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
-            if (read > 0)
-                return read;
+        if (buffer is null) throw new ArgumentNullException(nameof(buffer));
+        if (offset < 0 || count < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException();
 
-            // First stream done, switch to second
-            firstStreamExhausted = true;
+        // Best-effort: perform the caching step synchronously within a lock to avoid races,
+        // then perform the actual read from the cached stream asynchronously.
+        // This keeps semantics simple and avoids subtle interleavings.
+        long wantedEnd;
+        lock (sync)
+        {
+            wantedEnd = _position + count;
+            EnsureCached(wantedEnd);
+            firstStream.Position = _position;
         }
 
-        return await secondStream.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+        int read = await firstStream.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+
+        lock (sync) { _position += read; }
+        return read;
     }
 
-    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override long Seek(long offset, SeekOrigin origin)
+    {
+        lock (sync)
+        {
+            long target;
+            switch (origin)
+            {
+                case SeekOrigin.Begin:
+                    target = offset;
+                    break;
+                case SeekOrigin.Current:
+                    target = _position + offset;
+                    break;
+                case SeekOrigin.End:
+                    if (!secondStream.CanSeek)
+                        throw new NotSupportedException("SeekOrigin.End is not supported when the underlying source stream is not seekable.");
+                    // compute total length and apply offset
+                    long totalLength = firstStream.Length + (secondStream.Length - secondStream.Position);
+                    target = totalLength + offset;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(origin));
+            }
+
+            if (target < 0) throw new IOException("Attempted to seek before begin of stream.");
+
+            // Ensure the cache contains the requested position (read from secondStream if needed)
+            EnsureCached(target);
+
+            // If requested position is beyond cached & secondStream is at EOF, Seek beyond EOF is not allowed
+            if (target > firstStream.Length)
+                throw new IOException("Attempted to seek past end of stream.");
+
+            _position = target;
+            return _position;
+        }
+    }
+
     public override void SetLength(long value) => throw new NotSupportedException();
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    public override int Read(Span<byte> buffer)
+    {
+        lock (sync)
+        {
+            long wantedEnd = _position + buffer.Length;
+            EnsureCached(wantedEnd);
+
+            firstStream.Position = _position;
+            int read = firstStream.Read(buffer);
+            _position += read;
+            return read;
+        }
+    }
 }

@@ -10,10 +10,10 @@ public class SkipWhenAttribute : Attribute
 {
     private const string TEMPLATE_START = "#template SkipIf object actual";
     private const string TEMPLATE_END = "return SkipIf;";
-    private readonly object value;
+    private readonly object? value;
     private readonly WinterForgeVM? vm;
 
-    public SkipWhenAttribute(object value)
+    public SkipWhenAttribute(object? value)
     {
         if (value is string s && s.StartsWith(TEMPLATE_START))
         {
@@ -30,8 +30,6 @@ public class SkipWhenAttribute : Attribute
         }
         else
             this.value = value;
-
-        bool test = ShouldSkip(false);
     }
 
     internal bool ShouldSkip(object? actual)

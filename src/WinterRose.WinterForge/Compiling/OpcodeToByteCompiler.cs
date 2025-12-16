@@ -49,6 +49,7 @@ public class OpcodeToByteCompiler
     private bool allowCustomCompilers = true;
     private bool allowedRehydrate = true;
     private bool SeenEndOfDataMark = false;
+    private int _maxParallelismDefault = Math.Max(1, Environment.ProcessorCount);
 
     private string? peekedLine = null;
 
@@ -57,6 +58,7 @@ public class OpcodeToByteCompiler
         peekedLine ??= reader.ReadLine();
         return peekedLine;
     }
+
 
     private string? ReadLine(StreamReader reader)
     {
@@ -133,40 +135,144 @@ public class OpcodeToByteCompiler
 
     public void Compile(Stream textOpcodes, Stream bytesDestination)
     {
+        // keep the synchronous API but run the async pipeline under the hood
+        CompileAsync(textOpcodes, bytesDestination, _maxParallelismDefault).GetAwaiter().GetResult();
+    }
+
+    public async Task CompileAsync(Stream textOpcodes, Stream bytesDestination, int maxDegreeOfParallelism = 0)
+    {
+        if (maxDegreeOfParallelism <= 0)
+            maxDegreeOfParallelism = _maxParallelismDefault;
+
+        // queue of tasks producing byte[] in the exact order they were enqueued
+        var queue = new System.Collections.Concurrent.BlockingCollection<Task<byte[]>>();
+
+        // consumer: writes tasks' results to final output in the same order tasks were added
+        var consumer = Task.Run(async () =>
+        {
+            using var finalWriter = new BinaryWriter(bytesDestination, Encoding.UTF8, leaveOpen: true);
+            try
+            {
+                foreach (var task in queue.GetConsumingEnumerable())
+                {
+                    var bytes = await task.ConfigureAwait(false);
+                    if (bytes?.Length > 0)
+                        finalWriter.Write(bytes);
+                }
+
+                // If target is a NetworkStream and no explicit WF_ENDOFDATA was seen during parsing,
+                // original behavior appended an END_OF_DATA byte at the end. Preserve that here.
+                if (bytesDestination is NetworkStream && !SeenEndOfDataMark)
+                {
+                    finalWriter.Write((byte)OpCode.END_OF_DATA);
+                }
+
+                finalWriter.Flush();
+            }
+            catch
+            {
+                // ensure we don't swallow exceptions — rethrow after disposing writer (consumer task will fault)
+                throw;
+            }
+        });
+
+        // producer: parse input, create immediate byte[] tasks or background compile tasks and enqueue them
         using var reader = new StreamReader(textOpcodes, leaveOpen: true);
-        using var writer = new BinaryWriter(bytesDestination, Encoding.UTF8, leaveOpen: true);
 
         string? line;
-        bool bufferingActive = bufferedObject != null; // Is optimized buffering active?
-
+        bool bufferingActive = bufferedObject != null; // not used for this path but preserve logic
+                                                       // order is implicit in queue ordering; BlockingCollection preserves insertion order
         while ((line = ReadLine(reader)) != null)
         {
-            if (!ValidateLine(writer, line, out var parts, out var opcodeByte))
-                if (SeenEndOfDataMark)
-                    break;
-                else
-                    continue;
+            // Quick handling for WF_ENDOFDATA to ensure exact behavior and ordering
+            if (line == "WF_ENDOFDATA")
+            {
+                SeenEndOfDataMark = true;
+                queue.Add(Task.FromResult(new byte[] { (byte)OpCode.END_OF_DATA }));
+                break;
+            }
+
+            if (!ValidateLine(line, out var parts, out var opcodeByte))
+            {
+                // ignore whitespace/comments; ValidateLine already sets SeenEndOfDataMark where appropriate
+                continue;
+            }
 
             var opcode = (OpCode)opcodeByte;
 
-            if (bufferingActive)
+            // Special-case DEFINE: check for custom compiler — if present, buffer the define block and
+            // offload rehydrate+compile to a Task; enqueue the Task so consumer will write it at the correct place.
+            if (opcode is OpCode.DEFINE)
             {
-                // Pass bufferingActive by ref, so ParseOptimizedCompile can disable it early
-                ParseOptimizedCompile(writer, reader, line, ref opcodeByte, opcode, ref bufferingActive);
-                if (bufferingActive)
-                    continue;
-                if (opcode is OpCode.END)
-                    continue;
+                Type t = WinterForgeVM.ResolveType(parts[1]);
+
+                if (allowCustomCompilers && CustomValueCompilerRegistry.TryGetByType(t, out ICustomValueCompiler foundCompiler))
+                {
+                    // start buffering the DEFINE block (first line stored)
+                    List<string> localBuffered = [line];
+                    int localNesting = 1;
+
+                    // read lines until nesting ends (matching original ParseOptimizedCompile behavior)
+                    while (localNesting > 0 && (line = ReadLine(reader)) != null)
+                    {
+                        // keep lines verbatim (we will reparse them in Rehydrate)
+                        if (line.StartsWith(((byte)OpCode.END).ToString() + " "))
+                            localNesting--;
+
+                        localBuffered.Add(line);
+                    }
+
+                    // capture relevant values for the Task
+                    int localRefId = int.Parse(parts[2]); // object id
+                    Type localType = t;
+                    var localCompiler = foundCompiler;
+
+                    // create background task that rehydrates and compiles this object to bytes
+                    Task<byte[]> compileTask = Task.Run(() =>
+                    {
+                        // rehydrate instance from buffered text opcodes
+                        object instance = Rehydrate(localBuffered, localType);
+
+                        // compile into a memory stream (same output format original used)
+                        using var ms = new MemoryStream();
+                        using var bw = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true);
+
+                        // header written by original code
+                        bw.Write((byte)0x00);
+                        bw.Write((byte)0x00);
+                        bw.Write(localCompiler.CompilerId);
+                        bw.Write(localRefId);
+
+                        // custom compiler writes bytes representing the instance
+                        localCompiler.Compile(bw, instance);
+                        bw.Flush();
+                        return ms.ToArray();
+                    });
+
+                    queue.Add(compileTask);
+                    continue; // proceed to next input line
+                }
             }
 
-            EmitOpcode(writer, reader, line, parts, opcodeByte, opcode);
-            bufferingActive = bufferedObject != null;
+            // Non-custom or DEFINE-without-custom path:
+            // Emit opcode to a temporary memory stream (so we can get its bytes), then enqueue an immediate Task
+            using (var ms = new MemoryStream())
+            {
+                using (var tempWriter = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
+                {
+                    // reuse existing EmitOpcode logic which writes to BinaryWriter
+                    EmitOpcode(tempWriter, reader, line, parts, opcodeByte, opcode);
+                    tempWriter.Flush();
+                }
+
+                byte[] bytes = ms.ToArray();
+                queue.Add(Task.FromResult(bytes));
+            }
         }
 
-        if (bytesDestination is NetworkStream && !SeenEndOfDataMark)
-            writer.Write((byte)OpCode.END_OF_DATA);
-
-        writer.Flush();
+        // finished producing items — signal consumer and await it
+        queue.CompleteAdding();
+        await consumer.ConfigureAwait(false);
     }
 
 
@@ -177,18 +283,16 @@ public class OpcodeToByteCompiler
             // Illegal opcode detected for optimized rehydration
 
             allowCustomCompilers = false;
-            Type t = WinterForgeVM.ResolveType(bufferedObject[0].Split(' ')[1]);
-            //instanceStack.Push(t);
 
             foreach (string bufferedLine in bufferedObject)
             {
-                ValidateLine(writer, bufferedLine, out var bufferedParts, out var bufferedOpcodeByte);
+                ValidateLine(bufferedLine, out var bufferedParts, out var bufferedOpcodeByte);
                 EmitOpcode(writer, reader, bufferedLine, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
             }
 
             // this loose scope is intentional to not interfere with the above foreach loop
             {
-                ValidateLine(writer, line, out var bufferedParts, out var bufferedOpcodeByte);
+                ValidateLine(line, out var bufferedParts, out var bufferedOpcodeByte);
                 EmitOpcode(writer, reader, line, bufferedParts, bufferedOpcodeByte, (OpCode)bufferedOpcodeByte);
             }
             allowCustomCompilers = true;
@@ -214,7 +318,7 @@ public class OpcodeToByteCompiler
         {
             if (allowedRehydrate)
             {
-                object instance = Rehydrate(bufferedObject, bufferedType!); // you'll define this
+                object instance = Rehydrate(bufferedObject, bufferedType!);
 
                 writer.Write((byte)0x00);
                 writer.Write((byte)0x00);
@@ -238,7 +342,7 @@ public class OpcodeToByteCompiler
     }
 
 
-    private bool ValidateLine(BinaryWriter writer, string line, out string[] parts, out byte opcodeByte)
+    private bool ValidateLine(string line, out string[] parts, out byte opcodeByte)
     {
         parts = Array.Empty<string>();
         opcodeByte = 0;
@@ -246,15 +350,14 @@ public class OpcodeToByteCompiler
         if (string.IsNullOrWhiteSpace(line))
             return false;
 
-        if (line == "WF_ENDOFDATA")
-        {
-            writer.Write((byte)OpCode.END_OF_DATA);
-            SeenEndOfDataMark = true;
-            return false; // no further processing needed
-        }
-
         if (line.StartsWith("//")) // skip comments
             return false;
+
+        if (line == "WF_ENDOFDATA")
+        {
+            SeenEndOfDataMark = true;
+            return false;
+        }
 
         parts = SplitOpcodeLine(line.Trim());
         if (parts.Length == 0)
@@ -310,7 +413,9 @@ public class OpcodeToByteCompiler
                         Type fieldType = mem.Type;
                         ValuePrefix prefix = GetNumericValuePrefix(fieldType);
 
-                        if(parts[2] is not "#stack()" && CustomValueCompilerRegistry.TryGetByType(fieldType, out ICustomValueCompiler compiler))
+                        if(parts[2] is not "#stack()" 
+                            && CustomValueCompilerRegistry.TryGetByType(fieldType, out ICustomValueCompiler compiler) 
+                            && parts[2].GetType() == compiler.CompilerType)
                         {
                             writer.Write((byte)0x00);
                             writer.Write((byte)0x00);

@@ -9,6 +9,8 @@ namespace WinterRose.WinterForgeSerializing.Compiling;
 
 public abstract class CustomValueCompiler<T> : ICustomValueCompiler
 {
+    public Type CompilerType => typeof(T);
+
     // This hash is used as the unique identifier for the compiled form
     public uint CompilerId { get; private set; }
     uint ICustomValueCompiler.CompilerId { get => CompilerId; set => CompilerId = value; }

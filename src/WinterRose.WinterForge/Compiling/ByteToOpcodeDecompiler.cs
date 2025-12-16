@@ -9,36 +9,46 @@ public class ByteToOpcodeDecompiler
 {
     public static bool WaitIndefinitelyForData { get; set; } = false;
 
-    public static List<Instruction> Parse(Stream byteStream)
+    public static InstructionStream Parse(Stream byteStream)
     {
-        using CacheReader cacheStream = new(byteStream, new MemoryStream());
-        try
+        var instructionStream = new InstructionStream();
+
+        ThreadPool.QueueUserWorkItem(_ =>
         {
-            using var reader = new BinaryReader(cacheStream, System.Text.Encoding.UTF8, leaveOpen: true);
-            return InternalParse(reader);
-        }
-        catch (InvalidOperationException e)
-        {
-            using DualStreamReader cache = cacheStream.CreateFallbackReader();
+            using CacheReader cacheStream = new(byteStream, new MemoryStream());
             try
             {
-                using MemoryStream opcodes = new MemoryStream();
-                WinterForge.ConvertFromStreamToStream(cache, opcodes, TargetFormat.Optimized);
-                opcodes.Position = 0;
-                using var reader = new BinaryReader(opcodes, System.Text.Encoding.UTF8, leaveOpen: false);
-                return InternalParse(reader);
+                using var reader = new BinaryReader(cacheStream, System.Text.Encoding.UTF8, leaveOpen: true);
+                InternalParse(reader, instructionStream);
+                instructionStream.Complete();
             }
-            catch
+            catch (InvalidOperationException e)
             {
-                throw e;
+                using DualStreamReader cache = cacheStream.CreateFallbackReader();
+                try
+                {
+                    using MemoryStream opcodes = new MemoryStream();
+                    WinterForge.ConvertFromStreamToStream(cache, opcodes, TargetFormat.Optimized);
+                    opcodes.Position = 0;
+                    using var reader = new BinaryReader(opcodes, System.Text.Encoding.UTF8, leaveOpen: false);
+                    InternalParse(reader, instructionStream);
+                    instructionStream.Complete();
+                }
+                catch
+                {
+                    instructionStream.Fail(e);
+                }
             }
-        }
+            catch (Exception e)
+            {
+                instructionStream.Fail(e);
+            }
+        });
+        return instructionStream;
     }
 
-    private static List<Instruction> InternalParse(BinaryReader reader)
+    private static void InternalParse(BinaryReader reader, InstructionStream instructions)
     {
-        List<Instruction> instructions = [];
-
         try
         {
             while (true)
@@ -217,8 +227,6 @@ public class ByteToOpcodeDecompiler
         {
             // assume end of instructions giving valid data because who gives a fuck
         }
-
-        return instructions;
     }
 
 

@@ -13,7 +13,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// <summary>
         /// The instruction opcode
         /// </summary>
-        public readonly OpCode OpCode => opCode;
+        public readonly OpCode Opcode => opCode;
 
         /// <summary>
         /// The arguments of the opcode, if any
@@ -23,6 +23,6 @@ namespace WinterRose.WinterForgeSerializing.Instructions
 
         public override string ToString() => $"{opCode} {string.Join(' ', args)}";
 
-        public readonly Instruction Clone() => new Instruction(OpCode, Args);
+        public readonly Instruction Clone() => new Instruction(Opcode, Args);
     }
 }

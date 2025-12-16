@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Instructions;
 using WinterRose.WinterForgeSerializing.Workers;
 
@@ -6,7 +7,7 @@ namespace WinterRose.WinterForgeSerializing.Containers;
 
 public class Template : Scope
 {
-    public List<Instruction> Instructions { get; set; } = [];
+    public InstructionStream Instructions { get; set; } = [];
     public List<TemplateParmeter> Parameters { get; set; } = [];
 
     public Template(string name, params List<TemplateParmeter> parameters)
@@ -29,6 +30,7 @@ public class Template : Scope
 
     internal object? Call(object[] args, WinterForgeVM executor)
     {
+        Instructions.Complete();
         if (args.Length != Parameters.Count)
             throw new WinterForgeExecutionException($"Parameter count mismatch. Expected " +
                 $"[{string.Join(", ", Parameters.Select(p => p.Type.FullName))}]" +
