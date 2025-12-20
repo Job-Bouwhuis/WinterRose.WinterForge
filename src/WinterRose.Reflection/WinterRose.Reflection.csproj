@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <Version>25.3.0</Version>
+    <Version>25.4.0</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>WinterRose.Reflection</Title>
     <Description>A handy lightweight tool library that aids with a lot of reflection stuff</Description>
@@ -17,6 +17,8 @@
     <PackageReadmeFile>README_WinterRose.Reflection.md</PackageReadmeFile>
     <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <Copyright>WinterRose</Copyright>
+    <PackageProjectUrl>https://github.com/Job-Bouwhuis/WinterRose.WinterForge</PackageProjectUrl>
   </PropertyGroup>
 
   <ItemGroup>

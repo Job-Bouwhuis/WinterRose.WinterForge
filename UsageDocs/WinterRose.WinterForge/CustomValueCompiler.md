@@ -13,7 +13,8 @@ across app runs. further testing will be done and a later version will have a po
 - [Custom Value Providers](CustomValueProvider_Examples.md)
 - [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
 - [Access Restrictions](Access_Restrictions.md)  
-- [Flow Hooks](FlowHooks.md)  
+- [Flow Hooks](FlowHooks.md)
+- [Scripting](Scripting.md)
 
 
 an example of a Vector2 compiler.

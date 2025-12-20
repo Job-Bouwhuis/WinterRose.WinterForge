@@ -15,6 +15,7 @@ Without accessing, theres no way to read a variable
 - [Custom Value Providers](CustomValueProvider_Examples.md)  
 - [CustomValueCompiler](CustomValueCompiler.md)
 - [Flow Hooks](FlowHooks.md) 
+- [Scripting](Scripting.md)
 
 ## Examples:
 ```cs

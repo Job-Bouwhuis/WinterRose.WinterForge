@@ -29,7 +29,8 @@ namespace WinterRose.WinterForgeSerializing
     public static class WinterForge
     {
         /// <summary>
-        /// The working directory WinterForge uses. accessd by "#WorkingDir"
+        /// The working directory WinterForge uses. accessd by "#workingDir()" <br />
+        /// This property is whitelisted for the default WinterForge class access filter
         /// </summary>
         public static string WorkingDir { get; set; } = Directory.GetCurrentDirectory();
         /// <summary>
@@ -37,8 +38,27 @@ namespace WinterRose.WinterForgeSerializing
         /// </summary>
         public static string ImportDir { get; set; } = WorkingDir;
 
-        public static bool NoAccessFilter { get; set; } = false;
+        /// <summary>
+        /// When true, all default access filters will NOT be applied.<br /> Default is to false 
+        /// </summary>
+        public static bool NoDefaultAccessFilters { get; set; } = false;
 
+        /// <summary>
+        /// Whether or not the scripting part of winterforge is enabled <br />
+        /// That being templates(functions), containers(classes), and loops <br />
+        /// Accessing is not a part of this. <br /> <br/>
+        ///
+        /// Default: <see cref="ScriptingLevel.Conditions"/>
+        /// </summary>
+        public static ScriptingLevel AllowedScriptingLevel { get; set; } = ScriptingLevel.None;
+
+        public enum ScriptingLevel
+        {
+            None,
+            Conditions,
+            All
+        }
+        
         /// <summary>
         /// The primitive types that are handled as-is by WinterForge
         /// </summary>

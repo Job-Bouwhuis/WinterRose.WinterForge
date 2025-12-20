@@ -602,9 +602,16 @@ namespace WinterRose.WinterForgeSerializing.Workers
         /// Gets the type name in a normal way
         /// </summary>
         /// <param name="elementType"></param>
+        /// <returns></returns>
+        public static string ParseTypeName(Type elementType) => ParseTypeName(elementType, false);
+        
+        /// <summary>
+        /// Gets the type name in a normal way
+        /// </summary>
+        /// <param name="elementType"></param>
         /// <param name="allowNullTypeResolveToStringNull">When true, and <paramref name="elementType"/> is <see langword="null"/>, will return "Null-Type" as string</param>
         /// <returns></returns>
-        public static string ParseTypeName(Type elementType, bool allowNullTypeResolveToStringNull = false)
+        public static string ParseTypeName(Type elementType, bool allowNullTypeResolveToStringNull)
         {
             if (elementType is null && allowNullTypeResolveToStringNull)
                 return "Null-Type";

@@ -35,7 +35,7 @@ namespace WinterRose.WinterForgeSerializing
 
         static AccessFilterCache()
         {
-            if (WinterForge.NoAccessFilter)
+            if (WinterForge.NoDefaultAccessFilters)
                 return;
 
             GetFilter(typeof(File), AccessFilterKind.Whitelist);
@@ -77,7 +77,8 @@ namespace WinterRose.WinterForgeSerializing
 
             GetFilter(typeof(DataContractSerializer), AccessFilterKind.Whitelist);
             GetFilter(typeof(XmlSerializer), AccessFilterKind.Whitelist);
-            GetFilter(typeof(WinterForge), AccessFilterKind.Whitelist);
+            var wffilter = GetFilter(typeof(WinterForge), AccessFilterKind.Whitelist);
+            wffilter.Govern(nameof(WinterForge.WorkingDir));
             GetFilter(typeof(ObjectSerializer), AccessFilterKind.Whitelist);
             GetFilter(typeof(HumanReadableParser), AccessFilterKind.Whitelist);
             GetFilter(typeof(HumanReadableIndenter), AccessFilterKind.Whitelist);

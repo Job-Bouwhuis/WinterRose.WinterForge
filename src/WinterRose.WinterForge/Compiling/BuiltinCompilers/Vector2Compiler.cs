@@ -94,10 +94,25 @@ public sealed class Matrix4x4Compiler : CustomValueCompiler<Matrix4x4>
 
     public override Matrix4x4 Decompile(BinaryReader reader)
     {
-        float m11 = reader.ReadSingle(); float m12 = reader.ReadSingle(); float m13 = reader.ReadSingle(); float m14 = reader.ReadSingle();
-        float m21 = reader.ReadSingle(); float m22 = reader.ReadSingle(); float m23 = reader.ReadSingle(); float m24 = reader.ReadSingle();
-        float m31 = reader.ReadSingle(); float m32 = reader.ReadSingle(); float m33 = reader.ReadSingle(); float m34 = reader.ReadSingle();
-        float m41 = reader.ReadSingle(); float m42 = reader.ReadSingle(); float m43 = reader.ReadSingle(); float m44 = reader.ReadSingle();
+        float m11 = reader.ReadSingle(); 
+        float m12 = reader.ReadSingle();
+        float m13 = reader.ReadSingle(); 
+        float m14 = reader.ReadSingle();
+        
+        float m21 = reader.ReadSingle(); 
+        float m22 = reader.ReadSingle(); 
+        float m23 = reader.ReadSingle();
+        float m24 = reader.ReadSingle();
+        
+        float m31 = reader.ReadSingle(); 
+        float m32 = reader.ReadSingle(); 
+        float m33 = reader.ReadSingle(); 
+        float m34 = reader.ReadSingle();
+        
+        float m41 = reader.ReadSingle(); 
+        float m42 = reader.ReadSingle();
+        float m43 = reader.ReadSingle(); 
+        float m44 = reader.ReadSingle();
 
         return new Matrix4x4(
             m11, m12, m13, m14,

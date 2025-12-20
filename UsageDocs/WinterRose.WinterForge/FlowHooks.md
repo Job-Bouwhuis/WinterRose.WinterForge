@@ -8,7 +8,8 @@ A way for an object instance to have a say in what happens before and after its 
 - [Custom Value Providers](CustomValueProvider_Examples.md)   
 - [CustomValueCompiler](CustomValueCompiler.md)
 - [Anonymous Type Syntax](Anonymous_Type_Syntax.md)  
-- [Access Restrictions](Access_Restrictions.md)  
+- [Access Restrictions](Access_Restrictions.md)
+- [Scripting](Scripting.md)
 
 Done by marking instance methods with one of these attributes  
 [BeforeSerialize]  

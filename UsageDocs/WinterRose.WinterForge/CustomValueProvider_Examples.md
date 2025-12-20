@@ -13,7 +13,8 @@ On the 'GetObject' method (more on that method below) you do not have to account
 - [Built-in Functions](WinterForge_Built-in_Functions.md)   
 - [CustomValueCompiler](CustomValueCompiler.md)
 - [Flow Hooks](FlowHooks.md)  
-- [Access Restrictions](Access_Restrictions.md)  
+- [Access Restrictions](Access_Restrictions.md)
+- [Scripting](Scripting.md)
 
 ## Code examples
 ```cs

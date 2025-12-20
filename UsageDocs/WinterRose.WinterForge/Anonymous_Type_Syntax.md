@@ -12,7 +12,8 @@ Regardless, ive had a blast working on them
 - [Custom Value Providers](CustomValueProvider_Examples.md)   
 - [CustomValueCompiler](CustomValueCompiler.md)
 - [Flow Hooks](FlowHooks.md)  
-- [Access Restrictions](Access_Restrictions.md)  
+- [Access Restrictions](Access_Restrictions.md)
+- [Scripting](Scripting.md)
 
 Define an anonymous type:
 ```

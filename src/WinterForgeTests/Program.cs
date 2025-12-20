@@ -26,7 +26,7 @@ internal class Program
     public static int data = 15;
     public static bool flag = false;
     
-    private unsafe static void Main()
+    private static void Main()
     {
         benchmark();
 
@@ -65,7 +65,6 @@ internal class Program
 
         WinterForge.CompressedStreams = true;
         WinterForge.AllowCustomCompilers = true;
-        WinterRose.Windows.OpenConsole();
         Console.WriteLine("Creating data files");
         var w1 = WinterRose.WinterForgeSerializing.OverlyComplicatedTest.StupidComplexGenerator.Generate();
         Console.WriteLine("Serialization speed test...");

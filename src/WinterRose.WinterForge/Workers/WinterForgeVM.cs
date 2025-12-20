@@ -23,10 +23,23 @@ public class WinterForgeVM : IDisposable
     /// Enables some 
     /// </summary>
     public static bool Debug { get; set; } = false;
+
     /// <summary>
-    /// when true, prints the debug stuff to the console automatically
+    /// when true, prints the debug stuff to the console automatically. it really is for debug
     /// </summary>
     public static bool DebugAutoPrint { get; set; } = false;
+
+    /// <summary>
+    /// The default functions, if their entry here does not contain a closing ) they may accept argument(s)
+    /// </summary>
+    public static IReadOnlyList<string> BuiltinFunctions =
+    [
+        "#ref(",
+        "#stack()",
+        "#type()",
+        "#workingDir()",
+        "#str("
+    ];
 
     public bool IsDisposed { get; private set; }
 
@@ -36,6 +49,7 @@ public class WinterForgeVM : IDisposable
     {
         public abstract ICollection Collection { get; }
     }
+
     private class ListDefinition : CollectionDefinition
     {
         public ListDefinition(Type itemType, IList newList)
@@ -48,6 +62,7 @@ public class WinterForgeVM : IDisposable
         public IList Values { get; set; }
         public override ICollection Collection => Values;
     }
+
     private class DictionaryDefinition : CollectionDefinition
     {
         public DictionaryDefinition(Type keyType, Type valueType, IDictionary values)
@@ -92,18 +107,18 @@ public class WinterForgeVM : IDisposable
             if (o != null)
                 return o;
         }
+
         return null;
     }
 
     private bool TryGetContainerFromContexts(string name, out Container container)
     {
-        
-
         foreach (var ctx in scopeStack)
         {
             if (ctx.Containers.TryGetValue(name, out container))
                 return true;
         }
+
         container = null!;
         return false;
     }
@@ -116,7 +131,7 @@ public class WinterForgeVM : IDisposable
     internal readonly Stack<Scope> scopeStack = new();
     public Scope? CurrentScope => scopeStack.Count > 0 ? scopeStack.Peek() : null;
 
-    public unsafe object? Execute(InstructionStream instructionCollection, bool clearInternals)
+    public object? Execute(InstructionStream instructionCollection, bool clearInternals)
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
         int instructionTotal = instructionCollection.Count;
@@ -146,9 +161,9 @@ public class WinterForgeVM : IDisposable
                 if (CurrentContext.constructingScopes.TryPeek(out Scope cs)
                     && cs is Template templ
                     && instruction.Opcode is not OpCode.TEMPLATE_CREATE and not OpCode.TEMPLATE_END
-                    and not OpCode.CONTAINER_START and not OpCode.CONTAINER_END
-                    and not OpCode.VAR_DEF_START
-                    and not OpCode.VAR_DEF_END)
+                        and not OpCode.CONTAINER_START and not OpCode.CONTAINER_END
+                        and not OpCode.VAR_DEF_START
+                        and not OpCode.VAR_DEF_END)
                 {
                     templ.Instructions.Add(instruction);
                     continue;
@@ -179,12 +194,14 @@ public class WinterForgeVM : IDisposable
                         break;
                     case OpCode.STR:
                         if (sb is null)
-                            throw new InvalidOperationException("Missing 'START_STR' instruction before 'STR' operation");
+                            throw new WinterForgeExecutionException(
+                                "Missing 'START_STR' instruction before 'STR' operation");
                         sb.AppendLine((string)instruction.Args[0]);
                         break;
                     case OpCode.END_STR:
                         if (sb is null)
-                            throw new InvalidOperationException("Missing 'START_STR' instruction before 'END_STR' operation");
+                            throw new WinterForgeExecutionException(
+                                "Missing 'START_STR' instruction before 'END_STR' operation");
                         CurrentContext.ValueStack.Push(sb.ToString());
                         sb = null;
                         break;
@@ -212,10 +229,10 @@ public class WinterForgeVM : IDisposable
                         progressTracker?.Report((this.instructionIndexStack.Peek() + 1) / (float)instructionTotal);
                         break;
                     case OpCode.ACCESS:
-                        {
-                            HandleAccess(instruction);
-                            break;
-                        }
+                    {
+                        HandleAccess(instruction);
+                        break;
+                    }
                     case OpCode.SETACCESS:
                         HandleSetAccess(instruction);
                         break;
@@ -266,92 +283,118 @@ public class WinterForgeVM : IDisposable
                         break;
 
                     case OpCode.NOT:
-                        {
-                            bool value = PopBool();
-                            CurrentContext.ValueStack.Push(!value);
-                            break;
-                        }
+                    {
+                        bool value = PopBool();
+                        CurrentContext.ValueStack.Push(!value);
+                        break;
+                    }
 
                     case OpCode.CONSTRUCTOR_START:
                     case OpCode.TEMPLATE_CREATE:
+                    {
+                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+                            throw new WinterForgeExecutionException(
+                                "Function definition not permitted. Required scripting level exceeds current VM configuration"
+                            );
+                        bool isConstructor = CurrentContext.constructingScopes.TryPeek(out Scope s)
+                                             && s.Name == (string)instruction.Args[0];
+
+                        int argCount = (int)instruction.Args[1];
+
+                        // when argCount == 0 we skip only name, otherwise name+count
+                        int startIndex = (argCount == 0) ? 1 : 2;
+
+                        List<TemplateParmeter> templateArgs = new(argCount);
+
+                        for (int i = startIndex; i < startIndex + argCount * 2; i += 2)
                         {
-                            bool isConstructor = CurrentContext.constructingScopes.TryPeek(out Scope s)
-                                            && s.Name == (string)instruction.Args[0];
-
-                            int argCount = (int)instruction.Args[1];
-
-                            // when argCount == 0 we skip only name, otherwise name+count
-                            int startIndex = (argCount == 0) ? 1 : 2;
-
-                            List<TemplateParmeter> templateArgs = new(argCount);
-
-                            for (int i = startIndex; i < startIndex + argCount * 2; i += 2)
-                            {
-                                templateArgs.Add(new TemplateParmeter(
-                                    ResolveType((string)instruction.Args[i]),
-                                    (string)instruction.Args[i + 1]
-                                ));
-                            }
-
-                            Template t = new Template((string)instruction.Args[0], templateArgs);
-                            CurrentContext.constructingScopes.Push(t);
+                            templateArgs.Add(new TemplateParmeter(
+                                ResolveType((string)instruction.Args[i]),
+                                (string)instruction.Args[i + 1]
+                            ));
                         }
+
+                        Template t = new Template((string)instruction.Args[0], templateArgs);
+                        CurrentContext.constructingScopes.Push(t);
+                    }
                         break;
 
                     case OpCode.TEMPLATE_END: // 38
-                        {
-                            if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Template t)
-                                throw new WinterForgeExecutionException("Tried ending a template but most recent scope was not a template");
+                    {
+                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+                            throw new WinterForgeExecutionException(
+                                "Function definition not permitted. Required scripting level exceeds current VM configuration"
+                            );
+                        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Template t)
+                            throw new WinterForgeExecutionException(
+                                "Tried ending a template but most recent scope was not a template");
 
-                            if (CurrentContext.constructingScopes.Count == 0)
-                                if (scopeStack.TryPeek(out var current))
-                                {
-                                    current.DefineTemplate(t);
-                                    break;
-                                }
+                        if (CurrentContext.constructingScopes.Count == 0)
+                            if (scopeStack.TryPeek(out var current))
+                            {
+                                current.DefineTemplate(t);
+                                break;
+                            }
 
-                            if (!CurrentContext.constructingScopes.TryPeek(out s))
-                                throw new WinterForgeExecutionException("Tried ending a template but just ended scope was not defined in a scope");
+                        if (!CurrentContext.constructingScopes.TryPeek(out s))
+                            throw new WinterForgeExecutionException(
+                                "Tried ending a template but just ended scope was not defined in a scope");
 
-                            s.DefineTemplate(t);
-                        }
+                        s.DefineTemplate(t);
+                    }
                         break;
 
 
-
                     case OpCode.CONTAINER_START: // 39
+                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+                            throw new WinterForgeExecutionException(
+                                "Illegal container definition: class declarations are not permitted at the current scripting level"
+                            );
+
+
                         Container newContainer = new((string)instruction.Args[0]);
                         CurrentContext.constructingScopes.Push(newContainer);
                         scopeStack.Push(newContainer);
                         break;
 
                     case OpCode.CONTAINER_END: // 40
-                        {
-                            if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Container c)
-                                throw new WinterForgeExecutionException("Tried ending a container but just ended scope was not a container");
-                            scopeStack.Pop();
+                    {
+                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+                            throw new WinterForgeExecutionException(
+                                "Illegal container definition: class declarations are not permitted at the current scripting level"
+                            );
+                        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Container c)
+                            throw new WinterForgeExecutionException(
+                                "Tried ending a container but just ended scope was not a container");
+                        scopeStack.Pop();
 
-                            CurrentContext.constructingScopes.TryPeek(out Scope owner);
-                            owner ??= scopeStack.Peek();
-                            owner.Containers.Add(c.Name, c);
-                            //CurrentContext.Containers[c.Name] = c;
-                        }
+                        CurrentContext.constructingScopes.TryPeek(out Scope owner);
+                        owner ??= scopeStack.Peek();
+                        owner.Containers.Add(c.Name, c);
+                        //CurrentContext.Containers[c.Name] = c;
+                    }
                         break;
 
                     case OpCode.CONSTRUCTOR_END: // 42
-                        {
-                            if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Template t)
-                                throw new WinterForgeExecutionException("Tried ending a constructor but most recent scope was not a template");
+                    {
+                        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Template t)
+                            throw new WinterForgeExecutionException(
+                                "Tried ending a constructor but most recent scope was not a template");
 
-                            if (!CurrentContext.constructingScopes.TryPeek(out s) || s is not Container c)
-                                throw new WinterForgeExecutionException("Tried ending a constructor but just ended template was not defined in a container");
+                        if (!CurrentContext.constructingScopes.TryPeek(out s) || s is not Container c)
+                            throw new WinterForgeExecutionException(
+                                "Tried ending a constructor but just ended template was not defined in a container");
 
-                            t.Parent = c;
-                            c.Constructors.DefineTemplate(t);
-                        }
+                        t.Parent = c;
+                        c.Constructors.DefineTemplate(t);
+                    }
                         break;
 
                     case OpCode.VAR_DEF_START:
+                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+                            throw new WinterForgeExecutionException(
+                                "Illegal variable declaration: container-scope variables are not permitted at the current scripting level"
+                            );
                         buildingVariable = new Variable();
                         buildingVariable.Name = (string)instruction.Args[0];
 
@@ -364,8 +407,10 @@ public class WinterForgeVM : IDisposable
                                 buildingVariable.DefaultValueAsExpression = false;
                                 break;
                             }
+
                             goto ExpressionBuilding;
                         }
+
                         if (instruction.Args.Length == 2)
                         {
                             buildingVariable.defaultValue = instruction.Args[1];
@@ -373,7 +418,7 @@ public class WinterForgeVM : IDisposable
                             break;
                         }
 
-ExpressionBuilding:
+                        ExpressionBuilding:
                         buildingVariable.DefaultValueInstructions = [];
                         buildingVariable.DefaultValueAsExpression = true;
                         while (NextInstruction(out instruction))
@@ -382,28 +427,34 @@ ExpressionBuilding:
                                 goto case OpCode.VAR_DEF_END;
                             buildingVariable.DefaultValueInstructions.Add(instruction);
                         }
+
                         break;
 
                     case OpCode.VAR_DEF_END: // 44
-                                             // TODO: End variable definition
-                        {
-                            Scope s = CurrentContext.constructingScopes.Peek();
-                            if (s is null)
-                                throw new WinterForgeExecutionException("Attempting to add a variable on a non existing scope is impossible!");
+                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+                            throw new WinterForgeExecutionException(
+                                "Illegal variable declaration: container-scope variables are not permitted at the current scripting level"
+                            );
+                    {
+                        Scope s = CurrentContext.constructingScopes.Peek();
+                        if (s is null)
+                            throw new WinterForgeExecutionException(
+                                "Attempting to add a variable on a non existing scope is impossible!");
 
-                            if (buildingVariable is null)
-                                throw new WinterForgeExecutionException("Attempting to add a null variable to a scope is illegal!");
+                        if (buildingVariable is null)
+                            throw new WinterForgeExecutionException(
+                                "Attempting to add a null variable to a scope is illegal!");
 
-                            s.DefineVariable(buildingVariable);
-                            buildingVariable = null;
-                        }
+                        s.DefineVariable(buildingVariable);
+                        buildingVariable = null;
+                    }
                         break;
 
                     case OpCode.FORCE_DEF_VAR: // 45
-                        {
-                            Scope current = scopeStack.Peek();
-                            current.DefineVariable(new Variable((string)instruction.Args[0]));
-                        }
+                    {
+                        Scope current = scopeStack.Peek();
+                        current.DefineVariable(new Variable((string)instruction.Args[0]));
+                    }
                         break;
 
                     case OpCode.SCOPE_PUSH:
@@ -488,6 +539,10 @@ ExpressionBuilding:
 
     private void HandleJump(string label, IReadOnlyList<Instruction> instructionCollection)
     {
+        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.Conditions)
+            throw new WinterForgeExecutionException(
+                "Illegal control-flow instruction: conditions are disabled by the current VM scripting level");
+
         if (labelCache!.Peek() is null)
         {
             labelCache.Pop();
@@ -536,7 +591,8 @@ ExpressionBuilding:
         }
 
         if (currentDepth < targetDepth)
-            throw new WinterForgeExecutionException($"Attempted to jump into a deeper scope ('{label}'). Jumps into deeper scope are not allowed.");
+            throw new WinterForgeExecutionException(
+                $"Attempted to jump into a deeper scope ('{label}'). Jumps into deeper scope are not allowed.");
 
         // set next instruction index to the target
         instructionIndexStack.Pop();
@@ -562,7 +618,7 @@ ExpressionBuilding:
     }
 
     /// <summary>
-    /// Releases the workings 
+    /// Releases the resources of the VM
     /// </summary>
     public void Dispose()
     {
@@ -574,16 +630,15 @@ ExpressionBuilding:
         {
             contextStack.Pop().Dispose();
         }
+
         dispatchedReferences.Clear();
         listStack.Clear();
         instanceIDStack.Clear();
     }
 
-
-
-    private unsafe object? HandleReturn(Instruction instruction, bool isBody)
+    private object? HandleReturn(Instruction instruction, bool isBody)
     {
-        Validate();
+        ValidateReturn();
 
         var arg0 = instruction.Args[0];
         object returnVal = GetArgumentValue(arg0, 0, typeof(Any));
@@ -601,9 +656,10 @@ ExpressionBuilding:
             if (returnVal is int parsedId)
             {
                 returnVal = GetObjectFromContexts(parsedId)
-                    ?? throw new Exception($"object with ID {parsedId} not found");
+                            ?? throw new Exception($"object with ID {parsedId} not found");
             }
         }
+
         if (returnVal is Dispatched)
             throw new WinterForgeExecutionException("Can not dispatch a return value!");
         return returnVal;
@@ -626,13 +682,15 @@ ExpressionBuilding:
                 CurrentContext.ValueStack.Push(v.defaultValue);
                 return;
             }
+
             if (id is TemplateGroup tg)
             {
                 CurrentContext.ValueStack.Push(tg);
                 return;
             }
 
-            throw new WinterForgeExecutionException($"Variable or Template with name {fieldName} does not exist on the container!");
+            throw new WinterForgeExecutionException(
+                $"Variable or Template with name {fieldName} does not exist on the container!");
         }
 
         AccessFilterCache.Validate(o is Type ? (Type)o : o.GetType(), AccessFilterKind.Blacklist, fieldName);
@@ -640,7 +698,7 @@ ExpressionBuilding:
         CurrentContext.ValueStack.Push(rh.GetValueFrom(fieldName));
     }
 
-    private unsafe void HandleImport(Instruction instruction)
+    private void HandleImport(Instruction instruction)
     {
         string fileName = (string)instruction.Args[0];
         if (fileName.StartsWith('"') && fileName.EndsWith('"'))
@@ -648,7 +706,8 @@ ExpressionBuilding:
 
         FileInfo? fileInf = new DirectoryInfo(WinterForge.ImportDir).GetFiles($"{fileName}.*").FirstOrDefault();
         if (fileInf is null)
-            throw new WinterForgeExecutionException($"Import for file {fileName} can not be found in the WinterForge import directory: {WinterForge.ImportDir}");
+            throw new WinterForgeExecutionException(
+                $"Import for file {fileName} can not be found in the WinterForge import directory: {WinterForge.ImportDir}");
         using FileStream stream = fileInf.OpenRead();
         var instr = ByteToOpcodeDecompiler.Parse(stream);
         var VM = new WinterForgeVM();
@@ -674,11 +733,11 @@ ExpressionBuilding:
 
                 opcodeTimings[timing.Key] = t;
             }
-
         }
     }
 
     #region benchmark methods
+
     public void PrintOpcodeTimings(Stream outputStream)
     {
         using var writer = new StreamWriter(outputStream, leaveOpen: true);
@@ -727,7 +786,7 @@ ExpressionBuilding:
 
     #endregion
 
-    private unsafe void HandleMathOp(Instruction instruction)
+    private void HandleMathOp(Instruction instruction)
     {
         (decimal a, decimal b) = PopTwoDecimals();
 
@@ -745,7 +804,7 @@ ExpressionBuilding:
         CurrentContext.ValueStack.Push(result);
     }
 
-    private unsafe void HandleNegatorOp()
+    private void HandleNegatorOp()
     {
         object value = CurrentContext.ValueStack.Pop();
         value = GetArgumentValue(value, 0, typeof(decimal), null);
@@ -755,7 +814,7 @@ ExpressionBuilding:
         CurrentContext.ValueStack.Push(-(decimal)value);
     }
 
-    private unsafe void HandleCrossValueBooleanOp(Instruction instruction)
+    private void HandleCrossValueBooleanOp(Instruction instruction)
     {
         object b = CurrentContext.ValueStack.Pop();
         object a = CurrentContext.ValueStack.Pop();
@@ -811,7 +870,6 @@ ExpressionBuilding:
         return string.Compare(a.ToString(), b.ToString(), StringComparison.Ordinal);
     }
 
-
     private static bool TryConvertToDecimal(object obj, out decimal result)
     {
         try
@@ -827,8 +885,7 @@ ExpressionBuilding:
         }
     }
 
-
-    private unsafe void HandleBasicBoolToBoolOp(Instruction instruction)
+    private void HandleBasicBoolToBoolOp(Instruction instruction)
     {
         bool b = PopBool();
         bool a = PopBool();
@@ -844,7 +901,7 @@ ExpressionBuilding:
         CurrentContext.ValueStack.Push(result);
     }
 
-    private unsafe void HandleSetAccess(Instruction instruction)
+    private void HandleSetAccess(Instruction instruction)
     {
         var field = (string)instruction.Args[0];
         var rawValue = instruction.Args[1];
@@ -890,7 +947,6 @@ ExpressionBuilding:
         member.SetValue(ref actual, value);
     }
 
-
     private unsafe void HandlePush(Instruction instruction)
     {
         object arg = instruction.Args[0];
@@ -911,7 +967,7 @@ ExpressionBuilding:
             CurrentContext.ValueStack.Push(arg);
     }
 
-    private unsafe void HandleAnonymousSet(Instruction instruction)
+    private void HandleAnonymousSet(Instruction instruction)
     {
         if (CurrentContext.GetObject(instanceIDStack.Peek()) is not AnonymousTypeReader obj)
             throw new InvalidOperationException("Anonymous type reader not found on stack for anonymous set operation");
@@ -935,6 +991,7 @@ ExpressionBuilding:
         }
         else
             a = GetArgumentValue(a, 0, typeof(decimal), null);
+
         if (a is Dispatched) throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
 
         if (b is not decimal and IConvertible)
@@ -943,6 +1000,7 @@ ExpressionBuilding:
         }
         else
             b = GetArgumentValue(b, 0, typeof(decimal), null);
+
         if (b is Dispatched) throw new WinterForgeExecutionException("Cant differ usage of in-expression value");
 
         return ((decimal)a, (decimal)b);
@@ -992,7 +1050,7 @@ ExpressionBuilding:
         return rh;
     }
 
-    private void Validate()
+    private void ValidateReturn()
     {
         if (dispatchedReferences.Count > 0)
         {
@@ -1016,7 +1074,8 @@ ExpressionBuilding:
                 }
             }
 
-            throw new Exception("There were objects referenced in the deserialization that were never defined." + sb.ToString());
+            throw new Exception("There were objects referenced in the deserialization that were never defined." +
+                                sb.ToString());
         }
     }
 
@@ -1025,6 +1084,7 @@ ExpressionBuilding:
         ICollection list = listStack.Pop().Collection;
         CurrentContext.ValueStack.Push(list);
     }
+
     private void HandleCreateList(object[] args)
     {
         if (args.Length == 0)
@@ -1044,7 +1104,7 @@ ExpressionBuilding:
         listStack.Push(new ListDefinition(itemType, newList));
     }
 
-    private unsafe void HandleDefine(object[] args)
+    private void HandleDefine(object[] args)
     {
         var typeName = (string)args[0];
         var id = (int)args[1];
@@ -1087,14 +1147,16 @@ ExpressionBuilding:
             CurrentContext.ObjectTable[id] = inst;
 
             if (!inst.CreateInstance(constrArgs, this))
-                throw new WinterForgeExecutionException($"Constructor overload for args {string.Join(", ", constrArgs.Select(x => x.ToString()))} doesnt exist on container {inst.Name}");
+                throw new WinterForgeExecutionException(
+                    $"Constructor overload for args {string.Join(", ", constrArgs.Select(x => x.ToString()))} doesnt exist on container {inst.Name}");
             return;
         }
 
 
         Type type = ResolveType(typeName);
         if (type is null)
-            throw new WinterForgeExecutionException($"Type with name '{typeName}' does not exist either as C# type, or (imported) container. Cant create instance.");
+            throw new WinterForgeExecutionException(
+                $"Type with name '{typeName}' does not exist either as C# type, or (imported) container. Cant create instance.");
 
 
         object instance = DynamicObjectCreator.CreateInstanceWithArguments(type, constrArgs)!;
@@ -1106,8 +1168,10 @@ ExpressionBuilding:
         if (item.Any)
             item.InvokeBeforeDeserialize(instance);
 
-        progressTracker?.OnInstance("Creating " + type.Name, type.Name, type.IsClass, instructionIndexStack.Peek() + 1, instructionTotal);
+        progressTracker?.OnInstance("Creating " + type.Name, type.Name, type.IsClass, instructionIndexStack.Peek() + 1,
+            instructionTotal);
     }
+
     private void HandleSet(object[] args)
     {
         var field = (string)args[0];
@@ -1204,7 +1268,9 @@ ExpressionBuilding:
     {
         dispatchedReferences.Add(new(refID, instructionIndexStack.Peek(), method));
     }
+
     private record DispatchedReference(int RefID, int lineNum, Action<object?> method);
+
     private unsafe void HandleCall(string methodName, int argCount)
     {
         var args = new object[argCount];
@@ -1235,6 +1301,7 @@ ExpressionBuilding:
                     return;
                 }
             }
+
             if (id is Variable v && v.Value is TemplateGroup g)
             {
                 if (g.TryCall(out returnVal, args.ToList(), this))
@@ -1253,6 +1320,7 @@ ExpressionBuilding:
             {
                 id = tmplsg;
             }
+
             if (id is TemplateGroup tg)
             {
                 if (tg.TryCall(out object returnVal, args.ToList(), this))
@@ -1263,10 +1331,11 @@ ExpressionBuilding:
                     CurrentContext.ValueStack.Push(returnVal);
                     return;
                 }
-
             }
         }
 
+        // we check here if the reference is a template.
+        // since a template reference may be stored in a global variable (thus using #ref() accessing)
         if (methodName.StartsWith("#ref(")
             && GetObjectFromContexts(int.Parse(methodName[5..^1])) is TemplateGroup templg)
         {
@@ -1280,8 +1349,8 @@ ExpressionBuilding:
             }
         }
 
-        // fallback: normal method invocation (existing behavior)
-        AccessFilterCache.Validate(target is Type type ? type : target.GetType(), AccessFilterKind.Blacklist, methodName);
+        AccessFilterCache.Validate(target is Type type ? type : target.GetType(), AccessFilterKind.Blacklist,
+            methodName);
 
         progressTracker?.OnMethod(target.GetType().Name, methodName);
 
@@ -1303,13 +1372,15 @@ ExpressionBuilding:
         else
             CurrentContext.ValueStack.Push(val);
     }
+
     private void HandleAddElement(object[] args)
     {
         var collection = listStack.Peek();
 
         if (collection is ListDefinition list)
         {
-            object element = GetArgumentValue(args[0], 0, list.ElementType, o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
+            object element = GetArgumentValue(args[0], 0, list.ElementType,
+                o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
             if (element is Dispatched)
                 throw new WinterForgeDifferedException("Differed collection addition is not allowed");
 
@@ -1317,27 +1388,29 @@ ExpressionBuilding:
         }
         else if (collection is DictionaryDefinition dict)
         {
-            object key = GetArgumentValue(args[0], 0, dict.KeyType, o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
+            object key = GetArgumentValue(args[0], 0, dict.KeyType,
+                o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
             if (key is Dispatched)
                 throw new WinterForgeDifferedException("Differed collection addition is not allowed");
 
             if (args.Length < 2)
                 throw new WinterForgeExecutionException("Dictionary element did not have a value");
 
-            object value = GetArgumentValue(args[1], 0, dict.ValueType, o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
+            object value = GetArgumentValue(args[1], 0, dict.ValueType,
+                o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
             if (value is Dispatched)
                 throw new WinterForgeDifferedException("Differed collection addition is not allowed");
 
             dict.Values.Add(key, value);
         }
-
     }
+
     private object GetArgumentValue(object arg, int argIndex, Type desiredType, Action<object> onDispatch = null)
     {
         onDispatch ??= delegate { };
         object? value;
 
-        if(arg is string stringArg && stringArg.StartsWith('"') && stringArg.EndsWith('"'))
+        if (arg is string stringArg && stringArg.StartsWith('"') && stringArg.EndsWith('"'))
             return stringArg[1..^1];
 
         // Quick scope-name resolution for simple identifier strings (scope-first).
@@ -1348,6 +1421,7 @@ ExpressionBuilding:
             {
                 return v.Value!;
             }
+
             if (id is TemplateGroup tg)
             {
                 return tg;
@@ -1368,6 +1442,7 @@ ExpressionBuilding:
                     Dispatch(refID, onDispatch);
                     return new Dispatched(); // call dispatched for a later created object!
                 }
+
                 break;
 
             case string s when s.StartsWith("#stack("):
@@ -1384,6 +1459,20 @@ ExpressionBuilding:
             case string s when s.StartsWith("#str("):
                 value = ParseStringFunc(s);
                 break;
+            case string s when s.StartsWith("#workingDir("):
+                int indexOfOpen = s.IndexOf('(');
+                if (s.Length == indexOfOpen)
+                    throw new WinterForgeFormatException("Identifier #workingDir did not have a closing ')'");
+                bool noArg = s[indexOfOpen + 1] is ')';
+                if (noArg)
+                {
+                    value = WinterForge.WorkingDir;
+                    break;
+                }
+
+                string newWorkingDir = s["#workingDir(".Length..^1];
+                value = WinterForge.WorkingDir = newWorkingDir;
+                break;
             case object o when CustomValueProviderCache.Get(desiredType, out var provider):
                 if (o is "null")
                     value = provider.OnNull();
@@ -1393,6 +1482,7 @@ ExpressionBuilding:
                         o = string.Join(' ', current.Args.Skip(argIndex));
                     value = provider._CreateObject(o, this);
                 }
+
                 break;
             case object s when desiredType.IsEnum:
                 Type enumNumType = Enum.GetUnderlyingType(desiredType);
@@ -1409,7 +1499,7 @@ ExpressionBuilding:
 
     private string? ParseStringFunc(string s)
     {
-        if (!s.StartsWith("_str(") || !s.EndsWith(")"))
+        if (!s.StartsWith("#str(") || !s.EndsWith(")"))
             return null;
 
         string inner = s[5..^1];
@@ -1422,7 +1512,7 @@ ExpressionBuilding:
         for (int i = 0; i < parts.Length; i++)
         {
             if (!byte.TryParse(parts[i].Trim(), out bytes[i]))
-                return null; // invalid byte value
+                return null;
         }
 
         return Encoding.UTF8.GetString(bytes);
@@ -1462,6 +1552,7 @@ ExpressionBuilding:
 
         instanceIDStack.Pop();
     }
+
     private object? ParseLiteral(object o, Type target)
     {
         if (o.GetType() == target)
@@ -1484,18 +1575,19 @@ ExpressionBuilding:
             string r = raw.Replace('.', ',');
             return TypeWorker.CastPrimitive(r, target);
         }
+
         if (TypeConverter.TryConvert(o, target, out var converted))
             return converted;
         return o;
-
     }
-
 
     private object ParseToAny(string raw) => raw switch
     {
         _ when raw.StartsWith("\"") => raw.Trim('"'),
         _ when raw.StartsWith("#ref(") && raw.EndsWith(")") => int.Parse(raw[5..^1]),
-        _ when raw.StartsWith("#stack(") && raw.EndsWith(")") => CurrentContext.ValueStack.Pop(),
+        _ when raw.StartsWith("#stack()") => CurrentContext.ValueStack.Pop(),
+        _ when raw.StartsWith("#type()") => ParseTypeLiteral(raw),
+        _ when raw.StartsWith("#workingDir()") => WinterForge.WorkingDir,
         "default" => 0,
         _ when raw.Count(c => c == '.') > 1 => raw,
         _ when bool.TryParse(raw, out var b) => b,
@@ -1572,6 +1664,7 @@ ExpressionBuilding:
 
         return resolvedType;
     }
+
     private static void ValidateKeywordType(ref string typeName)
     {
         typeName = typeName switch
@@ -1587,9 +1680,10 @@ ExpressionBuilding:
             "char" => "System.Char",
             "string" => "System.String",
             "object" => "System.Object",
-            _ => typeName // assume it's already a CLR type or custom type
+            _ => typeName
         };
     }
+
     private static List<string> ParseGenericArguments(string args)
     {
         List<string> result = new List<string>();
