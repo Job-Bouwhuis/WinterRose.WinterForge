@@ -98,7 +98,8 @@ all folks are welcome!
 | CPU             | Serialization (ms)           | Deserialization (ms)       | RAM Used (KB) |
 |-----------------|------------------------------|----------------------------|---------------|
 | Ryzen 9 9950X3D | Best: 8785 / Worst: 11533    | Best: 2466 / Worst: 2793   | Min: 1,126.28 / Max: 1,557.30 |
-| Intel i7 650H   | Best: 13,033 / Worst: 14,866 | Best: 6,068 / Worst: 6,503 | Min: 1,128.87 / Max: 1,542.54 KB |
+| Intel i7 650H   | Best: 13033 / Worst: 14866 | Best: 6068 / Worst: 6503 | Min: 1,128.87 / Max: 1,542.54 |
+| Intel I7 14700K  | Best: 7881 / Worst: 9597  | Best: 2179  / Worst: 2694  | Min: 1,128.92 / Max: 1,561.34 |
 | Submit your     | own CPU stats                | to my discord, or a        | pull request |
 
   ```
