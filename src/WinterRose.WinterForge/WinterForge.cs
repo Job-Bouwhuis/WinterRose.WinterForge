@@ -292,7 +292,7 @@ namespace WinterRose.WinterForgeSerializing
                 }
                 else
                 {
-                    using OpcodeToByteCompiler compiler = new(opcodes, AllowCustomCompilers);
+                    using OpcodeToByteCompiler compiler = new(outputStream, AllowCustomCompilers);
                     new HumanReadableParser().Parse(serialized, compiler);
                 }
             }
@@ -728,7 +728,7 @@ namespace WinterRose.WinterForgeSerializing
             try
             {
                 long compressedBytes = stream.CanSeek ? stream.Length : 0;
-
+                Console.WriteLine(compressedBytes);
                 using GZipStream compressStream = new(cacheStream, CompressionMode.Decompress, leaveOpen: true);
                 using TempFileStream temp = new(compressStream);
 

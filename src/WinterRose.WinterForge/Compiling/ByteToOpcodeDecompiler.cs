@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Net;
 using System.Threading.Channels;
 using WinterRose.NetworkServer;
 using WinterRose.WinterForgeSerializing.Instructions;
@@ -9,42 +10,47 @@ public class ByteToOpcodeDecompiler
 {
     public static bool WaitIndefinitelyForData { get; set; } = false;
 
-    public static InstructionStream Parse(Stream byteStream)
+    public static InstructionStream Parse(Stream byteStream, bool threaded = true)
     {
         var instructionStream = new InstructionStream();
 
-        ThreadPool.QueueUserWorkItem(_ =>
+        if (threaded)
+            ThreadPool.QueueUserWorkItem(_ => DoParsing(byteStream, instructionStream));
+        else
+            DoParsing(byteStream, instructionStream); 
+        return instructionStream;
+    }
+
+    private static void DoParsing(Stream byteStream, InstructionStream instructionStream)
+    {
+        using CacheReader cacheStream = new(byteStream, new MemoryStream());
+        try
         {
-            using CacheReader cacheStream = new(byteStream, new MemoryStream());
+            using var reader = new BinaryReader(cacheStream, System.Text.Encoding.UTF8, leaveOpen: true);
+            InternalParse(reader, instructionStream);
+            instructionStream.Complete();
+        }
+        catch (InvalidOperationException e)
+        {
+            using DualStreamReader cache = cacheStream.CreateFallbackReader();
             try
             {
-                using var reader = new BinaryReader(cacheStream, System.Text.Encoding.UTF8, leaveOpen: true);
+                using MemoryStream opcodes = new MemoryStream();
+                WinterForge.ConvertFromStreamToStream(cache, opcodes, TargetFormat.Optimized);
+                opcodes.Position = 0;
+                using var reader = new BinaryReader(opcodes, System.Text.Encoding.UTF8, leaveOpen: false);
                 InternalParse(reader, instructionStream);
                 instructionStream.Complete();
             }
-            catch (InvalidOperationException e)
-            {
-                using DualStreamReader cache = cacheStream.CreateFallbackReader();
-                try
-                {
-                    using MemoryStream opcodes = new MemoryStream();
-                    WinterForge.ConvertFromStreamToStream(cache, opcodes, TargetFormat.Optimized);
-                    opcodes.Position = 0;
-                    using var reader = new BinaryReader(opcodes, System.Text.Encoding.UTF8, leaveOpen: false);
-                    InternalParse(reader, instructionStream);
-                    instructionStream.Complete();
-                }
-                catch
-                {
-                    instructionStream.Fail(e);
-                }
-            }
-            catch (Exception e)
+            catch
             {
                 instructionStream.Fail(e);
             }
-        });
-        return instructionStream;
+        }
+        catch (Exception e)
+        {
+            instructionStream.Fail(e);
+        }
     }
 
     private static void InternalParse(BinaryReader reader, InstructionStream instructions)

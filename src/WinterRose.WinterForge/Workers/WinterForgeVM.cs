@@ -158,6 +158,9 @@ public class WinterForgeVM : IDisposable
                 Instruction instruction = instructionCollection[instructionIndexStack.Peek()];
                 long startTicks = 0;
 
+                if (instructionIndexStack.Peek() is 0 && instruction.Opcode is OpCode.OR)
+                    continue; // TODO: this is a temp fix, figure out why it does weird shits and giggles later
+
                 if (CurrentContext.constructingScopes.TryPeek(out Scope cs)
                     && cs is Template templ
                     && instruction.Opcode is not OpCode.TEMPLATE_CREATE and not OpCode.TEMPLATE_END

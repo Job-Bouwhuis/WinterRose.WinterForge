@@ -15,21 +15,32 @@ public class SkipWhenAttribute : Attribute
 
     public SkipWhenAttribute(object? value)
     {
-        if (value is string s && s.StartsWith(TEMPLATE_START))
-        {
-            if(!s.EndsWith(TEMPLATE_END))
-                s += "\n" + TEMPLATE_END;
+        bool compress = WinterForge.CompressedStreams;
+        WinterForge.CompressedStreams = false;
 
-            vm = new();
-            using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(s));
-            var instructions = ByteToOpcodeDecompiler.Parse(stream);
-            object result = vm.Execute(instructions, clearInternals: false);
-            if(result is not TemplateGroup template)
-                throw new InvalidOperationException("SkipWhen template did not evaluate to a TemplateGroup");
-            this.value = template;
+        try
+        {
+            if (value is string s && s.StartsWith(TEMPLATE_START))
+            {
+                if (!s.EndsWith(TEMPLATE_END))
+                    s += "\n" + TEMPLATE_END;
+
+                vm = new();
+
+                using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(s));
+                var instructions = ByteToOpcodeDecompiler.Parse(stream, false);
+                object result = vm.Execute(instructions, clearInternals: false);
+                if (result is not TemplateGroup template)
+                    throw new InvalidOperationException("SkipWhen template did not evaluate to a TemplateGroup");
+                this.value = template;
+            }
+            else
+                this.value = value;
         }
-        else
-            this.value = value;
+        finally
+        {
+            WinterForge.CompressedStreams = compress;
+        }
     }
 
     internal bool ShouldSkip(object? actual)
