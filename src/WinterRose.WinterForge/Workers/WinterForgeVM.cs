@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using System.Text;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
@@ -155,6 +156,15 @@ public class WinterForgeVM : IDisposable
 
             for (; instructionIndexStack.Peek() < instructionCollection.Count; increaseIndex())
             {
+                try
+                {
+                    current = instructionCollection[instructionIndexStack.Peek()];
+
+                }
+                catch (IndexOutOfRangeException ex)
+                {
+                    break;
+                }
                 Instruction instruction = instructionCollection[instructionIndexStack.Peek()];
                 long startTicks = 0;
 
@@ -656,7 +666,7 @@ public class WinterForgeVM : IDisposable
 
         if (!isBody)
         {
-            if (returnVal is int parsedId)
+            if (returnVal is int parsedId && instruction.Args[0] is string s && !s.StartsWith("#ref("))
             {
                 returnVal = GetObjectFromContexts(parsedId)
                             ?? throw new Exception($"object with ID {parsedId} not found");
@@ -1162,7 +1172,7 @@ public class WinterForgeVM : IDisposable
                 $"Type with name '{typeName}' does not exist either as C# type, or (imported) container. Cant create instance.");
 
 
-        object instance = DynamicObjectCreator.CreateInstanceWithArguments(type, constrArgs)!;
+        object instance = DynamicObjectCreator.CreateInstance(type, constrArgs)!;
         CurrentContext.AddObject(id, ref instance);
 
         instanceIDStack.Push(id);
@@ -1416,19 +1426,14 @@ public class WinterForgeVM : IDisposable
         if (arg is string stringArg && stringArg.StartsWith('"') && stringArg.EndsWith('"'))
             return stringArg[1..^1];
 
-        // Quick scope-name resolution for simple identifier strings (scope-first).
         if (arg is string plain && !plain.StartsWith("#") && !plain.StartsWith("_"))
         {
             var id = CurrentScope?.GetIdentifier(plain);
             if (id is Variable v)
-            {
                 return v.Value!;
-            }
 
             if (id is TemplateGroup tg)
-            {
                 return tg;
-            }
 
             Container[] containers = scopeStack.Peek().Containers.Values.Where(c => c.Name == plain).ToArray();
             if (containers.Length >= 1)
@@ -1576,12 +1581,27 @@ public class WinterForgeVM : IDisposable
             if (target == typeof(string))
                 return raw;
             string r = raw.Replace('.', ',');
-            return TypeWorker.CastPrimitive(r, target);
+            return TypeWorker.CastPrimitive(raw, target);
         }
 
         if (TypeConverter.TryConvert(o, target, out var converted))
             return converted;
         return o;
+    }
+
+    private static object CastValue(object value, Type target)
+    {
+        if (target == typeof(object))
+            return value;
+        if (TypeWorker.SupportedPrimitives.Contains(target)
+            && TypeWorker.SupportedPrimitives.Contains(value.GetType())
+            && target != value.GetType())
+            return TypeWorker.CastPrimitive(value, target);
+        else if (TypeWorker.FindImplicitConversionMethod(target, value.GetType()) is MethodInfo conversionMethod)
+            return conversionMethod.Invoke(null, [value])!;
+        else if (TypeConverter.CanConvert(value.GetType(), target))
+            return TypeConverter.Convert(value, target);
+        return value;
     }
 
     private object ParseToAny(string raw) => raw switch

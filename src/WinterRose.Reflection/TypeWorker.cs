@@ -54,7 +54,6 @@ namespace WinterRose
         /// <returns></returns>
         public static MethodInfo? FindImplicitConversionMethod(Type targetType, Type sourceType)
         {
-            // Check for implicit operators in both the source and target types
             var conversionMethod = sourceType.GetMethods(BindingFlags.Static | BindingFlags.Public)
                 .FirstOrDefault(m => m.Name == "op_Implicit" &&
                                      m.ReturnType == targetType &&

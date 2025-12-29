@@ -19,6 +19,7 @@ using WinterRose.WinterForgeSerializing;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Workers;
 using WinterRose.WinterForgeSerializing.Expressions;
+using System.Diagnostics.CodeAnalysis;
 
 namespace WinterRose.WinterForgeSerializing.Formatting
 {
@@ -1190,9 +1191,69 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             WriteLine($"{opcodeMap[OpCode.SET]} {field} {value}");
         }
 
+        private bool TryEnum(string value, [NotNullWhen(true)] out object? enumObjValue)
+        {
+            enumObjValue = null;
+            if (value.Contains('.') && !HRPHelpers.IsValidNumericString(value) && !value.Contains('<'))
+            {
+                try
+                {
+                    string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    string enumType;
+                    string enumValue;
+                    if (parts.Length > 2)
+                    {
+                        enumType = parts.Take(parts.Length - 1).Aggregate((a, b) => a + "." + b);
+                        enumValue = parts.Last();
+                    }
+                    else if (parts.Length == 2)
+                    {
+                        enumType = parts[0];
+                        enumValue = parts[1];
+                    }
+                    else
+                        throw new WinterForgeFormatException(value, "Invalid enum format. Expected 'EnumType.EnumValue' or 'Namespace.EnumType.EnumValue'");
+
+                    Type? e = TypeWorker.FindType(enumType);
+                    if (e == null)
+                        return false;
+                    if (!e.IsEnum)
+                        throw new WinterForgeFormatException(value, $"Type '{enumType}' is not an enum type.");
+
+                    string[] values = enumValue.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    Enum result = null!;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        string v = values[i];
+                        if (!Enum.IsDefined(e, v))
+                            throw new WinterForgeFormatException(value, $"Enum '{enumType}' does not contain value '{enumValue}'.");
+
+                        object parsedEnumValue = Enum.Parse(e, v);
+                        if (i == 0)
+                            result = (Enum)parsedEnumValue;
+                        else
+                            result = (Enum)Enum.ToObject(e, Convert.ToInt32(result) | Convert.ToInt32(parsedEnumValue));
+                    }
+
+                    enumObjValue = Convert.ChangeType(result, Enum.GetUnderlyingType(e)).ToString()!;
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            return false;
+        }
+
         private string ValidateValue(string value, bool isBody, string? id = null)
         {
-            if (value.StartsWith('\"') && value.StartsWith('\"'))
+            if(TryEnum(value, out object? enumObjValue))
+            {
+                WriteLine($"{opcodeMap[OpCode.PUSH]} {enumObjValue}");
+                return "#stack()";
+            }
+            else if (value.StartsWith('\"') && value.StartsWith('\"'))
             {
                 string fullString = ReadString(value);
 
@@ -1229,45 +1290,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 return value;
             else if (value.StartsWith("#stack"))
                 return value;
-            else if (value.Contains('.') && !HRPHelpers.IsValidNumericString(value) && !value.Contains('<'))
-            {
-                string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                string enumType;
-                string enumValue;
-                if (parts.Length > 2)
-                {
-                    enumType = parts.Take(parts.Length - 1).Aggregate((a, b) => a + "." + b);
-                    enumValue = parts.Last();
-                }
-                else if (parts.Length == 2)
-                {
-                    enumType = parts[0];
-                    enumValue = parts[1];
-                }
-                else
-                    throw new WinterForgeFormatException(value, "Invalid enum format. Expected 'EnumType.EnumValue' or 'Namespace.EnumType.EnumValue'");
-
-                Type? e = TypeWorker.FindType(enumType);
-                if (!e.IsEnum)
-                    throw new WinterForgeFormatException(value, $"Type '{enumType}' is not an enum type.");
-
-                string[] values = enumValue.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                Enum result = null!;
-                for (int i = 0; i < values.Length; i++)
-                {
-                    string v = values[i];
-                    if (!Enum.IsDefined(e, v))
-                        throw new WinterForgeFormatException(value, $"Enum '{enumType}' does not contain value '{enumValue}'.");
-
-                    object parsedEnumValue = Enum.Parse(e, v);
-                    if (i == 0)
-                        result = (Enum)parsedEnumValue;
-                    else
-                        result = (Enum)Enum.ToObject(e, Convert.ToInt32(result) | Convert.ToInt32(parsedEnumValue));
-                }
-
-                return Convert.ChangeType(result, Enum.GetUnderlyingType(e)).ToString()!;
-            }
             else if (value is "true")
             {
                 WriteLine($"{opcodeMap[OpCode.PUSH]} true");
@@ -1398,11 +1420,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     content.Append(c switch
                     {
-                        '"' => '"',
-                        '\\' => '\\',
-                        'n' => '\n',
-                        't' => '\t',
-                        _ => throw new WinterForgeFormatException("Invalid escape character \\" + c)
+                        '"' => "\"",
+                        '\\' => "\\",
+                        'n' => "\n",
+                        't' => "\t",
+                        _ => "\\" + c
                     });
 
                     inEscape = false;
@@ -1726,7 +1748,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             if (string.IsNullOrWhiteSpace(currentElement))
                 return;
             string firstLine = currentElement.Split(['\n', '\r'], 2, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            if (firstLine.Contains(':'))
+            if (HRPHelpers.ContainsSequenceOutsideQuotes(firstLine, ":") != -1)
             {
                 if (isDictionary)
                 {

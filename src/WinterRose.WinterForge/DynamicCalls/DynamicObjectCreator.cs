@@ -13,7 +13,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
     {
         static ConcurrentDictionary<Type, ConstructorInfo[]> constructorCache = [];
 
-        public static object CreateInstanceWithArguments(Type targetType, List<object> argumentStrings)
+        public static object CreateInstance(Type targetType, List<object> argumentStrings)
         {
             argumentStrings = ResolveArgumentTypes(argumentStrings);
 
@@ -29,8 +29,14 @@ namespace WinterRose.WinterForgeSerializing.Workers
             {
                 foreach (var c in constructors)
                     if (c.GetParameters().Length == 0)
-                        return c.Invoke(Array.Empty<object>());
-
+                        try
+                        {
+                            return c.Invoke(Array.Empty<object>());
+                        }
+                        catch (Exception ex)
+                        {
+                            //throw new Exception($"Could not create an instance of type {targetType.Name}");
+                        }
                 if (targetType.IsValueType)
                     return Activator.CreateInstance(targetType);
             }

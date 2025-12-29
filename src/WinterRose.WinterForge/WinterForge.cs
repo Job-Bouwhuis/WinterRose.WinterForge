@@ -317,7 +317,7 @@ namespace WinterRose.WinterForgeSerializing
             try
             {
                 using GZipStream compressStream = new GZipStream(cacheStream, CompressionMode.Decompress, leaveOpen: true);
-                using TempFileStream temp = new(compressStream);
+                using TempFile temp = new(compressStream);
                 return CommitDeserialize(progressTracker, temp);
             }
             catch (InvalidDataException e)
@@ -435,13 +435,11 @@ namespace WinterRose.WinterForgeSerializing
         {
             using var mem = new MemoryStream();
             using var humanReadable = File.OpenRead(path);
+            using var compiled = new OpcodeToByteCompiler(mem, AllowCustomCompilers);
+            new HumanReadableParser().Parse(humanReadable, compiled);
+            mem.Position = 0;
 
-            new HumanReadableParser().Parse(humanReadable, mem);
-            mem.Seek(0, SeekOrigin.Begin);
-            using var opcodes = new MemoryStream();
-            using var compiled = new OpcodeToByteCompiler(opcodes, AllowCustomCompilers);
-            compiled.Position = 0;
-            var instructions = ByteToOpcodeDecompiler.Parse(compiled);
+            var instructions = ByteToOpcodeDecompiler.Parse(mem, false);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }
@@ -729,7 +727,7 @@ namespace WinterRose.WinterForgeSerializing
             {
                 long compressedBytes = stream.CanSeek ? stream.Length : 0;
                 using GZipStream compressStream = new(cacheStream, CompressionMode.Decompress, leaveOpen: true);
-                using TempFileStream temp = new(compressStream);
+                using TempFile temp = new(compressStream);
 
                 return InspectInstructions(temp, compressedBytes);
             }

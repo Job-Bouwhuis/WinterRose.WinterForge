@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -68,46 +69,15 @@ public class OpcodeToByteCompiler : Stream
     public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
     private string? peekedLine = null;
-
-    private string? Peek(StreamReader reader)
-    {
-        peekedLine ??= reader.ReadLine();
-        return peekedLine;
-    }
+    private bool finishedAllWriting;
+    private BlockingCollection<Task<byte[]>> byteTaskQueue;
 
     public override void Flush()
     {
-        // no-op — we flush to destination in the background consumer
+        lineQueue.CompleteAdding();
+        while (!finishedAllWriting)
+            ;
     }
-
-    private string? ReadLine(StreamReader reader)
-    {
-        if (peekedLine != null)
-        {
-            string line = peekedLine;
-            peekedLine = null;
-            return line;
-        }
-        return reader.ReadLine();
-    }
-
-    private void Consume(StreamReader reader, int count)
-    {
-        // If we had a peeked line waiting, consume it first if needed
-        if (peekedLine != null)
-        {
-            peekedLine = null;
-            count--;
-        }
-
-        // Read and discard the remaining lines
-        for (int i = 0; i < count; i++)
-        {
-            if (reader.ReadLine() == null)
-                break; // End of stream reached early
-        }
-    }
-
 
     internal OpcodeToByteCompiler(Stream bytesDestination, bool allowCustomCompilers = true)
     {
@@ -209,150 +179,6 @@ public class OpcodeToByteCompiler : Stream
         return -1; // not found
     }
 
-
-    public void Compile(Stream textOpcodes, Stream bytesDestination)
-    {
-        // keep the synchronous API but run the async pipeline under the hood
-        CompileAsync(textOpcodes, bytesDestination, _maxParallelismDefault).GetAwaiter().GetResult();
-    }
-
-    public async Task CompileAsync(Stream textOpcodes, Stream bytesDestination, int maxDegreeOfParallelism = 0)
-    {
-        if (maxDegreeOfParallelism <= 0)
-            maxDegreeOfParallelism = _maxParallelismDefault;
-
-        // queue of tasks producing byte[] in the exact order they were enqueued
-        var queue = new System.Collections.Concurrent.BlockingCollection<Task<byte[]>>();
-
-        // consumer: writes tasks' results to final output in the same order tasks were added
-        var consumer = Task.Run(async () =>
-        {
-            using var finalWriter = new BinaryWriter(bytesDestination, Encoding.UTF8, leaveOpen: true);
-            try
-            {
-                foreach (var task in queue.GetConsumingEnumerable())
-                {
-                    var bytes = await task.ConfigureAwait(false);
-                    if (bytes?.Length > 0)
-                        finalWriter.Write(bytes);
-                }
-
-                // If target is a NetworkStream and no explicit WF_ENDOFDATA was seen during parsing,
-                // original behavior appended an END_OF_DATA byte at the end. Preserve that here.
-                if (bytesDestination is NetworkStream && !SeenEndOfDataMark)
-                {
-                    finalWriter.Write((byte)OpCode.END_OF_DATA);
-                }
-
-                finalWriter.Flush();
-            }
-            catch
-            {
-                // ensure we don't swallow exceptions — rethrow after disposing writer (consumer task will fault)
-                throw;
-            }
-        });
-
-        // producer: parse input, create immediate byte[] tasks or background compile tasks and enqueue them
-        using var reader = new StreamReader(textOpcodes, leaveOpen: true);
-
-        string? line;
-        bool bufferingActive = bufferedObject != null; // not used for this path but preserve logic
-                                                       // order is implicit in queue ordering; BlockingCollection preserves insertion order
-        while ((line = ReadLine(reader)) != null)
-        {
-            // Quick handling for WF_ENDOFDATA to ensure exact behavior and ordering
-            if (line == "WF_ENDOFDATA")
-            {
-                SeenEndOfDataMark = true;
-                queue.Add(Task.FromResult(new byte[] { (byte)OpCode.END_OF_DATA }));
-                break;
-            }
-
-            if (!ValidateLine(line, out var parts, out var opcodeByte))
-            {
-                // ignore whitespace/comments; ValidateLine already sets SeenEndOfDataMark where appropriate
-                continue;
-            }
-
-            var opcode = (OpCode)opcodeByte;
-
-            // Special-case DEFINE: check for custom compiler — if present, buffer the define block and
-            // offload rehydrate+compile to a Task; enqueue the Task so consumer will write it at the correct place.
-            if (opcode is OpCode.DEFINE)
-            {
-                Type t = WinterForgeVM.ResolveType(parts[1]);
-
-                if (allowCustomCompilers && CustomValueCompilerRegistry.TryGetByType(t, out ICustomValueCompiler foundCompiler))
-                {
-                    // start buffering the DEFINE block (first line stored)
-                    List<string> localBuffered = [line];
-                    int localNesting = 1;
-
-                    // read lines until nesting ends (matching original ParseOptimizedCompile behavior)
-                    while (localNesting > 0 && (line = ReadLine(reader)) != null)
-                    {
-                        // keep lines verbatim (we will reparse them in Rehydrate)
-                        if (line.StartsWith(((byte)OpCode.END).ToString() + " "))
-                            localNesting--;
-
-                        localBuffered.Add(line);
-                    }
-
-                    // capture relevant values for the Task
-                    int localRefId = int.Parse(parts[2]); // object id
-                    Type localType = t;
-                    var localCompiler = foundCompiler;
-
-                    // create background task that rehydrates and compiles this object to bytes
-                    Task<byte[]> compileTask = Task.Run(() =>
-                    {
-                        // rehydrate instance from buffered text opcodes
-                        object instance = Rehydrate(localBuffered, localType);
-
-                        // compile into a memory stream (same output format original used)
-                        using var ms = memoryStreamPool.Using();
-                        using var bw = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true);
-
-                        // header written by original code
-                        bw.Write((byte)0x00);
-                        bw.Write((byte)0x00);
-                        bw.Write(localCompiler.CompilerId);
-                        bw.Write(localRefId);
-
-                        // custom compiler writes bytes representing the instance
-                        localCompiler.Compile(bw, instance);
-                        bw.Flush();
-                        return ms.Item.ToArray();
-                    });
-
-                    queue.Add(compileTask);
-                    continue; // proceed to next input line
-                }
-            }
-
-            // Non-custom or DEFINE-without-custom path:
-            // Emit opcode to a temporary memory stream (so we can get its bytes), then enqueue an immediate Task
-            using (var ms = memoryStreamPool.Using())
-            {
-                using (var tempWriter = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-                {
-                    // reuse existing EmitOpcode logic which writes to BinaryWriter
-                    EmitOpcode(tempWriter, line, parts, opcodeByte, opcode);
-                    tempWriter.Flush();
-                }
-
-                byte[] bytes = ms.Item.ToArray();
-                queue.Add(Task.FromResult(bytes));
-            }
-        }
-
-        // finished producing items — signal consumer and await it
-        queue.CompleteAdding();
-        await consumer.ConfigureAwait(false);
-    }
-
-
     private void ParseOptimizedCompile(BinaryWriter writer, string line, ref byte opcodeByte, OpCode opcode, ref bool bufferingActive)
     {
         if (opcode is not OpCode.SET and not OpCode.END)
@@ -449,7 +275,7 @@ public class OpcodeToByteCompiler : Stream
     {
         if (bytesDestinationStream == null) throw new InvalidOperationException("No bytes destination attached for streaming compile.");
 
-        var byteTaskQueue = new System.Collections.Concurrent.BlockingCollection<Task<byte[]>>();
+        byteTaskQueue = new System.Collections.Concurrent.BlockingCollection<Task<byte[]>>();
         var writeTask = Task.Run(async () =>
         {
             using var finalWriter = new BinaryWriter(bytesDestinationStream, Encoding.UTF8, leaveOpen: true);
@@ -468,6 +294,7 @@ public class OpcodeToByteCompiler : Stream
                 }
 
                 finalWriter.Flush();
+                finishedAllWriting = true;
             }
             catch
             {
