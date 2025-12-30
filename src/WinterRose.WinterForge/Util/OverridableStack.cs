@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace WinterRose.WinterForgeSerializing.Util
 {
-    internal class OverridableStack<T> : IEnumerable<T>
+    public class OverridableStack<T> : IEnumerable<T>
     {
         private readonly List<T> items = new();
 
