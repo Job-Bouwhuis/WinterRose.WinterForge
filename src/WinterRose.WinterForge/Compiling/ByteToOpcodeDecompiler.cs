@@ -235,7 +235,6 @@ public class ByteToOpcodeDecompiler
         }
     }
 
-
     private static string ReadString(BinaryReader reader, bool consumedPrefix = false)
     {
         if (!consumedPrefix)

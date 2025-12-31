@@ -308,7 +308,6 @@ namespace WinterRose.WinterForgeSerializing
         /// Deserializes from the given stream in which opcodes should exist
         /// </summary>
         /// <param name="stream"></param>
-        /// <param name="progress"></param>
         /// <returns></returns>
         public static object? DeserializeFromStream(Stream stream, WinterForgeProgressTracker? progressTracker = null)
         {
@@ -328,7 +327,7 @@ namespace WinterRose.WinterForgeSerializing
 
             static object? CommitDeserialize(WinterForgeProgressTracker? progressTracker, Stream compressStream)
             {
-                InstructionStream instr = ByteToOpcodeDecompiler.Parse(compressStream);
+                InstructionStream instr = ByteToOpcodeDecompiler.Parse(compressStream, false);
                 object? result = null;
                 DoDeserialization(out result, typeof(Nothing), instr, progressTracker);
                 return result;
