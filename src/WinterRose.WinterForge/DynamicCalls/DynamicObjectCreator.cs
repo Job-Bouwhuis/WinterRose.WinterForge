@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Tasks;
 using WinterRose.Reflection;
@@ -35,7 +36,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                         }
                         catch (Exception ex)
                         {
-                            //throw new Exception($"Could not create an instance of type {targetType.Name}");
+                            ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
                         }
                 if (targetType.IsValueType)
                     return Activator.CreateInstance(targetType);

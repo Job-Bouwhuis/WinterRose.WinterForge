@@ -1180,425 +1180,11 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             
             throw new WinterForgeFormatException("Expected ']' to close list.");
         }
-
-        private void ParseAssignment(string line, string? id, bool isBody)
-        {
-            line = line.TrimEnd(';');
-            int eq = line.IndexOf('=');
-            string field = line[..eq].Trim();
-            string value = ValidateValue(line[(eq + 1)..].Trim(), isBody, id);
-
-            WriteLine($"{opcodeMap[OpCode.SET]} {field} {value}");
-        }
-
-        private bool TryEnum(string value, [NotNullWhen(true)] out object? enumObjValue)
-        {
-            enumObjValue = null;
-            if (value.Contains('.') && !HRPHelpers.IsValidNumericString(value) && !value.Contains('<'))
-            {
-                try
-                {
-                    string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                    string enumType;
-                    string enumValue;
-                    if (parts.Length > 2)
-                    {
-                        enumType = parts.Take(parts.Length - 1).Aggregate((a, b) => a + "." + b);
-                        enumValue = parts.Last();
-                    }
-                    else if (parts.Length == 2)
-                    {
-                        enumType = parts[0];
-                        enumValue = parts[1];
-                    }
-                    else
-                        throw new WinterForgeFormatException(value, "Invalid enum format. Expected 'EnumType.EnumValue' or 'Namespace.EnumType.EnumValue'");
-
-                    Type? e = TypeWorker.FindType(enumType);
-                    if (e == null)
-                        return false;
-                    if (!e.IsEnum)
-                        throw new WinterForgeFormatException(value, $"Type '{enumType}' is not an enum type.");
-
-                    string[] values = enumValue.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                    Enum result = null!;
-                    for (int i = 0; i < values.Length; i++)
-                    {
-                        string v = values[i];
-                        if (!Enum.IsDefined(e, v))
-                            throw new WinterForgeFormatException(value, $"Enum '{enumType}' does not contain value '{enumValue}'.");
-
-                        object parsedEnumValue = Enum.Parse(e, v);
-                        if (i == 0)
-                            result = (Enum)parsedEnumValue;
-                        else
-                            result = (Enum)Enum.ToObject(e, Convert.ToInt32(result) | Convert.ToInt32(parsedEnumValue));
-                    }
-
-                    enumObjValue = Convert.ChangeType(result, Enum.GetUnderlyingType(e)).ToString()!;
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-            return false;
-        }
-
-        private string ValidateValue(string value, bool isBody, string? id = null)
-        {
-            if(TryEnum(value, out object? enumObjValue))
-            {
-                WriteLine($"{opcodeMap[OpCode.PUSH]} {enumObjValue}");
-                return "#stack()";
-            }
-            else if (value.StartsWith('\"') && value.StartsWith('\"'))
-            {
-                string fullString = ReadString(value);
-
-                if (!fullString.Contains('\n'))
-                    return fullString;
-                else
-                {
-                    writer.WriteLine(opcodeMap[OpCode.START_STR]);
-                    foreach (string line in fullString.Split('\n'))
-                        writer.WriteLine($"{opcodeMap[OpCode.STR]} \"{line}\"");
-                    writer.WriteLine(opcodeMap[OpCode.END_STR]);
-
-                    return "#stack()";
-                }
-            }
-            else if (HRPHelpers.HasValidGenericFollowedByBracket(value))
-            {
-                TryParseCollection(value, out string name, isBody);
-                return name;
-            }
-            else if (HRPHelpers.ContainsExpressionOutsideQuotes(value))
-            {
-                ParseExpression(value, id, isBody);
-                return "#stack()";
-            }
-            else if (HRPHelpers.ContainsSequenceOutsideQuotes(value, "->") != -1)
-            {
-                HandleAccessing(null, isBody, value);
-                return "#stack()";
-            }
-            else if (value.StartsWith("#type"))
-                return value;
-            else if (value.StartsWith("#ref"))
-                return value;
-            else if (value.StartsWith("#stack"))
-                return value;
-            else if (value is "true")
-            {
-                WriteLine($"{opcodeMap[OpCode.PUSH]} true");
-                return "#stack()";
-            }
-            else if (value is "false")
-            {
-                WriteLine($"{opcodeMap[OpCode.PUSH]} false");
-                return "#stack()";
-            }
-            else if (IsMethodCall(value))
-            {
-                ParseMethodCall(id, value, isBody);
-                return "#stack()";
-            }
-            return value;
-        }
-        private bool IsMethodCall(string line)
-        {
-            if (line.Trim().StartsWith('#'))
-                return false;
-            return HRPHelpers.ContainsSequenceOutsideQuotes(line, "(") != -1 && line.EndsWith(')');
-        }
-        private void ParseExpression(string value, string? id, bool isBody)
-        {
-            if (value.EndsWith(';'))
-                value = value[..^1];
-            var tokens = ExpressionTokenizer.Tokenize(value);
-
-            foreach (var token in tokens)
-            {
-                switch (token.Type)
-                {
-                    case TokenType.Number:
-                    case TokenType.String:
-                    case TokenType.Identifier:
-                        if (HRPHelpers.ContainsSequenceOutsideQuotes(token.Text, "->") != -1)
-                        {
-                            ParseRHSAccess(token.Text, id, isBody);
-                            break;
-                        }
-                        else if (token.Text.EndsWith(')') && token.Text.Contains('('))
-                        {
-                            ParseMethodCall(id, token.Text, isBody);
-                        }
-                        else
-                            WriteLine($"{opcodeMap[OpCode.PUSH]} {token.Text}");
-                        break;
-                    case TokenType.Operator:
-                        OpCode operatorCode = token.Text switch
-                        {
-                            "+" => OpCode.ADD,
-                            "-" => OpCode.SUB,
-                            "*" => OpCode.MUL,
-                            "/" => OpCode.DIV,
-                            "%" => OpCode.MOD,
-                            "^" => OpCode.POW,
-
-                            "==" => OpCode.EQ,
-                            "!=" => OpCode.NEQ,
-                            ">" => OpCode.GT,
-                            "<" => OpCode.LT,
-                            ">=" => OpCode.GTE,
-                            "<=" => OpCode.LTE,
-
-                            "&&" => OpCode.AND,
-                            "||" => OpCode.OR,
-                            "!" => OpCode.NOT,
-                            "^|" => OpCode.XOR,
-
-                            _ => throw new InvalidOperationException($"Unknown operator: {token.Text}")
-                        };
-
-                        WriteLine(opcodeMap[operatorCode].ToString());
-                        break;
-                    case TokenType.LParen:
-                        break;
-                    case TokenType.RParen:
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-
-        private string ReadString(string start)
-        {
-            if (start is "\"\"")
-                return start;
-            using var sbRental = stringBuilderPool.Using();
-            StringBuilder content = sbRental.Item;
-            bool inEscape = false;
-            bool isMultiline = false;
-            bool inside = false;
-            int quoteCount = 0;
-
-            // Determine quote style (single vs 5x)
-            for (int i = 0; i < start.Length; i++)
-            {
-                if (start[i] == '"')
-                {
-                    quoteCount++;
-                    inside = true;
-                }
-                else if (!char.IsWhiteSpace(start[i]))
-                {
-                    break;
-                }
-            }
-
-            if (!inside)
-                throw new InvalidOperationException("String must start with at least one quote.");
-
-            if (quoteCount == 1)
-                isMultiline = false;
-            else if (quoteCount == 5)
-                isMultiline = true;
-            else
-                throw new InvalidOperationException("Invalid number of quotes to start string. Use 1 or 5.");
-
-            int startOffset = quoteCount;
-
-            for (int i = startOffset; i < start.Length; i++)
-            {
-                char c = start[i];
-
-                if (inEscape)
-                {
-                    content.Append(c switch
-                    {
-                        '"' => "\"",
-                        '\\' => "\\",
-                        'n' => "\n",
-                        't' => "\t",
-                        _ => "\\" + c
-                    });
-
-                    inEscape = false;
-                }
-                else if (c == '\\')
-                {
-                    inEscape = true;
-                }
-                else if (c == '"')
-                {
-                    // check ahead to see if we hit the closing quote sequence
-                    int remaining = start.Length - i;
-
-                    if (isMultiline && remaining >= 5 && start.Substring(i, 5) == "\"\"\"\"\"")
-                        return '\"' + content.ToString() + '\"';
-                    else if (!isMultiline)
-                    {
-                        return '\"' + content.ToString() + '\"';
-                    }
-                    content.Append('"');
-                }
-                else
-                {
-                    content.Append(c);
-                }
-            }
-
-            if (!isMultiline)
-                throw new InvalidOperationException("Malformed multiline string: unexpected line break in single-quote string.");
-
-            // Keep reading until we find the closing 5x quote
-            while (true)
-            {
-                string? nextLine = ReadLine(allowEmptyLines: true);
-                if (nextLine == null)
-                    throw new InvalidOperationException("Unexpected end of stream while reading multiline string.");
-
-                content.Append('\n');
-
-                for (int i = 0; i < nextLine.Length; i++)
-                {
-                    char c = nextLine[i];
-
-                    if (inEscape)
-                    {
-                        content.Append(c switch
-                        {
-                            '"' => '"',
-                            '\\' => '\\',
-                            'n' => '\n',
-                            't' => '\t',
-                            _ => '\\' + c.ToString()
-                        });
-
-                        inEscape = false;
-                    }
-                    else if (c == '\\')
-                    {
-                        inEscape = true;
-                    }
-                    else if (c == '"')
-                    {
-                        // lookahead for 5x quote
-                        if (i + 4 < nextLine.Length && nextLine.Substring(i, 5) == "\"\"\"\"\"")
-                            return '\"' + content.ToString() + '\"';
-                        else
-                        {
-                            content.Append('"');
-                        }
-                    }
-                    else
-                    {
-                        content.Append(c);
-                    }
-                }
-            }
-        }
-        internal string? ReadLine(bool allowEmptyLines = false)
-        {
-            string? line;
-            do
-            {
-                if (lineBuffers.Count > 0)
-                {
-                    if ((lineBuffers.Peek()?.Count ?? 0) > 0)
-                    {
-                        line = lineBuffers.Peek().Pop();
-                        if (lineBuffers.Peek().Count == 0)
-                            lineBuffers.Pop();
-                    }
-                    else
-                    {
-                        lineBuffers.Pop();
-                        return null;
-                    }
-                }
-                else
-                {
-                    if (reader.EndOfStream)
-                        return null;
-                    line = reader.ReadLine();
-                }
-
-                if (allowEmptyLines)
-                    return line;
-
-            } while (string.IsNullOrWhiteSpace(line));
-
-            return line;
-        }
-
-        private string? PeekNonEmptyLine(bool allowEmptyLines = false)
-        {
-            string? line = null;
-
-            if (lineBuffers.Count > 0)
-            {
-                var topBuffer = lineBuffers.Peek();
-                if ((topBuffer?.Count ?? 0) > 0)
-                {
-                    line = topBuffer.Peek();
-                }
-                else
-                {
-                    return null;
-                }
-            }
-            else
-            {
-                if (reader.EndOfStream)
-                    return null;
-
-                // Read once, but push back into buffer so it can be read again later
-                line = reader.ReadLine();
-                if (line != null)
-                {
-                    var tempStack = new OverridableStack<string>();
-                    tempStack.PushStart(line);
-                    lineBuffers.Push(tempStack);
-                }
-            }
-
-            if (!allowEmptyLines && string.IsNullOrWhiteSpace(line))
-                return null;
-
-            return line;
-        }
-
-        private void ReadNextLineExpecting(string expected)
-        {
-            currentLine = ReadLine();
-            if (currentLine == null || currentLine.Trim() != expected)
-                throw new Exception($"Expected '{expected}' but got: {currentLine}");
-        }
-        private void WriteLine(string line)
-        {
-            if (line.Contains('\n'))
-            {
-                int lastIndex = line.Length - 1;
-
-                // Walk backwards to find where the trailing newlines start
-                while (lastIndex >= 0 && line[lastIndex] == '\n')
-                {
-                    lastIndex--;
-                }
-
-                string sanitized = line[..(lastIndex + 1)].Replace("\n", "");
-                line = sanitized;
-            }
-            writer.WriteLine(line);
-        }
         int HandleChar(ref bool insideFunction, ref bool collectingString, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref bool isDictionary, ref int listDepth, char? currentChar, ref char prefStringChar, bool isBody)
         {
             char character = currentChar.Value;
+            if (character is '\\')
+                ;
 
             if (collectingString)
             {
@@ -1854,6 +1440,436 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 WriteLine($"{opcodeMap[OpCode.ELEMENT]} " + currentElement);
             }
         }
+
+        private void ParseAssignment(string line, string? id, bool isBody)
+        {
+            line = line.TrimEnd(';');
+            int eq = line.IndexOf('=');
+            string field = line[..eq].Trim();
+            string value = ValidateValue(line[(eq + 1)..].Trim(), isBody, id);
+
+            WriteLine($"{opcodeMap[OpCode.SET]} {field} {value}");
+        }
+
+        private bool TryEnum(string value, [NotNullWhen(true)] out object? enumObjValue)
+        {
+            enumObjValue = null;
+            if (value.Contains('.') && !HRPHelpers.IsValidNumericString(value) && !value.Contains('<'))
+            {
+                try
+                {
+                    string[] parts = value.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    string enumType;
+                    string enumValue;
+                    if (parts.Length > 2)
+                    {
+                        enumType = parts.Take(parts.Length - 1).Aggregate((a, b) => a + "." + b);
+                        enumValue = parts.Last();
+                    }
+                    else if (parts.Length == 2)
+                    {
+                        enumType = parts[0];
+                        enumValue = parts[1];
+                    }
+                    else
+                        throw new WinterForgeFormatException(value, "Invalid enum format. Expected 'EnumType.EnumValue' or 'Namespace.EnumType.EnumValue'");
+
+                    Type? e = TypeWorker.FindType(enumType);
+                    if (e == null)
+                        return false;
+                    if (!e.IsEnum)
+                        throw new WinterForgeFormatException(value, $"Type '{enumType}' is not an enum type.");
+
+                    string[] values = enumValue.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                    Enum result = null!;
+                    for (int i = 0; i < values.Length; i++)
+                    {
+                        string v = values[i];
+                        if (!Enum.IsDefined(e, v))
+                            throw new WinterForgeFormatException(value, $"Enum '{enumType}' does not contain value '{enumValue}'.");
+
+                        object parsedEnumValue = Enum.Parse(e, v);
+                        if (i == 0)
+                            result = (Enum)parsedEnumValue;
+                        else
+                            result = (Enum)Enum.ToObject(e, Convert.ToInt32(result) | Convert.ToInt32(parsedEnumValue));
+                    }
+
+                    enumObjValue = Convert.ChangeType(result, Enum.GetUnderlyingType(e)).ToString()!;
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        private string ValidateValue(string value, bool isBody, string? id = null)
+        {
+            string trimmed = value.Trim();
+            if(TryEnum(trimmed, out object? enumObjValue))
+            {
+                WriteLine($"{opcodeMap[OpCode.PUSH]} {enumObjValue}");
+                return "#stack()";
+            }
+            else if (trimmed.StartsWith('\"') && trimmed.StartsWith('\"'))
+            {
+                string fullString = ReadString(trimmed);
+
+                if (!fullString.Contains('\n'))
+                    return fullString;
+                else
+                {
+                    writer.WriteLine(opcodeMap[OpCode.START_STR]);
+                    fullString = fullString.Trim('"');
+                    foreach (string line in fullString.Split('\n'))
+                        writer.WriteLine($"{opcodeMap[OpCode.STR]} \"{line}\"");
+                    writer.WriteLine(opcodeMap[OpCode.END_STR]);
+
+                    return "#stack()";
+                }
+            }
+            else if (HRPHelpers.HasValidGenericFollowedByBracket(trimmed))
+            {
+                TryParseCollection(value, out string name, isBody);
+                return name;
+            }
+            else if (HRPHelpers.ContainsExpressionOutsideQuotes(trimmed))
+            {
+                ParseExpression(value, id, isBody);
+                return "#stack()";
+            }
+            else if (HRPHelpers.ContainsSequenceOutsideQuotes(trimmed, "->") != -1)
+            {
+                HandleAccessing(null, isBody, value);
+                return "#stack()";
+            }
+            else if (trimmed.StartsWith("#type"))
+                return value;
+            else if (trimmed.StartsWith("#ref"))
+                return value;
+            else if (trimmed.StartsWith("#stack"))
+                return value;
+            else if (trimmed is "true")
+            {
+                WriteLine($"{opcodeMap[OpCode.PUSH]} true");
+                return "#stack()";
+            }
+            else if (trimmed is "false")
+            {
+                WriteLine($"{opcodeMap[OpCode.PUSH]} false");
+                return "#stack()";
+            }
+            else if (IsMethodCall(value))
+            {
+                ParseMethodCall(id, value, isBody);
+                return "#stack()";
+            }
+            return value;
+        }
+        private bool IsMethodCall(string line)
+        {
+            if (line.Trim().StartsWith('#'))
+                return false;
+            return HRPHelpers.ContainsSequenceOutsideQuotes(line, "(") != -1 && line.EndsWith(')');
+        }
+        private void ParseExpression(string value, string? id, bool isBody)
+        {
+            if (value.EndsWith(';'))
+                value = value[..^1];
+            var tokens = ExpressionTokenizer.Tokenize(value);
+
+            foreach (var token in tokens)
+            {
+                switch (token.Type)
+                {
+                    case TokenType.Number:
+                    case TokenType.String:
+                    case TokenType.Identifier:
+                        if (HRPHelpers.ContainsSequenceOutsideQuotes(token.Text, "->") != -1)
+                        {
+                            ParseRHSAccess(token.Text, id, isBody);
+                            break;
+                        }
+                        else if (token.Text.EndsWith(')') && token.Text.Contains('('))
+                        {
+                            ParseMethodCall(id, token.Text, isBody);
+                        }
+                        else
+                            WriteLine($"{opcodeMap[OpCode.PUSH]} {token.Text}");
+                        break;
+                    case TokenType.Operator:
+                        OpCode operatorCode = token.Text switch
+                        {
+                            "+" => OpCode.ADD,
+                            "-" => OpCode.SUB,
+                            "*" => OpCode.MUL,
+                            "/" => OpCode.DIV,
+                            "%" => OpCode.MOD,
+                            "^" => OpCode.POW,
+
+                            "==" => OpCode.EQ,
+                            "!=" => OpCode.NEQ,
+                            ">" => OpCode.GT,
+                            "<" => OpCode.LT,
+                            ">=" => OpCode.GTE,
+                            "<=" => OpCode.LTE,
+
+                            "&&" => OpCode.AND,
+                            "||" => OpCode.OR,
+                            "!" => OpCode.NOT,
+                            "^|" => OpCode.XOR,
+
+                            _ => throw new InvalidOperationException($"Unknown operator: {token.Text}")
+                        };
+
+                        WriteLine(opcodeMap[operatorCode].ToString());
+                        break;
+                    case TokenType.LParen:
+                        break;
+                    case TokenType.RParen:
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        private string ReadString(string start)
+        {
+            if (start is "\"\"")
+                return start;
+            using var sbRental = stringBuilderPool.Using();
+            StringBuilder content = sbRental.Item;
+            bool inEscape = false;
+            bool isMultiline = false;
+            bool inside = false;
+            int quoteCount = 0;
+
+            // Determine quote style (single vs 5x)
+            for (int i = 0; i < start.Length; i++)
+            {
+                if (start[i] == '"')
+                {
+                    quoteCount++;
+                    inside = true;
+                }
+                else if (!char.IsWhiteSpace(start[i]))
+                {
+                    break;
+                }
+            }
+
+            if (!inside)
+                throw new InvalidOperationException("String must start with at least one quote.");
+
+            if (quoteCount == 1)
+                isMultiline = false;
+            else if (quoteCount == 5)
+                isMultiline = true;
+            else
+                throw new InvalidOperationException("Invalid number of quotes to start string. Use 1 or 5.");
+
+            int startOffset = quoteCount;
+
+            for (int i = startOffset; i < start.Length; i++)
+            {
+                char c = start[i];
+
+                if (inEscape)
+                {
+                    content.Append(c switch
+                    {
+                        '"' => "\"",
+                        '\\' => "\\",
+                        'n' => "\n",
+                        't' => "\t",
+                        _ => "\\" + c
+                    });
+
+                    inEscape = false;
+                }
+                else if (c == '\\')
+                {
+                    inEscape = true;
+                }
+                else if (c == '"')
+                {
+                    // check ahead to see if we hit the closing quote sequence
+                    int remaining = start.Length - i;
+
+                    if (isMultiline && remaining >= 5 && start.Substring(i, 5) == "\"\"\"\"\"")
+                        return '\"' + content.ToString() + '\"';
+                    else if (!isMultiline)
+                    {
+                        return '\"' + content.ToString() + '\"';
+                    }
+                    content.Append('"');
+                }
+                else
+                {
+                    content.Append(c);
+                }
+            }
+
+            if (!isMultiline)
+                throw new InvalidOperationException("Malformed multiline string: unexpected line break in single-quote string.");
+
+            // Keep reading until we find the closing 5x quote
+            while (true)
+            {
+                string? nextLine = ReadLine(allowEmptyLines: true);
+                if (nextLine == null)
+                    throw new InvalidOperationException("Unexpected end of stream while reading multiline string.");
+
+                content.Append('\n');
+
+                for (int i = 0; i < nextLine.Length; i++)
+                {
+                    char c = nextLine[i];
+
+                    if (inEscape)
+                    {
+                        content.Append(c switch
+                        {
+                            '"' => '"',
+                            '\\' => '\\',
+                            'n' => '\n',
+                            't' => '\t',
+                            _ => '\\' + c.ToString()
+                        });
+
+                        inEscape = false;
+                    }
+                    else if (c == '\\')
+                    {
+                        inEscape = true;
+                    }
+                    else if (c == '"')
+                    {
+                        // lookahead for 5x quote
+                        if (i + 4 < nextLine.Length && nextLine.Substring(i, 5) == "\"\"\"\"\"")
+                            return '\"' + content.ToString() + '\"';
+                        else
+                        {
+                            content.Append('"');
+                        }
+                    }
+                    else
+                    {
+                        content.Append(c);
+                    }
+                }
+            }
+        }
+        internal string? ReadLine(bool allowEmptyLines = false)
+        {
+            string? line;
+            do
+            {
+                line = ReadNextLogicalLine();
+                if (line == null)
+                    return null;
+
+                if (allowEmptyLines)
+                    return line;
+
+            } while (string.IsNullOrWhiteSpace(line));
+
+            return line;
+        }
+
+        private string? PeekNonEmptyLine(bool allowEmptyLines = false)
+        {
+            // Temporarily read the logical line
+            string? line = ReadNextLogicalLine(peekOnly: true);
+            if (line == null)
+                return null;
+
+            if (!allowEmptyLines && string.IsNullOrWhiteSpace(line))
+                return null;
+
+            return line;
+        }
+
+        private string? ReadNextLogicalLine(bool peekOnly = false)
+        {
+            string? line;
+
+            if (lineBuffers.Count > 0 && (lineBuffers.Peek()?.Count ?? 0) > 0)
+            {
+                line = peekOnly ? lineBuffers.Peek().Peek() : lineBuffers.Peek().Pop();
+                if (!peekOnly && lineBuffers.Peek().Count == 0)
+                    lineBuffers.Pop();
+            }
+            else
+            {
+                if (reader.EndOfStream)
+                    return null;
+                line = reader.ReadLine();
+            }
+
+            if (line == null)
+                return null;
+
+            int startIndex = line.IndexOf("\"\"\"\"\"");
+            if (startIndex >= 0)
+            {
+                var sb = new StringBuilder();
+                // Append from the first occurrence of """"" to end of line
+                sb.Append(line[startIndex..]);
+                bool closed = sb.ToString().Contains("\"\"\"\"\"") && sb.ToString().LastIndexOf("\"\"\"\"\"") > 0;
+
+                while (!closed && !reader.EndOfStream)
+                {
+                    string? nextLine = reader.ReadLine();
+                    if (nextLine == null)
+                        break;
+
+                    sb.AppendLine('\n' + nextLine);
+                    if (nextLine.Contains("\"\"\"\"\""))
+                        closed = true;
+                }
+
+                line = sb.ToString();
+
+                if (peekOnly)
+                {
+                    var tempStack = new OverridableStack<string>();
+                    tempStack.PushStart(line);
+                    lineBuffers.Push(tempStack);
+                }
+            }
+
+            return line;
+        }
+
+        private void ReadNextLineExpecting(string expected)
+        {
+            currentLine = ReadLine();
+            if (currentLine == null || currentLine.Trim() != expected)
+                throw new Exception($"Expected '{expected}' but got: {currentLine}");
+        }
+        private void WriteLine(string line)
+        {
+            if (line.Contains('\n'))
+            {
+                int lastIndex = line.Length - 1;
+
+                // Walk backwards to find where the trailing newlines start
+                while (lastIndex >= 0 && line[lastIndex] == '\n')
+                {
+                    lastIndex--;
+                }
+
+                string sanitized = line[..(lastIndex + 1)].Replace("\n", "");
+                line = sanitized;
+            }
+            writer.WriteLine(line);
+        }
+
 
         internal void EnqueueLines(List<string> lines)
         {

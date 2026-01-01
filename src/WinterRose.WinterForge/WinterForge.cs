@@ -137,7 +137,7 @@ namespace WinterRose.WinterForgeSerializing
             DoSerialization(serializer, o, serialized, formatted, targetFormat);
             byte[] bytes = formatted.ToArray();
 
-            if (targetFormat is TargetFormat.HumanReadable or TargetFormat.FormattedHumanReadable)
+            if (targetFormat is TargetFormat.HumanReadable or TargetFormat.FormattedHumanReadable or TargetFormat.ReadableIntermediateRepresentation)
             {
                 StringBuilder sb = new StringBuilder();
                 foreach (byte b in bytes)
@@ -292,8 +292,11 @@ namespace WinterRose.WinterForgeSerializing
                 }
                 else
                 {
-                    using OpcodeToByteCompiler compiler = new(outputStream, AllowCustomCompilers);
-                    new HumanReadableParser().Parse(serialized, compiler);
+                    using MemoryStream s = new();
+                    new HumanReadableParser().Parse(serialized, s);
+                    s.Position = 0;
+                    OpcodeToByteCompiler compiler = new(s, outputStream, AllowCustomCompilers);
+                    compiler.Compile();
                 }
             }
 
@@ -434,10 +437,8 @@ namespace WinterRose.WinterForgeSerializing
         {
             using var mem = new MemoryStream();
             using var humanReadable = File.OpenRead(path);
-            using var compiled = new OpcodeToByteCompiler(mem, AllowCustomCompilers);
-            new HumanReadableParser().Parse(humanReadable, compiled);
+            FinishSerialization(humanReadable, mem, TargetFormat.Optimized);
             mem.Position = 0;
-
             var instructions = ByteToOpcodeDecompiler.Parse(mem, false);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;

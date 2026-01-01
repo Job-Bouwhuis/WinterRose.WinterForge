@@ -130,11 +130,6 @@ public class ByteToOpcodeDecompiler
                         args.Add(ReadString(reader));
                         break;
 
-                    case OpCode.START_STR:
-                    case OpCode.STR:
-                        args.Add(ReadMultilineString(reader));
-                        break;
-
                     case OpCode.ANONYMOUS_SET:
                         args.Add(ReadString(reader));
                         args.Add(ReadString(reader));
@@ -149,7 +144,6 @@ public class ByteToOpcodeDecompiler
                     // No-arg instructions
                     case OpCode.LIST_END:
                     case OpCode.PROGRESS:
-                    case OpCode.END_STR:
                     case OpCode.ADD:
                     case OpCode.SUB:
                     case OpCode.MUL:
@@ -289,7 +283,6 @@ public class ByteToOpcodeDecompiler
             ValuePrefix.STACK => "#stack()",
             ValuePrefix.DEFAULT => "default",
             ValuePrefix.BOOL => reader.ReadBoolean(),
-            ValuePrefix.MULTILINE_STRING => ReadMultilineString(reader),
             ValuePrefix.FLOAT => reader.ReadSingle(),
             ValuePrefix.SHORT => reader.ReadInt16(),
             ValuePrefix.USHORT => reader.ReadUInt16(),
@@ -304,17 +297,6 @@ public class ByteToOpcodeDecompiler
             ValuePrefix.NULL => null,
             _ => throw new InvalidDataException($"Unknown type prefix {type}")
         };
-    }
-
-    private static string ReadMultilineString(BinaryReader reader)
-    {
-        byte prefix = reader.ReadByte();
-        if (prefix != 0x01)
-            throw new InvalidDataException($"Expected string prefix 0x01 but got {prefix:X2}");
-
-        ushort length = reader.ReadUInt16();
-        var bytes = reader.ReadBytes(length);
-        return System.Text.Encoding.UTF8.GetString(bytes);
     }
 }
 
