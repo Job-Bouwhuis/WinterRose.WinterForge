@@ -1,5 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -41,6 +43,17 @@ public class WinterForgeVM : IDisposable
         "#workingDir()",
         "#str("
     ];
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="callTicksToWait">The amount of times the VM enumerator has to have its next() called until it goes to the next instruction</param>
+    public class OpcodeTiming(int callTicksToWait)
+    {
+        public int CallTicksToWait { get; set; } = callTicksToWait;
+    }
+
+    public FrozenDictionary<OpCode, OpcodeTiming> OpcodeTimings { get; } = Enum.GetValues<OpCode>().Select(op => new KeyValuePair<OpCode, OpcodeTiming>(op, new(0))).ToFrozenDictionary();
 
     public bool IsDisposed { get; private set; }
 
@@ -132,7 +145,7 @@ public class WinterForgeVM : IDisposable
     internal readonly Stack<Scope> scopeStack = new();
     public Scope? CurrentScope => scopeStack.Count > 0 ? scopeStack.Peek() : null;
 
-    public object? Execute(InstructionStream instructionCollection, bool clearInternals)
+    public IEnumerator<object> GetExecutor(InstructionStream instructionCollection, bool clearInternals)
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
         int instructionTotal = instructionCollection.Count;
@@ -148,6 +161,7 @@ public class WinterForgeVM : IDisposable
 
             Variable? buildingVariable = null;
             int scopesCreated = 0;
+            StringBuilder? sb = null;
 
             void increaseIndex()
             {
@@ -159,17 +173,14 @@ public class WinterForgeVM : IDisposable
                 try
                 {
                     current = instructionCollection[instructionIndexStack.Peek()];
-
                 }
-                catch (IndexOutOfRangeException ex)
+                catch (IndexOutOfRangeException)
                 {
                     break;
                 }
+
                 Instruction instruction = instructionCollection[instructionIndexStack.Peek()];
                 long startTicks = 0;
-
-                if (instructionIndexStack.Peek() is 0 && instruction.Opcode is OpCode.OR)
-                    continue; // TODO: this is a temp fix, figure out why it does weird shits and giggles later
 
                 if (CurrentContext.constructingScopes.TryPeek(out Scope cs)
                     && cs is Template templ
@@ -179,6 +190,9 @@ public class WinterForgeVM : IDisposable
                         and not OpCode.VAR_DEF_END)
                 {
                     templ.Instructions.Add(instruction);
+                    // apply post-op tick waits for TEMPLATE accumulation as well
+                    int ticksToWaitTpl = OpcodeTimings.TryGetValue(instruction.Opcode, out var tplTiming) ? tplTiming.CallTicksToWait : 1;
+                    for (int t = 0; t < ticksToWaitTpl; t++) yield return null;
                     continue;
                 }
 
@@ -234,18 +248,22 @@ public class WinterForgeVM : IDisposable
                         HandleEnd();
                         break;
                     case OpCode.RET:
-                        object returnValue = HandleReturn(instruction, contextStack.Count != 1);
-                        for (int i = 0; i < scopesCreated; i++)
-                            scopeStack.Pop();
-                        return returnValue;
+                        {
+                            object returnValue = HandleReturn(instruction, contextStack.Count != 1);
+                            for (int i = 0; i < scopesCreated; i++)
+                                scopeStack.Pop();
+                            // yield the return value and finish
+                            yield return returnValue;
+                            yield break;
+                        }
                     case OpCode.PROGRESS:
                         progressTracker?.Report((this.instructionIndexStack.Peek() + 1) / (float)instructionTotal);
                         break;
                     case OpCode.ACCESS:
-                    {
-                        HandleAccess(instruction);
-                        break;
-                    }
+                        {
+                            HandleAccess(instruction);
+                            break;
+                        }
                     case OpCode.SETACCESS:
                         HandleSetAccess(instruction);
                         break;
@@ -296,178 +314,52 @@ public class WinterForgeVM : IDisposable
                         break;
 
                     case OpCode.NOT:
-                    {
-                        bool value = PopBool();
-                        CurrentContext.ValueStack.Push(!value);
-                        break;
-                    }
+                        {
+                            bool value = PopBool();
+                            CurrentContext.ValueStack.Push(!value);
+                            break;
+                        }
 
                     case OpCode.CONSTRUCTOR_START:
                     case OpCode.TEMPLATE_CREATE:
-                    {
-                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
-                            throw new WinterForgeExecutionException(
-                                "Function definition not permitted. Required scripting level exceeds current VM configuration"
-                            );
-                        bool isConstructor = CurrentContext.constructingScopes.TryPeek(out Scope s)
-                                             && s.Name == (string)instruction.Args[0];
-
-                        int argCount = (int)instruction.Args[1];
-
-                        // when argCount == 0 we skip only name, otherwise name+count
-                        int startIndex = (argCount == 0) ? 1 : 2;
-
-                        List<TemplateParmeter> templateArgs = new(argCount);
-
-                        for (int i = startIndex; i < startIndex + argCount * 2; i += 2)
-                        {
-                            templateArgs.Add(new TemplateParmeter(
-                                ResolveType((string)instruction.Args[i]),
-                                (string)instruction.Args[i + 1]
-                            ));
-                        }
-
-                        Template t = new Template((string)instruction.Args[0], templateArgs);
-                        CurrentContext.constructingScopes.Push(t);
-                    }
+                        CreateTemplate(instruction);
                         break;
 
                     case OpCode.TEMPLATE_END: // 38
-                    {
-                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
-                            throw new WinterForgeExecutionException(
-                                "Function definition not permitted. Required scripting level exceeds current VM configuration"
-                            );
-                        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Template t)
-                            throw new WinterForgeExecutionException(
-                                "Tried ending a template but most recent scope was not a template");
-
-                        if (CurrentContext.constructingScopes.Count == 0)
-                            if (scopeStack.TryPeek(out var current))
-                            {
-                                current.DefineTemplate(t);
-                                break;
-                            }
-
-                        if (!CurrentContext.constructingScopes.TryPeek(out s))
-                            throw new WinterForgeExecutionException(
-                                "Tried ending a template but just ended scope was not defined in a scope");
-
-                        s.DefineTemplate(t);
-                    }
+                        TemplateEnd();
                         break;
 
 
                     case OpCode.CONTAINER_START: // 39
-                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
-                            throw new WinterForgeExecutionException(
-                                "Illegal container definition: class declarations are not permitted at the current scripting level"
-                            );
-
-
-                        Container newContainer = new((string)instruction.Args[0]);
-                        CurrentContext.constructingScopes.Push(newContainer);
-                        scopeStack.Push(newContainer);
+                        CreateContainer(instruction);
                         break;
 
                     case OpCode.CONTAINER_END: // 40
-                    {
-                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
-                            throw new WinterForgeExecutionException(
-                                "Illegal container definition: class declarations are not permitted at the current scripting level"
-                            );
-                        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Container c)
-                            throw new WinterForgeExecutionException(
-                                "Tried ending a container but just ended scope was not a container");
-                        scopeStack.Pop();
-
-                        CurrentContext.constructingScopes.TryPeek(out Scope owner);
-                        owner ??= scopeStack.Peek();
-                        owner.Containers.Add(c.Name, c);
-                        //CurrentContext.Containers[c.Name] = c;
-                    }
+                        FinalizeContainer();
                         break;
 
                     case OpCode.CONSTRUCTOR_END: // 42
-                    {
-                        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Template t)
-                            throw new WinterForgeExecutionException(
-                                "Tried ending a constructor but most recent scope was not a template");
-
-                        if (!CurrentContext.constructingScopes.TryPeek(out s) || s is not Container c)
-                            throw new WinterForgeExecutionException(
-                                "Tried ending a constructor but just ended template was not defined in a container");
-
-                        t.Parent = c;
-                        c.Constructors.DefineTemplate(t);
-                    }
+                        {
+                            EndConstructor();
+                        }
                         break;
 
                     case OpCode.VAR_DEF_START:
-                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
-                            throw new WinterForgeExecutionException(
-                                "Illegal variable declaration: container-scope variables are not permitted at the current scripting level"
-                            );
-                        buildingVariable = new Variable();
-                        buildingVariable.Name = (string)instruction.Args[0];
-
-                        if (instruction.Args.Length == 1)
-                        {
-                            if (PeekInstruction(out Instruction instr)
-                                && instr.Opcode == OpCode.VAR_DEF_END)
-                            {
-                                buildingVariable.defaultValue = null;
-                                buildingVariable.DefaultValueAsExpression = false;
-                                break;
-                            }
-
-                            goto ExpressionBuilding;
-                        }
-
-                        if (instruction.Args.Length == 2)
-                        {
-                            buildingVariable.defaultValue = instruction.Args[1];
-                            buildingVariable.DefaultValueAsExpression = false;
+                        (bool flowControl, (buildingVariable, instruction)) = DefineVariable(instruction);
+                        if (!flowControl)
                             break;
-                        }
-
-                        ExpressionBuilding:
-                        buildingVariable.DefaultValueInstructions = [];
-                        buildingVariable.DefaultValueAsExpression = true;
-                        while (NextInstruction(out instruction))
-                        {
-                            if (instruction.Opcode == OpCode.VAR_DEF_END)
-                                goto case OpCode.VAR_DEF_END;
-                            buildingVariable.DefaultValueInstructions.Add(instruction);
-                        }
 
                         break;
 
                     case OpCode.VAR_DEF_END: // 44
-                        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
-                            throw new WinterForgeExecutionException(
-                                "Illegal variable declaration: container-scope variables are not permitted at the current scripting level"
-                            );
-                    {
-                        Scope s = CurrentContext.constructingScopes.Peek();
-                        if (s is null)
-                            throw new WinterForgeExecutionException(
-                                "Attempting to add a variable on a non existing scope is impossible!");
-
-                        if (buildingVariable is null)
-                            throw new WinterForgeExecutionException(
-                                "Attempting to add a null variable to a scope is illegal!");
-
-                        s.DefineVariable(buildingVariable);
-                        buildingVariable = null;
-                    }
+                        buildingVariable = EndVariable(buildingVariable);
                         break;
 
                     case OpCode.FORCE_DEF_VAR: // 45
-                    {
-                        Scope current = scopeStack.Peek();
-                        current.DefineVariable(new Variable((string)instruction.Args[0]));
-                    }
+                        {
+                            Scope current = scopeStack.Peek();
+                            current.DefineVariable(new Variable((string)instruction.Args[0]));
+                        }
                         break;
 
                     case OpCode.SCOPE_PUSH:
@@ -494,37 +386,28 @@ public class WinterForgeVM : IDisposable
                 if (Debug)
                 {
                     if (instruction.Opcode is OpCode.IMPORT or OpCode.CALL)
-                        continue;
+                    {
+                        // do not time import/call here
+                    }
+                    else
+                    {
+                        long endTicks = Stopwatch.GetTimestamp();
+                        long elapsedTicks = endTicks - startTicks;
 
-                    long endTicks = Stopwatch.GetTimestamp();
-                    long elapsedTicks = endTicks - startTicks;
-
-                    if (!(opcodeTimings ??= []).TryGetValue(instruction.Opcode, out var timing))
-                        timing = (0, 0);
-                    opcodeTimings[instruction.Opcode] = (timing.totalTicks + elapsedTicks, timing.count + 1);
+                        if (!(opcodeTimings ??= []).TryGetValue(instruction.Opcode, out var timing))
+                            timing = (0, 0);
+                        opcodeTimings[instruction.Opcode] = (timing.totalTicks + elapsedTicks, timing.count + 1);
+                    }
                 }
+
+                // after executing the instruction, yield null the configured number of times
+                int ticksToWait = OpcodeTimings.TryGetValue(instruction.Opcode, out var opTiming) ? Math.Max(1, opTiming.CallTicksToWait) : 1;
+                for (int t = 0; t < ticksToWait; t++)
+                    yield return null;
             }
 
-            return new Nothing(contextStack.SelectMany(stack => stack.ObjectTable).ToDictionary());
-
-            bool PeekInstruction([NotNullWhen(true)] out Instruction instruction)
-            {
-                instruction = default;
-                if (instructionIndexStack.Peek() + 1 >= instructionCollection.Count)
-                    return false;
-                instruction = instructionCollection[instructionIndexStack.Peek() + 1];
-                return true;
-            }
-
-            bool NextInstruction([NotNullWhen(true)] out Instruction instruction)
-            {
-                instruction = default;
-                if (instructionIndexStack.Peek() + 1 >= instructionCollection.Count)
-                    return false;
-                instructionIndexStack.Push(instructionIndexStack.Pop() + 1);
-                instruction = instructionCollection[instructionIndexStack.Peek()];
-                return true;
-            }
+            // finished without an explicit RET -> return the final Nothing value
+            yield return new Nothing(contextStack.SelectMany(stack => stack.ObjectTable).ToDictionary());
         }
         finally
         {
@@ -548,6 +431,206 @@ public class WinterForgeVM : IDisposable
             if (DebugAutoPrint)
                 PrintOpcodeTimings(new TextWriterStream(Console.Out));
         }
+
+        bool PeekInstruction([NotNullWhen(true)] out Instruction instruction)
+        {
+            instruction = default;
+            if (instructionIndexStack.Peek() + 1 >= instructionCollection.Count)
+                return false;
+            instruction = instructionCollection[instructionIndexStack.Peek() + 1];
+            return true;
+        }
+
+        bool NextInstruction([NotNullWhen(true)] out Instruction instruction)
+        {
+            instruction = default;
+            if (instructionIndexStack.Peek() + 1 >= instructionCollection.Count)
+                return false;
+            instructionIndexStack.Push(instructionIndexStack.Pop() + 1);
+            instruction = instructionCollection[instructionIndexStack.Peek()];
+            return true;
+        }
+
+        (bool flowControl, (Variable? buildingVariable, Instruction instruction) value) DefineVariable(Instruction instruction)
+        {
+            Variable? buildingVariableLocal;
+            if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+                throw new WinterForgeExecutionException(
+                    "Illegal variable declaration: container-scope variables are not permitted at the current scripting level"
+                );
+            buildingVariableLocal = new Variable();
+            buildingVariableLocal.Name = (string)instruction.Args[0];
+
+            if (instruction.Args.Length == 1)
+            {
+                if (PeekInstruction(out Instruction instr)
+                    && instr.Opcode == OpCode.VAR_DEF_END)
+                {
+                    buildingVariableLocal.defaultValue = null;
+                    buildingVariableLocal.DefaultValueAsExpression = false;
+                    return (flowControl: false, value: default);
+                }
+
+                goto ExpressionBuilding;
+            }
+
+            if (instruction.Args.Length == 2)
+            {
+                buildingVariableLocal.defaultValue = instruction.Args[1];
+                buildingVariableLocal.DefaultValueAsExpression = false;
+                return (flowControl: false, value: default);
+            }
+
+ExpressionBuilding:
+            buildingVariableLocal.DefaultValueInstructions = [];
+            buildingVariableLocal.DefaultValueAsExpression = true;
+            while (NextInstruction(out instruction))
+            {
+                if (instruction.Opcode == OpCode.VAR_DEF_END)
+                    EndVariable(buildingVariableLocal);
+                buildingVariableLocal.DefaultValueInstructions.Add(instruction);
+            }
+
+            return (flowControl: true, value: default);
+        }
+    }
+
+    public object? Execute(InstructionStream instructionCollection, bool clearInternals)
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+
+        object? result = null;
+        // consume executor until it yields a non-null object (the RET value or final Nothing)
+        foreach (var tick in GetExecutor(instructionCollection, clearInternals))
+        {
+            if (tick != null)
+            {
+                result = tick;
+                break;
+            }
+        }
+
+        return result;
+    }
+
+
+    private Variable? EndVariable(Variable? buildingVariable)
+    {
+        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+            throw new WinterForgeExecutionException(
+                "Illegal variable declaration: container-scope variables are not permitted at the current scripting level"
+            );
+        {
+            Scope s = CurrentContext.constructingScopes.Peek();
+            if (s is null)
+                throw new WinterForgeExecutionException(
+                    "Attempting to add a variable on a non existing scope is impossible!");
+
+            if (buildingVariable is null)
+                throw new WinterForgeExecutionException(
+                    "Attempting to add a null variable to a scope is illegal!");
+
+            s.DefineVariable(buildingVariable);
+            buildingVariable = null;
+        }
+
+        return buildingVariable;
+    }
+
+    private void EndConstructor()
+    {
+        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Template t)
+            throw new WinterForgeExecutionException(
+                "Tried ending a constructor but most recent scope was not a template");
+
+        if (!CurrentContext.constructingScopes.TryPeek(out s) || s is not Container c)
+            throw new WinterForgeExecutionException(
+                "Tried ending a constructor but just ended template was not defined in a container");
+
+        t.Parent = c;
+        c.Constructors.DefineTemplate(t);
+    }
+
+    private void FinalizeContainer()
+    {
+        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+            throw new WinterForgeExecutionException(
+                "Illegal container definition: class declarations are not permitted at the current scripting level"
+            );
+        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Container c)
+            throw new WinterForgeExecutionException(
+                "Tried ending a container but just ended scope was not a container");
+        scopeStack.Pop();
+
+        CurrentContext.constructingScopes.TryPeek(out Scope owner);
+        owner ??= scopeStack.Peek();
+        owner.Containers.Add(c.Name, c);
+    }
+
+    private void CreateContainer(Instruction instruction)
+    {
+        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+            throw new WinterForgeExecutionException(
+                "Illegal container definition: class declarations are not permitted at the current scripting level"
+            );
+
+
+        Container newContainer = new((string)instruction.Args[0]);
+        CurrentContext.constructingScopes.Push(newContainer);
+        scopeStack.Push(newContainer);
+    }
+
+    private bool TemplateEnd()
+    {
+        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+            throw new WinterForgeExecutionException(
+                "Function definition not permitted. Required scripting level exceeds current VM configuration"
+            );
+        if (!CurrentContext.constructingScopes.TryPop(out Scope s) || s is not Template t)
+            throw new WinterForgeExecutionException(
+                "Tried ending a template but most recent scope was not a template");
+
+        if (CurrentContext.constructingScopes.Count == 0)
+            if (scopeStack.TryPeek(out var current))
+            {
+                current.DefineTemplate(t);
+                return false;
+            }
+
+        if (!CurrentContext.constructingScopes.TryPeek(out s))
+            throw new WinterForgeExecutionException(
+                "Tried ending a template but just ended scope was not defined in a scope");
+
+        s.DefineTemplate(t);
+        return true;
+    }
+
+    private void CreateTemplate(Instruction instruction)
+    {
+        if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
+            throw new WinterForgeExecutionException(
+                "Function definition not permitted. Required scripting level exceeds current VM configuration"
+            );
+        bool isConstructor = CurrentContext.constructingScopes.TryPeek(out Scope s)
+                             && s.Name == (string)instruction.Args[0];
+
+        int argCount = (int)instruction.Args[1];
+
+        // when argCount == 0 we skip only name, otherwise name+count
+        int startIndex = (argCount == 0) ? 1 : 2;
+
+        List<TemplateParmeter> templateArgs = new(argCount);
+
+        for (int i = startIndex; i < startIndex + argCount * 2; i += 2)
+        {
+            templateArgs.Add(new TemplateParmeter(
+                ResolveType((string)instruction.Args[i]),
+                (string)instruction.Args[i + 1]
+            ));
+        }
+
+        Template t = new Template((string)instruction.Args[0], templateArgs);
+        CurrentContext.constructingScopes.Push(t);
     }
 
     private void HandleJump(string label, IReadOnlyList<Instruction> instructionCollection)
@@ -1739,4 +1822,12 @@ public class WinterForgeVM : IDisposable
     }
 
     private class Dispatched();
+}
+
+public static class ext
+{
+    extension(IEnumerator<object> e)
+    {
+        public IEnumerator<object> GetEnumerator() => e;
+    }
 }
