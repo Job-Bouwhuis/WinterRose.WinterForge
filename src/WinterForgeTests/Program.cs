@@ -28,34 +28,15 @@ internal class Program
     
     private static void Main()
     {
-        benchmark();
+        var factory = WinterForge.CreateFactory();
 
-        if (!File.Exists("human.txt"))
-            File.Create("human.txt").Close();
-        if (!File.Exists("human2.txt"))
-            File.Create("human2.txt").Close();
+        var type = factory.DefineType(typeof(TestClass));
+        type.DefineMember("number", 1);
+        type.DefineMember("text", "this is amazing");
+        type.DefineMember("format", TargetFormat.FormattedHumanReadable);
 
-        File.Create("bytes.wfbin").Close();
-
-        //var tokens = ExpressionTokenizer.Tokenize("_ref(0)->X == 15");
-
-        //Dictionary<string, string> kv = new()
-        //{
-        //    { "key", "val" }
-        //};
-        //List<demo> list = new() { demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D(), demo.D() };
-
-        //WinterForge.SerializeToFile(list, "human.txt", TargetFormat.HumanReadable);
-
-        WinterForge.AllowCustomCompilers = false;
-        WinterForge.ConvertFromFileToFile("human.txt", "bytes.wfbin");
-
-        WinterForge.ConvertFromFileToFile("human.txt", "opcodesAsText.txt", TargetFormat.ReadableIntermediateRepresentation);
-
-        WinterForgeVM.Debug = true;
-        using FileStream stream = File.OpenRead("bytes.wfbin");
-        var inspection = WinterForge.InspectStream(stream);
-        Console.WriteLine(inspection);
+        string result = factory.Build();
+        Console.WriteLine(result);
     }
 
     private static void benchmark()

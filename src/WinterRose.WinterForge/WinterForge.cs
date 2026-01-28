@@ -13,6 +13,7 @@ using System.Text;
 using System.Threading.Tasks;
 using WinterRose.NetworkServer;
 using WinterRose.WinterForgeSerializing.Compiling;
+using WinterRose.WinterForgeSerializing.Factory;
 using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Instructions;
 using WinterRose.WinterForgeSerializing.Logging;
@@ -105,6 +106,8 @@ namespace WinterRose.WinterForgeSerializing
                 }
             }
         }
+
+        public static WinterForgeFactory CreateFactory() => new();
 
         /// <summary>
         /// Serializes the given object directly to opcodes for fastest deserialization
