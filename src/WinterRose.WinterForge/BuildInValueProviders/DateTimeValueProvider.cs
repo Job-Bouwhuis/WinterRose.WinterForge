@@ -11,7 +11,7 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
 
         public override object CreateString(DateTime obj, ObjectSerializer serializer)
         {
-            return $"\"{obj}\"";
+            return $"{obj}";
         }
     }
 

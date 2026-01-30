@@ -1039,6 +1039,8 @@ ExpressionBuilding:
             value = sr.Get();
         if (member.Type.IsArray)
             value = ((IList)value).GetInternalArray();
+        if(CustomValueProviderCache.Get(member.Type, out var provider))
+            value = provider._CreateObject(value, this);
 
         member.SetValue(ref actual, value);
     }

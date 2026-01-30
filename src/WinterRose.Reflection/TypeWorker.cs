@@ -211,7 +211,7 @@ namespace WinterRose
                         if (attribute.GetType() == typeof(T))
                         {
                             types.Add(type);
-                            break; // No need to check other attributes once a match is found
+                            break;
                         }
                     }
                 }

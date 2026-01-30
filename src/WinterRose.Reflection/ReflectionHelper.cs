@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Dynamic;
 using System.Linq;
 using System.Reflection;
@@ -115,6 +116,33 @@ namespace WinterRose.Reflection
             if (res is 1)
                 return property!;
             return null;
+        }
+
+        public bool TryGetMember(string name, [NotNullWhen(true)] out MemberData? member)
+        {
+            member = null;
+            try
+            {
+                member = GetMember(name);
+            }
+            catch
+            {
+                return false;
+            }
+            return member != null;
+        }
+
+        public bool HasMember(string name)
+        {
+            try
+            {
+                var m = GetMember(name);
+                return m != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
