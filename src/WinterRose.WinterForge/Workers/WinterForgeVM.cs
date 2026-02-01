@@ -1509,7 +1509,7 @@ ExpressionBuilding:
         object? value;
 
         if (arg is string stringArg && stringArg.StartsWith('"') && stringArg.EndsWith('"'))
-            return stringArg[1..^1];
+            arg = stringArg[1..^1];
 
         if (arg is string plain && !plain.StartsWith("#") && !plain.StartsWith("_"))
         {

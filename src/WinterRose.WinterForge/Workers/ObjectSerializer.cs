@@ -188,7 +188,13 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 string typePrefix = GetNumericTypeName(val);
                 if (typePrefix is "null")
                     value = "null";
-                else if (typePrefix is "none" && val is string s)
+                else if (val is null)
+                    value = "null";
+                else if (val is string s1 && s1.StartsWith('#'))
+                {
+                    value = s1;
+                }
+                else if (typePrefix is "none" && val is string s && !s.StartsWith('#'))
                 {
                     if (s.StartsWith('"') && s.EndsWith('"'))
                         value = s;
