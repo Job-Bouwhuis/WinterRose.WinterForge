@@ -91,7 +91,7 @@ namespace WinterRose.Reflection
         /// <param name="name"></param>
         /// <returns></returns>
         /// <exception cref="FieldNotFoundException"></exception>
-        public MemberData? GetMember(string name)
+        public MemberData? GetMember(string name, bool throwOnNotFound = true)
         {
             int res = GetFieldOrProperty(name, out var field, out var property);
             if (res is -1)
@@ -107,7 +107,7 @@ namespace WinterRose.Reflection
                         return new AnonymousMember(name, anon);
                     }
                 }
-                else
+                else if (throwOnNotFound)
                     throw new FieldNotFoundException($"field or property with name '{name}' does not exist");
             }
                 

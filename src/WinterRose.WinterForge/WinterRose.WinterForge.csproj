@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>26.1.0</Version>
+    <Version>26.1.1</Version>
     <RootNamespace>WinterRose.WinterForgeSerializing</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
