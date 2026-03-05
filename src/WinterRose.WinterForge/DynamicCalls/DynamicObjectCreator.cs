@@ -14,7 +14,9 @@ namespace WinterRose.WinterForgeSerializing.Workers
     {
         static ConcurrentDictionary<Type, ConstructorInfo[]> constructorCache = [];
 
-        public static object CreateInstance(Type targetType, List<object> argumentStrings)
+        public static T CreateInstance<T>(params List<object> argumentStrings) => (T)CreateInstance(typeof(T), argumentStrings);
+
+        public static object CreateInstance(Type targetType, params List<object> argumentStrings)
         {
             argumentStrings = ResolveArgumentTypes(argumentStrings);
 

@@ -1,0 +1,12 @@
+#import * as Term from "Terminal";
+
+
+#container Trash
+{
+	#template Main string[] args
+	{
+		foreach arg in args
+			Term->Run("mv " + arg + "~/.Trash");
+		Console->WriteLine("All files moved to Trash.");
+	}
+}
