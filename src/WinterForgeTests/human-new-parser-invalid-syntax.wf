@@ -1,0 +1,10 @@
+// Intentionally invalid script for testing syntax diagnostics
+WinterForgeTests.ComplexParserTestClass : 1 {
+    name = "this should fail";
+    numbers = <System.Int32>[1, 2, 3;
+    tags = <System.String>["alpha", "beta"];
+    scores = <System.String, System.Int32>["alice" => 10];
+    format = WinterRose.WinterForgeSerializing.TargetFormat.Optimized;
+}
+
+return 1;

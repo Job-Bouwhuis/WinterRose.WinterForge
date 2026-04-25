@@ -55,10 +55,13 @@ public class ByteToOpcodeDecompiler
 
     private static void InternalParse(BinaryReader reader, InstructionStream instructions)
     {
+        Queue<string> recentInstructions = new();
+
         try
         {
             while (true)
             {
+                long opcodePos = reader.BaseStream.CanSeek ? reader.BaseStream.Position : -1;
                 byte peek = reader.ReadByte();
                 if (peek == -1)
                 {
@@ -214,10 +217,14 @@ public class ByteToOpcodeDecompiler
 
 
                     default:
-                        throw new InvalidOperationException($"Opcode {opcode} not supported in deserializer.");
+                        throw CreateUnsupportedOpcodeException(reader, peek, opcodePos, recentInstructions);
                 }
 
-                instructions.Add(new Instruction(opcode, args.ToArray()));
+                Instruction parsed = new(opcode, args.ToArray());
+                instructions.Add(parsed);
+                if (recentInstructions.Count >= 6)
+                    recentInstructions.Dequeue();
+                recentInstructions.Enqueue(parsed.ToString());
 
                 if (opcode == OpCode.END_OF_DATA)
                     break;
@@ -226,6 +233,58 @@ public class ByteToOpcodeDecompiler
         catch (EndOfStreamException)
         {
             // assume end of instructions giving valid data because who gives a fuck
+        }
+
+        static Exception CreateUnsupportedOpcodeException(BinaryReader reader, byte opcodeByte, long opcodePos, Queue<string> recentInstructions)
+        {
+            string bytePos = opcodePos >= 0 ? opcodePos.ToString() : "<unknown>";
+            string recent = recentInstructions.Count > 0
+                ? string.Join(Environment.NewLine, recentInstructions.Select((x, i) => $"    [{i}] {x}"))
+                : "    <none>";
+
+            string byteWindow = BuildByteWindow(reader, opcodePos, radius: 10);
+            string message =
+                $"Unsupported opcode byte '{opcodeByte}' (0x{opcodeByte:X2}) encountered while decompiling at byte offset {bytePos}.\n" +
+                "This usually means the stream is corrupted, truncated, or not valid WinterForge bytecode for this runtime.\n" +
+                "Recently decoded instructions:\n" + recent + "\n" +
+                "Nearby bytes:\n" + byteWindow;
+
+            return new InvalidOperationException(message);
+        }
+
+        static string BuildByteWindow(BinaryReader reader, long opcodePos, int radius)
+        {
+            if (!reader.BaseStream.CanSeek || opcodePos < 0)
+                return "    <byte window unavailable: non-seekable stream>";
+
+            long originalPos = reader.BaseStream.Position;
+            try
+            {
+                long start = Math.Max(0, opcodePos - radius);
+                long end = Math.Min(reader.BaseStream.Length - 1, opcodePos + radius);
+                int count = (int)(end - start + 1);
+
+                reader.BaseStream.Position = start;
+                byte[] bytes = reader.ReadBytes(count);
+
+                var parts = new List<string>(bytes.Length);
+                for (int i = 0; i < bytes.Length; i++)
+                {
+                    long absolute = start + i;
+                    string marker = absolute == opcodePos ? "<--" : "   ";
+                    parts.Add($"    {absolute,8}: 0x{bytes[i]:X2} {marker}");
+                }
+
+                return string.Join(Environment.NewLine, parts);
+            }
+            catch
+            {
+                return "    <failed to capture byte window>";
+            }
+            finally
+            {
+                reader.BaseStream.Position = originalPos;
+            }
         }
     }
 

@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
+using System.Xml.Linq;
 using WinterRose.AnonymousTypes;
 using WinterRose.Reflection;
 using WinterRose.WinterForgeSerializing.Compiling;
@@ -138,6 +139,7 @@ public class WinterForgeVM : IDisposable
     }
 
     private int instructionTotal;
+    private InstructionStream? activeInstructionCollection;
 
     private Dictionary<OpCode, (long totalTicks, int count)> opcodeTimings;
     internal readonly Stack<int> instructionIndexStack = new();
@@ -149,6 +151,7 @@ public class WinterForgeVM : IDisposable
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
         int instructionTotal = instructionCollection.Count;
+        activeInstructionCollection = instructionCollection;
 
         try
         {
@@ -181,10 +184,13 @@ public class WinterForgeVM : IDisposable
 
                 Instruction instruction = instructionCollection[instructionIndexStack.Peek()];
                 long startTicks = 0;
+                bool pendingReturn = false;
+                object? pendingReturnValue = null;
 
                 if (CurrentContext.constructingScopes.TryPeek(out Scope cs)
                     && cs is Template templ
                     && instruction.Opcode is not OpCode.TEMPLATE_CREATE and not OpCode.TEMPLATE_END
+                        and not OpCode.CONSTRUCTOR_START and not OpCode.CONSTRUCTOR_END
                         and not OpCode.CONTAINER_START and not OpCode.CONTAINER_END
                         and not OpCode.VAR_DEF_START
                         and not OpCode.VAR_DEF_END)
@@ -199,8 +205,10 @@ public class WinterForgeVM : IDisposable
                 if (Debug)
                     startTicks = Stopwatch.GetTimestamp();
 
-                switch (instruction.Opcode)
+                try
                 {
+                    switch (instruction.Opcode)
+                    {
                     case OpCode.LABEL:
                         break; // nop
 
@@ -249,12 +257,9 @@ public class WinterForgeVM : IDisposable
                         break;
                     case OpCode.RET:
                         {
-                            object returnValue = HandleReturn(instruction, contextStack.Count != 1);
-                            for (int i = 0; i < scopesCreated; i++)
-                                scopeStack.Pop();
-                            // yield the return value and finish
-                            yield return returnValue;
-                            yield break;
+                            pendingReturnValue = HandleReturn(instruction, contextStack.Count != 1);
+                            pendingReturn = true;
+                            break;
                         }
                     case OpCode.PROGRESS:
                         progressTracker?.Report((this.instructionIndexStack.Peek() + 1) / (float)instructionTotal);
@@ -345,10 +350,20 @@ public class WinterForgeVM : IDisposable
                         break;
 
                     case OpCode.VAR_DEF_START:
-                        (bool flowControl, (buildingVariable, instruction)) = DefineVariable(instruction);
+                        (bool flowControl, var defineResult) = DefineVariable(instruction);
+                        buildingVariable = defineResult.buildingVariable;
                         if (!flowControl)
                             break;
 
+                        break;
+
+                    case OpCode.VAR_DEFAULT_VALUE:
+                        if (buildingVariable is null)
+                            throw new WinterForgeExecutionException(
+                                "Encountered VAR_DEFAULT_VALUE without an active variable definition. Check emitted container variable opcodes.");
+
+                        buildingVariable.defaultValue = instruction.Args.Length > 0 ? instruction.Args[0] : null;
+                        buildingVariable.DefaultValueAsExpression = false;
                         break;
 
                     case OpCode.VAR_DEF_END: // 44
@@ -381,6 +396,23 @@ public class WinterForgeVM : IDisposable
 
                     default:
                         throw new WinterForgeExecutionException($"Opcode: {instruction.Opcode} not supported");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (ex is WinterForgeExecutionException wfe && wfe.HasExecutionContext)
+                        throw;
+
+                    throw CreateExecutionException(ex.Message, ex);
+                }
+
+                if (pendingReturn)
+                {
+                    for (int i = 0; i < scopesCreated; i++)
+                        scopeStack.Pop();
+
+                    yield return pendingReturnValue!;
+                    yield break;
                 }
 
                 if (Debug)
@@ -411,6 +443,7 @@ public class WinterForgeVM : IDisposable
         }
         finally
         {
+            activeInstructionCollection = null;
             progressTracker?.Report(1);
             progressTracker?.Report("Finishing up");
             instructionIndexStack.Pop();
@@ -453,45 +486,24 @@ public class WinterForgeVM : IDisposable
 
         (bool flowControl, (Variable? buildingVariable, Instruction instruction) value) DefineVariable(Instruction instruction)
         {
-            Variable? buildingVariableLocal;
             if (WinterForge.AllowedScriptingLevel < WinterForge.ScriptingLevel.All)
                 throw new WinterForgeExecutionException(
                     "Illegal variable declaration: container-scope variables are not permitted at the current scripting level"
                 );
-            buildingVariableLocal = new Variable();
-            buildingVariableLocal.Name = (string)instruction.Args[0];
+            if (instruction.Args.Length == 0)
+                throw new WinterForgeExecutionException("VAR_DEF_START missing variable name argument.");
 
-            if (instruction.Args.Length == 1)
+            Variable buildingVariableLocal = new()
             {
-                if (PeekInstruction(out Instruction instr)
-                    && instr.Opcode == OpCode.VAR_DEF_END)
-                {
-                    buildingVariableLocal.defaultValue = null;
-                    buildingVariableLocal.DefaultValueAsExpression = false;
-                    return (flowControl: false, value: default);
-                }
+                Name = (string)instruction.Args[0],
+                defaultValue = null,
+                DefaultValueAsExpression = false
+            };
 
-                goto ExpressionBuilding;
-            }
-
-            if (instruction.Args.Length == 2)
-            {
+            if (instruction.Args.Length >= 2)
                 buildingVariableLocal.defaultValue = instruction.Args[1];
-                buildingVariableLocal.DefaultValueAsExpression = false;
-                return (flowControl: false, value: default);
-            }
 
-ExpressionBuilding:
-            buildingVariableLocal.DefaultValueInstructions = [];
-            buildingVariableLocal.DefaultValueAsExpression = true;
-            while (NextInstruction(out instruction))
-            {
-                if (instruction.Opcode == OpCode.VAR_DEF_END)
-                    EndVariable(buildingVariableLocal);
-                buildingVariableLocal.DefaultValueInstructions.Add(instruction);
-            }
-
-            return (flowControl: true, value: default);
+            return (flowControl: false, value: (buildingVariableLocal, instruction));
         }
     }
 
@@ -1369,6 +1381,73 @@ ExpressionBuilding:
 
     private record DispatchedReference(int RefID, int lineNum, Action<object?> method);
 
+    private WinterForgeExecutionException CreateExecutionException(string message, Exception? inner = null)
+    {
+        int? index = null;
+        OpCode? opcode = null;
+        string? instructionText = null;
+        string? context = null;
+
+        if (instructionIndexStack.Count > 0)
+        {
+            index = instructionIndexStack.Peek();
+            if (activeInstructionCollection is not null && index >= 0 && index < activeInstructionCollection.Count)
+            {
+                Instruction instr = activeInstructionCollection[index.Value];
+                opcode = instr.Opcode;
+                instructionText = instr.ToString();
+                context = BuildInstructionContextWindow(activeInstructionCollection, index.Value, radius: 2);
+            }
+            else if (!current.Equals(default(Instruction)))
+            {
+                opcode = current.Opcode;
+                instructionText = current.ToString();
+            }
+        }
+
+        string scopePath = scopeStack.Count > 0
+            ? string.Join(" -> ", scopeStack.Reverse().Select(s => s.Name))
+            : "<no-scope>";
+
+        int valueDepth = contextStack.Count > 0 ? CurrentContext.ValueStack.Count : 0;
+        int instanceDepth = instanceIDStack.Count;
+
+        string messageWithHint = message;
+        if (index.HasValue)
+            messageWithHint += $" (at instruction #{index.Value})";
+
+        return new WinterForgeExecutionException(
+            message: messageWithHint,
+            innerException: inner,
+            instructionIndex: index,
+            opcode: opcode,
+            instructionText: instructionText,
+            instructionContext: context,
+            scopePath: scopePath,
+            valueStackCount: valueDepth,
+            instanceStackDepth: instanceDepth);
+    }
+
+    private static string BuildInstructionContextWindow(InstructionStream stream, int centerIndex, int radius)
+    {
+        int start = Math.Max(0, centerIndex - radius);
+        int end = Math.Min(stream.Count - 1, centerIndex + radius);
+        int width = Math.Max(2, end.ToString().Length);
+
+        StringBuilder sb = new();
+        for (int i = start; i <= end; i++)
+        {
+            string marker = i == centerIndex ? ">" : " ";
+            sb.Append(marker)
+              .Append(' ')
+              .Append(i.ToString().PadLeft(width))
+              .Append(": ")
+              .AppendLine(stream[i].ToString());
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
     private unsafe void HandleCall(string methodName, int argCount)
     {
         var args = new object[argCount];
@@ -1482,6 +1561,13 @@ ExpressionBuilding:
             if (element is Dispatched)
                 throw new WinterForgeDifferedException("Differed collection addition is not allowed");
 
+            if(element.GetType() != list.ElementType)
+            {
+                if (!TypeConverter.TryConvert(element, list.ElementType, out var newelement))
+                    throw new WinterForgeExecutionException($"Could not convert from type {element.GetType()} to {list.ElementType} for value {element}");
+                element = newelement;
+            }
+
             list.Values.Add(element);
         }
         else if (collection is DictionaryDefinition dict)
@@ -1498,6 +1584,20 @@ ExpressionBuilding:
                 o => throw new WinterForgeDifferedException("Differed collection addition is not allowed"));
             if (value is Dispatched)
                 throw new WinterForgeDifferedException("Differed collection addition is not allowed");
+
+            if (key.GetType() != dict.KeyType)
+            {
+                if (!TypeConverter.TryConvert(key, dict.KeyType, out var newkey))
+                    throw new WinterForgeExecutionException($"Could not convert from type {key.GetType()} to {dict.KeyType} for value {key}");
+                key = newkey;
+            }
+
+            if (value.GetType() != dict.ValueType)
+            {
+                if (!TypeConverter.TryConvert(key, dict.KeyType, out var newvalue))
+                    throw new WinterForgeExecutionException($"Could not convert from type {value.GetType()} to {dict.ValueType} for value {value}");
+                value = newvalue;
+            }
 
             dict.Values.Add(key, value);
         }
@@ -1822,9 +1922,9 @@ ExpressionBuilding:
 
         return result;
     }
-
-    private class Dispatched();
 }
+
+internal class Dispatched();
 
 public static class ext
 {

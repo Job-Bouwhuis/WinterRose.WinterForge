@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Globalization;
 using System.Threading.Tasks;
 using WinterRose.NetworkServer;
 using WinterRose.WinterForgeSerializing.Compiling;
@@ -284,22 +285,21 @@ namespace WinterRose.WinterForgeSerializing
             {
                 if (target is TargetFormat.IntermediateRepresentation)
                 {
-                    new HumanReadableParser().Parse(serialized, outputStream);
+                    using MemoryStream bytecode = new();
+                    new HumanReadableBytecodeParser().Parse(serialized, bytecode, AllowCustomCompilers);
+                    bytecode.Position = 0;
+                    WriteInstructionText(bytecode, outputStream, readableOpcodes: false);
                 }
                 else if (target is TargetFormat.ReadableIntermediateRepresentation)
                 {
-                    using MemoryStream mem = new();
-                    new HumanReadableParser().Parse(serialized, mem);
-                    mem.Position = 0;
-                    new OpcodeToReadableOpcodeParser().Parse(mem, outputStream);
+                    using MemoryStream bytecode = new();
+                    new HumanReadableBytecodeParser().Parse(serialized, bytecode, AllowCustomCompilers);
+                    bytecode.Position = 0;
+                    WriteInstructionText(bytecode, outputStream, readableOpcodes: true);
                 }
                 else
                 {
-                    using MemoryStream s = new();
-                    new HumanReadableParser().Parse(serialized, s);
-                    s.Position = 0;
-                    OpcodeToByteCompiler compiler = new(s, outputStream, AllowCustomCompilers);
-                    compiler.Compile();
+                    new HumanReadableBytecodeParser().Parse(serialized, outputStream, AllowCustomCompilers);
                 }
             }
 
@@ -307,6 +307,46 @@ namespace WinterRose.WinterForgeSerializing
 
             if (CompressedStreams)
                 outputStream.Dispose(); // flushes and closes GZip wrapper without closing underlying opcodes stream
+        }
+
+        private static void WriteInstructionText(Stream bytecode, Stream destination, bool readableOpcodes)
+        {
+            InstructionStream instructionStream = ByteToOpcodeDecompiler.Parse(bytecode, threaded: false);
+            using StreamWriter writer = new(destination, Encoding.UTF8, leaveOpen: true);
+
+            for (int i = 0; i < instructionStream.Count; i++)
+            {
+                Instruction instruction = instructionStream[i];
+                string opcode = readableOpcodes
+                    ? instruction.Opcode.ToString()
+                    : ((int)instruction.Opcode).ToString(CultureInfo.InvariantCulture);
+
+                if (instruction.Args.Length == 0)
+                {
+                    writer.WriteLine(opcode);
+                    continue;
+                }
+
+                string args = string.Join(' ', instruction.Args.Select(FormatInstructionArg));
+                writer.WriteLine($"{opcode} {args}");
+            }
+
+            writer.Flush();
+        }
+
+        private static string FormatInstructionArg(object arg)
+        {
+            if (arg is null)
+                return "null";
+
+            if (arg is string s)
+            {
+                if (s.Contains(' ') || s.Length == 0)
+                    return $"\"{s.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+                return s;
+            }
+
+            return Convert.ToString(arg, CultureInfo.InvariantCulture) ?? string.Empty;
         }
 
 

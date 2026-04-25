@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.Numerics;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -28,15 +29,50 @@ internal class Program
     
     private static void Main()
     {
-        var factory = WinterForge.CreateFactory();
+        RunNewParserSmokeTest();
 
-        var type = factory.DefineType(typeof(TestClass));
-        type.DefineMember("number", 1);
-        type.DefineMember("text", "this is amazing");
-        type.DefineMember("format", TargetFormat.FormattedHumanReadable);
+        //var factory = WinterForge.CreateFactory();
 
-        string result = factory.Build();
-        Console.WriteLine(result);
+        //var type = factory.DefineType(typeof(TestClass));
+        //type.DefineMember("number", 1);
+        //type.DefineMember("text", "this is amazing");
+        //type.DefineMember("format", TargetFormat.FormattedHumanReadable);
+
+        //string result = factory.Build();
+        //Console.WriteLine(result);
+    }
+
+    private static void RunNewParserSmokeTest()
+    {
+        WinterForge.AllowedScriptingLevel = WinterForge.ScriptingLevel.All;
+
+        object? result2 = WinterForge.DeserializeFromHumanReadableFile("human-new-parser-invalid-syntax.wf");
+
+        string path = Path.Combine(AppContext.BaseDirectory, "human-new-parser.wf");
+        if (!File.Exists(path))
+            path = Path.Combine("src", "WinterForgeTests", "human-new-parser.wf");
+
+        string source = File.ReadAllText(path);
+        using MemoryStream compiled = new();
+
+        var parser = new HumanReadableBytecodeParser();
+        string ast = parser.VisualizeAst(source);
+        Console.WriteLine("===== AST =====");
+        Console.WriteLine(ast);
+        Console.WriteLine("===============");
+
+        using MemoryStream input = new(Encoding.UTF8.GetBytes(source));
+        parser.Parse(input, compiled, allowCustomCompilers: false);
+
+        compiled.Position = 0;
+        object? result = WinterForge.DeserializeFromStream(compiled);
+        if (result is not global::WinterForgeTests.ComplexParserTestClass tc)
+            throw new InvalidOperationException("New parser test failed: result type mismatch.");
+
+        if (tc.numbers.Count != 6 || tc.tags.Count != 3 || tc.scores.Count != 3)
+            throw new InvalidOperationException("New parser test failed: collection sizes do not match expected values.");
+
+        Console.WriteLine($"[NEW PARSER OK] name={tc.name}, numbers={tc.numbers.Count}, tags={tc.tags.Count}, scores={tc.scores.Count}, format={tc.format}");
     }
 
     private static void benchmark()

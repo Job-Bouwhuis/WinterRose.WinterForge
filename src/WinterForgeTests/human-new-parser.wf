@@ -1,0 +1,39 @@
+// Complex smoke test script for HumanReadableBytecodeParser
+var baseValue = 10;
+var absValue = System.Math->Abs(-32);
+var computed = baseValue + absValue * 2;
+
+if true {
+    WinterForgeTests.Program->data = computed;
+    WinterForgeTests.Program->flag = true;
+}
+else {
+    WinterForgeTests.Program->data = 0;
+    WinterForgeTests.Program->flag = false;
+}
+
+#container DemoContainer {
+    #variables {
+        cached;
+        threshold = 10;
+    }
+
+    #template BuildLabel string prefix int n {
+        var local = prefix;
+        return local;
+    }
+
+    DemoContainer {
+        var ctorValue = 1;
+    }
+}
+
+WinterForgeTests.ComplexParserTestClass : 1 {
+    name = "complex parser object";
+    numbers = <System.Int32>[1, 2, computed, absValue, WinterRose.WinterForgeSerializing.TargetFormat.Optimized, 13];
+    tags = <System.String>["alpha", "beta", "gamma"];
+    scores = <System.String, System.Int32>["alice" => 10, "bob" => 20, "charlie" => 30];
+    format = WinterRose.WinterForgeSerializing.TargetFormat.Optimized;
+}
+
+return 1;
