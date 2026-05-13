@@ -159,8 +159,10 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         DIV,    // /
         MOD,    // %
 
-        POW,    // ^ or **, depending on your syntax
+        // cant remember if the syntax supports this operator, if not it will in the future.
+        POW,    // **
         NEG,    // unary -
+        INV,    // unary ! not used yet, but must be implemented in the future
 
         EQ,     // ==
         NEQ,    // !=
@@ -201,6 +203,8 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         LABEL = 49,
         SCOPE_PUSH = 50,
         SCOPE_POP = 51,
+        //Unused at this time, but reserved for an optimization where we can push a void value to the stack instead of null,
+        //to avoid confusion with null references and allow for better error messages when trying to access members on void values.
         VOID_STACK_ITEM = 52,
     }
 }

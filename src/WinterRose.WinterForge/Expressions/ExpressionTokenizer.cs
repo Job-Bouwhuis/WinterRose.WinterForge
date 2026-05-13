@@ -243,8 +243,7 @@ public static class ExpressionTokenizer
                 continue;
             }
 
-            // if nothing matched, throw
-            throw new Exception($"Unexpected character '{c}' at position {i}");
+            throw new WinterForgeFormatException(input, $"Unexpected character '{c}' at position {i}");
         }
 
         // NOTE: original code returned postfix tokens — that's fine for expression evaluation.
