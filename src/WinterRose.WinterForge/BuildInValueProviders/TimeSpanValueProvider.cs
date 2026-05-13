@@ -6,11 +6,7 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
     {
         public override TimeSpan CreateObject(object value, WinterForgeVM executor)
         {
-            if(value is string s)
-                return TimeSpan.Parse(s);
-            if (value is TimeSpan t)
-                return t;
-            return TimeSpan.Zero;
+            return TimeSpan.Parse((string)value);
         }
 
         public override object CreateString(TimeSpan obj, ObjectSerializer serializer)
