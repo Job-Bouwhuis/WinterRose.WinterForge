@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using WinterRose.WinterForgeSerializing.Compiling;
@@ -220,10 +221,30 @@ internal sealed class Compiler
             return;
         }
 
-        if (line.Contains('=') && (line.EndsWith(';') || line.Contains('"')))
+        // Handle simple property/field assignments (e.g., "FieldName = value" or "FieldName = value;")
+        if (line.Contains('='))
         {
-            ParseAssignment(line, isBody, currentObjectId);
-            return;
+            int eqIdx = line.IndexOf('=');
+            if (eqIdx > 0 && eqIdx < line.Length - 1)
+            {
+                // Check if left side is a simple identifier or member access (field name)
+                string leftSide = line[..eqIdx].Trim();
+                bool isSimpleIdentifier = true;
+                foreach (char c in leftSide)
+                {
+                    if (!char.IsLetterOrDigit(c) && c != '.' && c != '_' && c != ' ')
+                    {
+                        isSimpleIdentifier = false;
+                        break;
+                    }
+                }
+
+                if (isSimpleIdentifier)
+                {
+                    ParseAssignment(line, isBody, currentObjectId);
+                    return;
+                }
+            }
         }
 
         if (HRPHelpers.ContainsSequenceOutsideQuotes(line, "(") != -1 && HRPHelpers.EndsWithParenOrParenSemicolon(line))
@@ -304,9 +325,9 @@ internal sealed class Compiler
 
         EmitDefine(type, assignedId, ctorArgCount);
 
-        if (HumanReadableStatementNodeExtensions.IsBlock(stmt))
+        if (stmt.IsBlock)
         {
-            CompileStatements(stmt.Children(), isBody, assignedId.ToString(CultureInfo.InvariantCulture));
+            CompileStatements(stmt.Children, isBody, assignedId.ToString(CultureInfo.InvariantCulture));
             EmitInt(OpCode.END, assignedId);
         }
         else
@@ -817,8 +838,12 @@ internal sealed class Compiler
         if (typeOpen == -1 || blockOpen == -1 || blockClose < blockOpen)
             throw new WinterForgeFormatException("Expected typed collection syntax '<...>[...]'.");
 
-        string types = value[(typeOpen + 1)..value.IndexOf('>', typeOpen)].Trim();
-        string[] typeParts = types.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        int typeClose = FindMatchingGenericClose(value, typeOpen);
+        if (typeClose == -1)
+            throw new WinterForgeFormatException("Mismatched generic brackets in collection type.");
+
+        string types = value[(typeOpen + 1)..typeClose].Trim();
+        string[] typeParts = SplitGenericParameters(types);
         bool dict = typeParts.Length == 2;
         if (!dict && typeParts.Length != 1)
             throw new WinterForgeFormatException("Invalid generic parameter count for collection.");
@@ -835,7 +860,7 @@ internal sealed class Compiler
 
             if (dict)
             {
-                int split = HRPHelpers.ContainsSequenceOutsideQuotes(e, "=>");
+                int split = FindTopLevelFatArrow(e);
                 if (split == -1)
                     throw new WinterForgeFormatException(e, "Dictionary key-value not properly written. Expected 'key => value'");
 
@@ -852,6 +877,48 @@ internal sealed class Compiler
 
         EmitNoArgs(OpCode.LIST_END);
         return "#stack()";
+    }
+
+    private int FindTopLevelFatArrow(string e)
+    {
+        int depth = 0;
+        bool inString = false;
+
+        for (int i = 0; i < e.Length - 1; i++)
+        {
+            char c = e[i];
+
+            if (c == '"' && (i == 0 || e[i - 1] != '\\'))
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString)
+                continue;
+
+            switch (c)
+            {
+                case '[':
+                case '{':
+                case '(':
+                case '<':
+                    depth++;
+                    break;
+
+                case ']':
+                case '}':
+                case ')':
+                case '>':
+                    depth--;
+                    break;
+            }
+
+            if (depth == 0 && c == '=' && e[i + 1] == '>')
+                return i;
+        }
+
+        return -1;
     }
 
     private string ValidateValue(string value, bool isBody, string? currentObjectId)
@@ -1449,5 +1516,102 @@ internal sealed class Compiler
         }
 
         WriteString(v);
+    }
+
+    /// <summary>
+    /// Finds the closing '>' that matches the opening '<' at the given position,
+    /// correctly handling nested generic parameters.
+    /// </summary>
+    private int FindMatchingGenericClose(string value, int openIndex)
+    {
+        int depth = 0;
+        bool inString = false;
+
+        for (int i = openIndex; i < value.Length; i++)
+        {
+            char c = value[i];
+
+            // Handle string literals
+            if (c == '"' && (i == 0 || value[i - 1] != '\\'))
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString)
+                continue;
+
+            if (c == '<')
+                depth++;
+            else if (c == '>')
+            {
+                depth--;
+                if (depth == 0)
+                    return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Splits generic parameters while respecting nested generics and quoted strings.
+    /// For example, "string, Dictionary<int, string>" correctly splits into two parts.
+    /// </summary>
+    private string[] SplitGenericParameters(string types)
+    {
+        List<string> parts = [];
+        StringBuilder currentPart = new();
+        int depth = 0;
+        bool inString = false;
+
+        for (int i = 0; i < types.Length; i++)
+        {
+            char c = types[i];
+
+            // Handle string literals
+            if (c == '"' && (i == 0 || types[i - 1] != '\\'))
+            {
+                inString = !inString;
+                currentPart.Append(c);
+                continue;
+            }
+
+            if (inString)
+            {
+                currentPart.Append(c);
+                continue;
+            }
+
+            if (c == '<')
+            {
+                depth++;
+                currentPart.Append(c);
+            }
+            else if (c == '>')
+            {
+                depth--;
+                currentPart.Append(c);
+            }
+            else if (c == ',' && depth == 0)
+            {
+                // This is a top-level comma separating generic parameters
+                string part = currentPart.ToString().Trim();
+                if (!string.IsNullOrEmpty(part))
+                    parts.Add(part);
+                currentPart.Clear();
+            }
+            else
+            {
+                currentPart.Append(c);
+            }
+        }
+
+        // Add the last part
+        string lastPart = currentPart.ToString().Trim();
+        if (!string.IsNullOrEmpty(lastPart))
+            parts.Add(lastPart);
+
+        return parts.ToArray();
     }
 }

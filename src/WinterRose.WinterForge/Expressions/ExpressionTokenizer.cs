@@ -95,7 +95,7 @@ public static class ExpressionTokenizer
                 }
 
                 if (i >= input.Length)
-                    throw new Exception("Unterminated string literal");
+                    throw WinterForgeSyntaxException.ForToken("Unterminated string literal", input, 1, i + 1, "\"", null);
 
                 i++; // consume closing quote
                 tokens.Add(new Token(TokenType.String, sb.ToString()));
@@ -243,12 +243,12 @@ public static class ExpressionTokenizer
                 continue;
             }
 
-            throw new WinterForgeFormatException(input, $"Unexpected character '{c}' at position {i}");
+            throw WinterForgeSyntaxException.ForToken("Unexpected character", input, 1, i + 1, c.ToString(), null);
         }
 
         // NOTE: original code returned postfix tokens — that's fine for expression evaluation.
         // We'll simply return the token list converted to postfix here to preserve existing behavior (operators handled).
-        return ConvertToPostfix(tokens);
+        return ConvertToPostfix(tokens, input);
     }
 
     private static string ConsumeFullFunctionCall(string input, ref int i)
@@ -297,7 +297,7 @@ public static class ExpressionTokenizer
 
     private static bool IsRightAssociative(string op) => op == "^" || op == "!";
 
-    private static List<Token> ConvertToPostfix(List<Token> tokens)
+    private static List<Token> ConvertToPostfix(List<Token> tokens, string input)
     {
         var output = new List<Token>();
         var operators = new Stack<Token>();
@@ -347,7 +347,7 @@ public static class ExpressionTokenizer
                         output.Add(operators.Pop());
                     }
                     if (operators.Count == 0)
-                        throw new Exception("Mismatched parentheses");
+                        throw WinterForgeSyntaxException.ForToken("Mismatched parentheses", input, 1, 1, ")", null);
                     operators.Pop(); // Remove '('
                     break;
 
@@ -357,7 +357,7 @@ public static class ExpressionTokenizer
                     break;
 
                 default:
-                    throw new Exception($"Unexpected token {token.Type} in expression");
+                    throw WinterForgeSyntaxException.ForToken($"Unexpected token {token.Type}", input, 1, 1, token.Text, null);
             }
         }
 
@@ -365,7 +365,7 @@ public static class ExpressionTokenizer
         {
             var top = operators.Pop();
             if (top.Type == TokenType.LParen || top.Type == TokenType.RParen)
-                throw new Exception("Mismatched parentheses");
+                throw WinterForgeSyntaxException.ForToken("Mismatched parentheses", input, 1, 1, top.Text, null);
             output.Add(top);
         }
 

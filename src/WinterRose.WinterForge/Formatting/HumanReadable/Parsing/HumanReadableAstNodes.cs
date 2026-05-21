@@ -30,6 +30,7 @@ internal enum HumanReadableNodeKind
     DictionaryEntry,
     GroupedExpression,
     TypeReference,
+    ObjectDefinitionExpression,
 
     ContainerDeclaration,
     TemplateDeclaration,
@@ -368,6 +369,15 @@ internal sealed record HumanReadableDictionaryExpressionNode(
     int End,
     string Text)
     : HumanReadableExpressionNode(HumanReadableNodeKind.DictionaryExpression, Start, End, Text);
+
+internal sealed record HumanReadableObjectDefinitionExpressionNode(
+    HumanReadableExpressionNode Head,
+    HumanReadableExpressionNode Reference,
+    HumanReadableBlockStatementNode? Body,
+    int Start,
+    int End,
+    string Text)
+    : HumanReadableExpressionNode(HumanReadableNodeKind.ObjectDefinitionExpression, Start, End, Text);
 
 internal sealed record HumanReadableTypeReferenceNode(
     IReadOnlyList<string> Segments,

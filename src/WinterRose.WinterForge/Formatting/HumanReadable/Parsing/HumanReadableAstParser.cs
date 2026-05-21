@@ -600,7 +600,8 @@ internal static class HumanReadableAstParser
                 or HumanReadableTokenKind.Semicolon
                 or HumanReadableTokenKind.Comma
                 or HumanReadableTokenKind.Colon
-                or HumanReadableTokenKind.KeywordElse)
+                or HumanReadableTokenKind.KeywordElse
+                or HumanReadableTokenKind.FatArrow)
             {
                 break;
             }
@@ -884,7 +885,7 @@ internal static class HumanReadableAstParser
             {
                 while (true)
                 {
-                    HumanReadableExpressionNode item = ParseExpression(reader, 0);
+                    HumanReadableExpressionNode item = ParseCollectionItemOrObjectDefinition(reader);
                     items.Add(item);
 
                     reader.SkipTrivia();
@@ -914,13 +915,13 @@ internal static class HumanReadableAstParser
         {
             while (true)
             {
-                HumanReadableExpressionNode key = ParseExpression(reader, 0);
+                HumanReadableExpressionNode key = ParseCollectionItemOrObjectDefinition(reader);
                 reader.SkipTrivia();
 
                 Expect(reader, HumanReadableTokenKind.FatArrow, "Expected '=>' between dictionary key and value.");
                 reader.SkipTrivia();
 
-                HumanReadableExpressionNode value = ParseExpression(reader, 0);
+                HumanReadableExpressionNode value = ParseCollectionItemOrObjectDefinition(reader);
                 int entryStart = key.Start;
                 int entryEnd = value.End;
                 string entryText = SafeSlice(reader.Source, entryStart, entryEnd);
@@ -942,6 +943,38 @@ internal static class HumanReadableAstParser
         int dictionaryEnd = reader.PreviousOrCurrent().End();
         string dictionaryText = SafeSlice(reader.Source, startToken.Start, dictionaryEnd);
         return new HumanReadableDictionaryExpressionNode(keyType, valueType, entries, startToken.Start, dictionaryEnd, dictionaryText);
+    }
+
+    private static HumanReadableExpressionNode ParseCollectionItemOrObjectDefinition(TokenReader reader)
+    {
+        reader.SkipTrivia();
+        HumanReadableToken startToken = reader.Current;
+
+        // Try to parse an expression first
+        HumanReadableExpressionNode expression = ParseExpression(reader, 0);
+
+        reader.SkipTrivia();
+        // Check if this is actually an object definition (head : reference { ... })
+        if (reader.Current.Kind == HumanReadableTokenKind.Colon)
+        {
+            reader.Advance();
+            reader.SkipTrivia();
+
+            HumanReadableExpressionNode reference = ParseExpression(reader, 0);
+            reader.SkipTrivia();
+
+            HumanReadableBlockStatementNode? body = null;
+            if (reader.Current.Kind == HumanReadableTokenKind.OpenBrace)
+                body = ParseBlock(reader, StatementContext.General);
+
+            int end = body?.End ?? reference.End;
+            string text = SafeSlice(reader.Source, expression.Start, end);
+
+            // Create an object definition expression node
+            return new HumanReadableObjectDefinitionExpressionNode(expression, reference, body, expression.Start, end, text);
+        }
+
+        return expression;
     }
 
     private static HumanReadableTypeReferenceNode ParseTypeReference(TokenReader reader)

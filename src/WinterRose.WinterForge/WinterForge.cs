@@ -769,14 +769,25 @@ namespace WinterRose.WinterForgeSerializing
             using MemoryStream serialized = new();
             if (options.SkipAstConstruction && options.DirectBinaryEmit && target == TargetFormat.Optimized)
             {
-                serializer.Serialize(ref o, serialized, isRootCall: true, emitReturn: false);
+                serializer.Serialize(ref o, serialized, isRootCall: true);
                 serialized.Seek(0, SeekOrigin.Begin);
+
+                using StreamReader readerr = new(serialized);
+                Console.WriteLine(readerr.ReadToEnd());
+                serialized.Seek(0, SeekOrigin.Begin);
+
                 new HumanReadableBytecodeParser().Parse(serialized, opcodes, options, AllowCustomCompilers);
                 return;
             }
 
             serializer.Serialize(ref o, serialized, isRootCall: true);
             serialized.Seek(0, SeekOrigin.Begin);
+
+            using StreamReader reader = new(serialized);
+            Console.WriteLine(reader.ReadToEnd());
+            serialized.Seek(0, SeekOrigin.Begin);
+
+
             if (options.EnableAggressiveOptimizations)
                 new HumanReadableBytecodeParser().Parse(serialized, opcodes, options, AllowCustomCompilers);
             else
