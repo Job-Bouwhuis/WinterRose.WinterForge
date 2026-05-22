@@ -16,7 +16,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// object ID of 0 <br></br>
         /// 0 items from the stack for constructor arguments
         /// </summary>
-        DEFINE = 0,
+        DEFINE,
         /// <summary>
         /// Sets the value of a field on the current object <br></br><br></br>
         /// 
@@ -25,7 +25,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// X - field name<br></br>
         /// 25 - value
         /// </summary>
-        SET = 1,
+        SET,
         /// <summary>
         /// Ends the working on the most recent defined object.<br></br><br></br>
         /// 
@@ -33,7 +33,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// 2 - END<br></br>
         /// 0 - object key its ending. this must match the most recent defined object that has not yet had this end operation called on it.
         /// </summary>
-        END = 2,
+        END,
         /// <summary>
         /// pushes a value to the stack. used for constructor and method calls<br></br><br></br>
         /// 
@@ -41,11 +41,11 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// 3 - PUSH<br></br>
         /// 5 - value. value can also be a #ref() or #stack() call
         /// </summary>
-        PUSH = 3,
+        PUSH,
         /// <summary>
         /// Calls a method. this opcode has not yet been fully designed. therefor an example can not yet be given
         /// </summary>
-        CALL = 4,
+        CALL,
         /// <summary>
         /// Adds an element to the current list<br></br><br></br>
         /// 
@@ -53,7 +53,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// 5 - ELEMENT<br></br>
         /// #ref(4) - value, the reference of an object with ID 4
         /// </summary>
-        ELEMENT = 5,
+        ELEMENT,
         /// <summary>
         /// begins creating a new list<br></br><br></br>
         /// 
@@ -61,13 +61,13 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// 6 - LIST_START<br></br>
         /// list item type
         /// </summary>
-        LIST_START = 6,
+        LIST_START,
         /// <summary>
         /// Ends a list and puts it to the stack. can then be accessed by <see cref="SET"/> using '#stack()'<br></br><br></br>
         /// 
         /// Has no arguments. line should be only "7".
         /// </summary>
-        LIST_END = 7,
+        LIST_END,
         /// <summary>
         /// tells the <see cref="WinterForgeVM"/> to return the object of which key is given<br></br><br></br>
         /// 
@@ -75,23 +75,23 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// 8 - RETURN<br></br>
         /// 4 - key of which object reference to return
         /// </summary>
-        RET = 8,
+        RET,
         /// <summary>
         /// invokes <see cref="WinterForgeVM.ProgressMark"/>
         /// </summary>
-        PROGRESS = 9,
+        PROGRESS,
         /// <summary>
         /// Attempts to access the top stack value. on success puts the value on the stack. on fail, exception<br></br><br></br>
         /// 
         /// EG: "10 Player"<br></br>
         /// </summary>
-        ACCESS = 10,
+        ACCESS,
         /// <summary>
         /// Sets the value on the top stack value, rather than the current working object<br></br><br></br>
         /// 
         /// refer to <see cref="SET"/> for the example
         /// </summary>
-        SETACCESS = 11,
+        SETACCESS,
         /// <summary>
         /// Takes the top stack item and puts it as a reference item on the given ID 
         /// (can be used to override an id reference)<br></br><br></br>
@@ -100,19 +100,19 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// 12 - AS<br></br>
         /// 0 - store the stack item on ID 0. even if an object at that ID already exists
         /// </summary>
-        AS = 12,
+        AS,
         /// <summary>
         /// Starts a multiline string
         /// </summary>
-        START_STR = 13,
+        START_STR,
         /// <summary>
         /// Adds a line inside a multiline string
         /// </summary>
-        STR = 14,
+        STR,
         /// <summary>
         /// Ends a multiline string
         /// </summary>
-        END_STR = 15,
+        END_STR,
         /// <summary>
         /// aliases a ref object under the given name <br></br>
         /// <br></br>
@@ -122,7 +122,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// 0 - the ref id<br></br>
         /// player - the alias to give it<br></br>
         /// </summary>
-        ALIAS = 16,
+        ALIAS,
         /// <summary>
         /// lets the type and name of a field inside an anonymous object definition<br></br>
         /// <br></br>
@@ -136,7 +136,7 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// <remarks>
         /// This requres a value, to define a value with its default value for the given type, set the value to 'default'
         /// </remarks>
-        ANONYMOUS_SET = 17,
+        ANONYMOUS_SET,
         /// <summary>
         /// Imports another winterforge file. only accepts opcode files
         /// 
@@ -145,13 +145,13 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// <example>
         /// import "filename.wf"
         /// </example>
-        IMPORT = 18,
+        IMPORT,
 
         /// <summary>
         /// Creates the second argument as a ref value on the refid that is the first argument
         /// Not used in saved files, exclusively used when reading binary compiled WinterForge files that use custom compilers
         /// </summary>
-        CREATE_REF = 19,
+        CREATE_REF,
 
         ADD,    // +
         SUB,    // -
@@ -159,8 +159,10 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         DIV,    // /
         MOD,    // %
 
-        POW,    // ^ or **, depending on your syntax
+        // cant remember if the syntax supports this operator, if not it will in the future.
+        POW,    // **
         NEG,    // unary -
+        INV,    // unary ! not used yet, but must be implemented in the future
 
         EQ,     // ==
         NEQ,    // !=
@@ -186,21 +188,23 @@ namespace WinterRose.WinterForgeSerializing.Instructions
         /// <summary>
         /// represents the end of data in a winterforge byte stream
         /// </summary>
-        END_OF_DATA = 255,
+        END_OF_DATA,
 
-        CONTAINER_START = 39,
-        CONTAINER_END = 40,
-        CONSTRUCTOR_START = 41,
-        CONSTRUCTOR_END = 42,
-        VAR_DEF_START = 43,
-        VAR_DEF_END = 44,
-        FORCE_DEF_VAR = 45,
-        VAR_DEFAULT_VALUE = 46,
-        JUMP = 47,
-        JUMP_IF_FALSE = 48,
-        LABEL = 49,
-        SCOPE_PUSH = 50,
-        SCOPE_POP = 51,
-        VOID_STACK_ITEM = 52,
+        CONTAINER_START,
+        CONTAINER_END,
+        CONSTRUCTOR_START,
+        CONSTRUCTOR_END,
+        VAR_DEF_START,
+        VAR_DEF_END,
+        FORCE_DEF_VAR,
+        VAR_DEFAULT_VALUE,
+        JUMP,
+        JUMP_IF_FALSE,
+        LABEL,
+        SCOPE_PUSH,
+        SCOPE_POP,
+        //Unused at this time, but reserved for an optimization where we can push a void value to the stack instead of null,
+        //to avoid confusion with null references and allow for better error messages when trying to access members on void values.
+        VOID_STACK_ITEM,
     }
 }

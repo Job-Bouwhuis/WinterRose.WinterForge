@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.Numerics;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -9,6 +10,7 @@ using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Containers;
 using WinterRose.WinterForgeSerializing.Expressions;
 using WinterRose.WinterForgeSerializing.Formatting;
+using WinterRose.WinterForgeSerializing.Formatting.HumanReadable.Parsing;
 using WinterRose.WinterForgeSerializing.InclusionRules;
 using WinterRose.WinterForgeSerializing.Workers;
 
@@ -28,15 +30,269 @@ internal class Program
     
     private static void Main()
     {
-        var factory = WinterForge.CreateFactory();
+        //RunNewParserSmokeTest();
+        RunQuestSystemTest();
 
-        var type = factory.DefineType(typeof(TestClass));
-        type.DefineMember("number", 1);
-        type.DefineMember("text", "this is amazing");
-        type.DefineMember("format", TargetFormat.FormattedHumanReadable);
+        //var factory = WinterForge.CreateFactory();
 
-        string result = factory.Build();
-        Console.WriteLine(result);
+        //var type = factory.DefineType(typeof(TestClass));
+        //type.DefineMember("number", 1);
+        //type.DefineMember("text", "this is amazing");
+        //type.DefineMember("format", TargetFormat.FormattedHumanReadable);
+
+        //string result = factory.Build();
+        //Console.WriteLine(result);
+    }
+
+    private static void RunNewParserSmokeTest()
+    {
+        WinterForge.AllowedScriptingLevel = WinterForge.ScriptingLevel.All;
+
+        object? result2 = WinterForge.DeserializeFromHumanReadableFile("human-new-parser-invalid-syntax.wf");
+
+        string path = Path.Combine(AppContext.BaseDirectory, "human-new-parser.wf");
+        if (!File.Exists(path))
+            path = Path.Combine("src", "WinterForgeTests", "human-new-parser.wf");
+
+        string source = File.ReadAllText(path);
+        using MemoryStream compiled = new();
+
+        var parser = new HumanReadableBytecodeParser();
+        string ast = parser.VisualizeAst(source);
+        Console.WriteLine("===== AST =====");
+        Console.WriteLine(ast);
+        Console.WriteLine("===============");
+
+        using MemoryStream input = new(Encoding.UTF8.GetBytes(source));
+        parser.Parse(input, compiled, allowCustomCompilers: false);
+
+        compiled.Position = 0;
+        object? result = WinterForge.DeserializeFromStream(compiled);
+        if (result is not global::WinterForgeTests.ComplexParserTestClass tc)
+            throw new InvalidOperationException("New parser test failed: result type mismatch.");
+
+        if (tc.numbers.Count != 6 || tc.tags.Count != 3 || tc.scores.Count != 3)
+            throw new InvalidOperationException("New parser test failed: collection sizes do not match expected values.");
+
+        Console.WriteLine($"[NEW PARSER OK] name={tc.name}, numbers={tc.numbers.Count}, tags={tc.tags.Count}, scores={tc.scores.Count}, format={tc.format}");
+    }
+
+    private static void RunQuestSystemTest()
+    {
+        Console.WriteLine("\n===== QUEST SYSTEM TEST =====\n");
+
+        // Create a complex quest system with nested dictionaries
+        QuestSystem questSystem = CreateQuestSystem();
+
+        Console.WriteLine("Original QuestSystem:");
+        PrintQuestSystem(questSystem);
+
+        // Serialize
+        Console.WriteLine("\nSerializing...");
+        string serializedPath = "quest_system.wf";
+        WinterForge.SerializeToFile(questSystem, serializedPath);
+        Console.WriteLine($"Serialized to {serializedPath}");
+
+        // Deserialize
+        Console.WriteLine("\nDeserializing...");
+        object? deserialized = WinterForge.DeserializeFromFile(serializedPath);
+
+        if (deserialized is not QuestSystem deserializedSystem)
+            throw new InvalidOperationException("Quest system test failed: deserialization resulted in wrong type.");
+
+        Console.WriteLine("\nDeserialized QuestSystem:");
+        PrintQuestSystem(deserializedSystem);
+
+        // Validate
+        ValidateQuestSystem(questSystem, deserializedSystem);
+
+        Console.WriteLine("\n[QUEST SYSTEM TEST OK] All validations passed!");
+        Console.WriteLine("===== QUEST SYSTEM TEST END =====\n");
+    }
+
+    private static QuestSystem CreateQuestSystem()
+    {
+        var system = new QuestSystem
+        {
+            SystemId = "quest_v2_advanced",
+            MaxActiveQuests = 10,
+            QuestTitles = new Dictionary<string, string>
+            {
+                { "combat_01", "Goblin Slayer" },
+                { "combat_02", "Dragon's End" },
+                { "exploration_01", "Lost Temple" },
+                { "exploration_02", "Ancient Ruins" },
+                { "crafting_01", "Master Smith" }
+            },
+            QuestsByCategory = new Dictionary<string, Dictionary<int, string>>
+            {
+                {
+                    "Combat", new Dictionary<int, string>
+                    {
+                        { 1, "Defeat 10 goblins in the forest" },
+                        { 2, "Slay the dragon boss at Mount Inferno" },
+                        { 3, "Clear the undead fortress" }
+                    }
+                },
+                {
+                    "Exploration", new Dictionary<int, string>
+                    {
+                        { 1, "Find the hidden temple in the desert" },
+                        { 2, "Visit all waypoints on the map" },
+                        { 3, "Discover the secret underwater cavern" }
+                    }
+                },
+                {
+                    "Crafting", new Dictionary<int, string>
+                    {
+                        { 1, "Craft 5 iron swords" },
+                        { 2, "Create a legendary amulet" }
+                    }
+                }
+            },
+            AvailableRewards = new List<QuestReward>
+            {
+                new QuestReward
+                {
+                    RewardId = "reward_gold_100",
+                    ExperiencePoints = 500,
+                    ItemRewards = new Dictionary<string, int>
+                    {
+                        { "gold", 100 },
+                        { "exp_scroll", 1 }
+                    }
+                },
+                new QuestReward
+                {
+                    RewardId = "reward_gold_500",
+                    ExperiencePoints = 2500,
+                    ItemRewards = new Dictionary<string, int>
+                    {
+                        { "gold", 500 },
+                        { "rare_gem", 2 },
+                        { "exp_scroll", 3 }
+                    }
+                }
+            },
+            CategoryDifficulties = new Dictionary<string, int>
+            {
+                { "Combat", 8 },
+                { "Exploration", 5 },
+                { "Crafting", 3 }
+            }
+        };
+
+        return system;
+    }
+
+    private static void PrintQuestSystem(QuestSystem system)
+    {
+        Console.WriteLine($"SystemId: {system.SystemId}");
+        Console.WriteLine($"MaxActiveQuests: {system.MaxActiveQuests}");
+
+        Console.WriteLine($"\nQuest Titles ({system.QuestTitles.Count}):");
+        foreach (var title in system.QuestTitles)
+        {
+            Console.WriteLine($"  [{title.Key}] = {title.Value}");
+        }
+
+        Console.WriteLine($"\nQuests by Category ({system.QuestsByCategory.Count} categories):");
+        foreach (var category in system.QuestsByCategory)
+        {
+            Console.WriteLine($"  {category.Key}: ({category.Value.Count} quests)");
+            foreach (var quest in category.Value)
+            {
+                Console.WriteLine($"    [{quest.Key}] {quest.Value}");
+            }
+        }
+
+        Console.WriteLine($"\nAvailable Rewards ({system.AvailableRewards.Count}):");
+        foreach (var reward in system.AvailableRewards)
+        {
+            Console.WriteLine($"  {reward.RewardId}: {reward.ExperiencePoints} XP");
+            foreach (var item in reward.ItemRewards)
+            {
+                Console.WriteLine($"    - {item.Key}: {item.Value}");
+            }
+        }
+
+        Console.WriteLine($"\nCategory Difficulties ({system.CategoryDifficulties.Count}):");
+        foreach (var difficulty in system.CategoryDifficulties)
+        {
+            Console.WriteLine($"  {difficulty.Key}: {difficulty.Value}");
+        }
+    }
+
+    private static void ValidateQuestSystem(QuestSystem original, QuestSystem deserialized)
+    {
+        if (original.SystemId != deserialized.SystemId)
+            throw new InvalidOperationException($"SystemId mismatch: {original.SystemId} != {deserialized.SystemId}");
+
+        if (original.MaxActiveQuests != deserialized.MaxActiveQuests)
+            throw new InvalidOperationException($"MaxActiveQuests mismatch");
+
+        if (original.QuestTitles.Count != deserialized.QuestTitles.Count)
+            throw new InvalidOperationException($"QuestTitles count mismatch: {original.QuestTitles.Count} != {deserialized.QuestTitles.Count}");
+
+        foreach (var kvp in original.QuestTitles)
+        {
+            if (!deserialized.QuestTitles.ContainsKey(kvp.Key) || deserialized.QuestTitles[kvp.Key] != kvp.Value)
+                throw new InvalidOperationException($"QuestTitle {kvp.Key} mismatch");
+        }
+
+        if (original.QuestsByCategory.Count != deserialized.QuestsByCategory.Count)
+            throw new InvalidOperationException($"QuestsByCategory count mismatch");
+
+        foreach (var category in original.QuestsByCategory)
+        {
+            if (!deserialized.QuestsByCategory.ContainsKey(category.Key))
+                throw new InvalidOperationException($"Category {category.Key} missing in deserialized");
+
+            var originalCategoryQuests = category.Value;
+            var deserializedCategoryQuests = deserialized.QuestsByCategory[category.Key];
+
+            if (originalCategoryQuests.Count != deserializedCategoryQuests.Count)
+                throw new InvalidOperationException($"Quest count mismatch in category {category.Key}");
+
+            foreach (var quest in originalCategoryQuests)
+            {
+                if (!deserializedCategoryQuests.ContainsKey(quest.Key) || deserializedCategoryQuests[quest.Key] != quest.Value)
+                    throw new InvalidOperationException($"Quest {quest.Key} in category {category.Key} mismatch");
+            }
+        }
+
+        if (original.AvailableRewards.Count != deserialized.AvailableRewards.Count)
+            throw new InvalidOperationException($"AvailableRewards count mismatch");
+
+        for (int i = 0; i < original.AvailableRewards.Count; i++)
+        {
+            var origReward = original.AvailableRewards[i];
+            var deseReward = deserialized.AvailableRewards[i];
+
+            if (origReward.RewardId != deseReward.RewardId || origReward.ExperiencePoints != deseReward.ExperiencePoints)
+                throw new InvalidOperationException($"Reward {i} mismatch");
+
+            if (origReward.ItemRewards.Count != deseReward.ItemRewards.Count)
+                throw new InvalidOperationException($"ItemRewards count mismatch in reward {i}");
+
+            foreach (var item in origReward.ItemRewards)
+            {
+                if (!deseReward.ItemRewards.ContainsKey(item.Key) || deseReward.ItemRewards[item.Key] != item.Value)
+                    throw new InvalidOperationException($"Item {item.Key} in reward {i} mismatch");
+            }
+        }
+
+        if (original.CategoryDifficulties.Count != deserialized.CategoryDifficulties.Count)
+            throw new InvalidOperationException($"CategoryDifficulties count mismatch");
+
+        foreach (var difficulty in original.CategoryDifficulties)
+        {
+            if (!deserialized.CategoryDifficulties.ContainsKey(difficulty.Key) || 
+                deserialized.CategoryDifficulties[difficulty.Key] != difficulty.Value)
+                throw new InvalidOperationException($"Difficulty for {difficulty.Key} mismatch");
+        }
+
+        Console.WriteLine("✓ All validations passed!");
     }
 
     private static void benchmark()
@@ -487,4 +743,83 @@ public class GameWorld
     public Dictionary<string, Region> Regions { get; set; }
     [WFInclude]
     public List<GameEvent> EventQueue { get; set; }
+}
+
+// ---------- Nested Dictionary Test Class ----------
+public class QuestSystem
+{
+    [WFInclude]
+    public string SystemId { get; set; }
+
+    [WFInclude]
+    public int MaxActiveQuests { get; set; }
+
+    [WFInclude]
+    public Dictionary<string, string> QuestTitles { get; set; }
+
+    /// <summary>
+    /// Nested dictionary: Category -> (QuestId -> Description)
+    /// For example: "Combat" -> { 1 -> "Defeat 10 goblins", 2 -> "Slay the dragon boss" }
+    ///             "Exploration" -> { 1 -> "Find the hidden temple", 2 -> "Visit all waypoints" }
+    /// </summary>
+    [WFInclude]
+    public Dictionary<string, Dictionary<int, string>> QuestsByCategory { get; set; }
+
+    [WFInclude]
+    public List<QuestReward> AvailableRewards { get; set; }
+
+    [WFInclude]
+    public Dictionary<string, int> CategoryDifficulties { get; set; }
+
+    public QuestSystem()
+    {
+        SystemId = "quest_system_v1";
+        MaxActiveQuests = 5;
+        QuestTitles = new();
+        QuestsByCategory = new();
+        AvailableRewards = new();
+        CategoryDifficulties = new();
+    }
+}
+
+public class QuestReward
+{
+    [WFInclude]
+    public string RewardId { get; set; }
+
+    [WFInclude]
+    public int ExperiencePoints { get; set; }
+
+    [WFInclude]
+    public Dictionary<string, int> ItemRewards { get; set; }
+
+    public QuestReward()
+    {
+        ItemRewards = new();
+    }
+}
+
+public class ComplexParserTestClass2
+{
+    [WFInclude]
+    public string name { get; set; }
+
+    [WFInclude]
+    public List<int> numbers { get; set; }
+
+    [WFInclude]
+    public List<string> tags { get; set; }
+
+    [WFInclude]
+    public Dictionary<string, int> scores { get; set; }
+
+    [WFInclude]
+    public string format { get; set; }
+
+    public ComplexParserTestClass2()
+    {
+        numbers = new();
+        tags = new();
+        scores = new();
+    }
 }

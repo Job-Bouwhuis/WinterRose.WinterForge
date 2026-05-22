@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Globalization;
 using System.Threading.Tasks;
 using WinterRose.NetworkServer;
 using WinterRose.WinterForgeSerializing.Compiling;
@@ -18,6 +19,7 @@ using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.Instructions;
 using WinterRose.WinterForgeSerializing.Logging;
 using WinterRose.WinterForgeSerializing.Util;
+using WinterRose.WinterForgeSerializing.Formatting.HumanReadable.Parsing;
 using WinterRose.WinterForgeSerializing.Workers;
 
 namespace WinterRose.WinterForgeSerializing
@@ -110,35 +112,35 @@ namespace WinterRose.WinterForgeSerializing
         public static WinterForgeFactory CreateFactory() => new();
 
         /// <summary>
-        /// Serializes the given object directly to opcodes for fastest deserialization
+        /// Serializes the given object directly to opcodes using the provided compilation options.
         /// </summary>
-        /// <param name="o"></param>
-        /// <param name="path"></param>
-        public static void SerializeToFile(object o, string path, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        /// <param name="o">The object to serialize</param>
+        /// <param name="path">The file path to write to</param>
+        /// <param name="progressTracker">Optional progress tracking</param>
+        /// <param name="compilationOptions">Options to control compilation pipeline and target format</param>
+        public static void SerializeToFile(object o, string path, WinterForgeProgressTracker? progressTracker = null, CompilationOptions compilationOptions = null)
         {
             EnsurePathExists(path);
 
-            using (Stream serialized = new MemoryStream())
-            using (Stream opcodes = File.Open(path, FileMode.Create, FileAccess.ReadWrite))
-            {
-                ObjectSerializer serializer = new(progressTracker);
-                DoSerialization(serializer, o, serialized, opcodes, targetFormat);
-            }
+            using Stream opcodes = File.Open(path, FileMode.Create, FileAccess.ReadWrite);
+            ObjectSerializer serializer = new(progressTracker);
+            DoSerialization(serializer, o, opcodes, compilationOptions);
         }
         /// <summary>
         /// Serializes the object into a string
         /// </summary>
         /// <param name="o"></param>
         /// <returns></returns>
-        public static string SerializeToString(object o, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        public static string SerializeToString(object o, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null)
         {
-            using MemoryStream serialized = new();
             using MemoryStream formatted = new();
 
             ObjectSerializer serializer = new(progressTracker);
-
-            DoSerialization(serializer, o, serialized, formatted, targetFormat);
+            DoSerialization(serializer, o, formatted, compilationOptions);
             byte[] bytes = formatted.ToArray();
+
+            var options = CompilationOptions.Merge(compilationOptions, null);
+            var targetFormat = options.TargetFormat;
 
             if (targetFormat is TargetFormat.HumanReadable or TargetFormat.FormattedHumanReadable or TargetFormat.ReadableIntermediateRepresentation)
             {
@@ -147,7 +149,7 @@ namespace WinterRose.WinterForgeSerializing
                     sb.Append((char)b);
                 return sb.ToString();
             }
-            
+
             return Convert.ToBase64String(bytes);
         }
         /// <summary>
@@ -155,12 +157,12 @@ namespace WinterRose.WinterForgeSerializing
         /// </summary>
         /// <param name="obj"></param>
         /// <param name="data"></param>
-        public static void SerializeToStream(object obj, Stream data, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        public static void SerializeToStream(object obj, Stream data, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null)
         {
-            using MemoryStream serialized = new MemoryStream();
             ObjectSerializer serializer = new(progressTracker);
-            DoSerialization(serializer, obj, serialized, data, targetFormat);
+            DoSerialization(serializer, obj, data, compilationOptions);
         }
+
         /// <summary>
         /// Serializes the given static type to the file at the given <paramref name="path"/>
         /// </summary>
@@ -168,16 +170,13 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="path"></param>
         /// <param name="targetFormat"></param>
         /// <param name="progressTracker"></param>
-        public static void SerializeStaticToFile(Type type, string path, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        public static void SerializeStaticToFile(Type type, string path, WinterForgeProgressTracker? progressTracker = null, CompilationOptions compilationOptions = null)
         {
             EnsurePathExists(path);
 
-            using (Stream serialized = new MemoryStream())
-            using (Stream opcodes = File.Open(path, FileMode.Create, FileAccess.ReadWrite))
-            {
-                ObjectSerializer serializer = new(progressTracker);
-                DoStaticSerialization(serializer, type, serialized, opcodes, targetFormat);
-            }
+            using Stream opcodes = File.Open(path, FileMode.Create, FileAccess.ReadWrite);
+            ObjectSerializer serializer = new(progressTracker);
+            DoStaticSerialization(serializer, type, opcodes, compilationOptions);
         }
         /// <summary>
         /// Serializes the given static type to a string
@@ -186,29 +185,29 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="targetFormat"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static string SerializeStaticToString(Type type, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        public static string SerializeStaticToString(Type type, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null)
         {
-            using MemoryStream serialized = new();
             using MemoryStream formatted = new();
 
             ObjectSerializer serializer = new(progressTracker);
-            DoStaticSerialization(serializer, type, serialized, formatted, targetFormat);
+            DoStaticSerialization(serializer, type, formatted, compilationOptions);
 
             byte[] bytes = formatted.ToArray();
-            return Encoding.UTF8.GetString(bytes);
+            var options = CompilationOptions.Merge(compilationOptions, null);
+            return options.TargetFormat is TargetFormat.Optimized
+                ? Convert.ToBase64String(bytes)
+                : Encoding.UTF8.GetString(bytes);
         }
         /// <summary>
         /// Serializes the given static type to the given stream <paramref name="data"/>
         /// </summary>
         /// <param name="type"></param>
         /// <param name="data"></param>
-        /// <param name="targetFormat"></param>
         /// <param name="progressTracker"></param>
-        public static void SerializeStaticToStream(Type type, Stream data, TargetFormat targetFormat = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null)
+        public static void SerializeStaticToStream(Type type, Stream data, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null)
         {
-            using MemoryStream serialized = new();
             ObjectSerializer serializer = new(progressTracker);
-            DoStaticSerialization(serializer, type, serialized, data, targetFormat);
+            DoStaticSerialization(serializer, type, data, compilationOptions);
         }
 
         /// <summary>
@@ -219,7 +218,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeToFileAsync(object obj, string path, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToFile(obj, path, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeToFileAsync(object obj, string path, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null) => RunSerializeAsync(() => SerializeToFile(obj, path, progressTracker, compilationOptions));
         /// <summary>
         /// Serializes to a string in the provided <paramref name="format"/>
         /// </summary>
@@ -227,7 +226,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeToStringAsync(object obj, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToString(obj, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeToStringAsync(object obj, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null) => RunSerializeAsync(() => SerializeToString(obj, progressTracker, compilationOptions));
         /// <summary>
         /// Serializes to a stream in the provided <paramref name="format"/>
         /// </summary>
@@ -236,7 +235,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeToStreamAsync(object obj, Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeToStream(obj, stream, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeToStreamAsync(object obj, Stream stream, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null) => RunSerializeAsync(() => SerializeToStream(obj, stream, progressTracker, compilationOptions));
         /// <summary>
         /// Serializes a static type to a file in the provided <paramref name="format"/>
         /// </summary>
@@ -245,7 +244,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeStaticToFileAsync(Type type, string path, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToFile(type, path, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeStaticToFileAsync(Type type, string path, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null) => RunSerializeAsync(() => SerializeStaticToFile(type, path, progressTracker, compilationOptions));
         /// <summary>
         /// Serializes a static type to a string in the provided <paramref name="format"/>
         /// </summary>
@@ -253,7 +252,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeStaticToStringAsync(Type type, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToString(type, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeStaticToStringAsync(Type type, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null) => RunSerializeAsync(() => SerializeStaticToString(type, progressTracker, compilationOptions));
         /// <summary>
         /// Serializes a static type to a stream in the provided <paramref name="format"/>
         /// </summary>
@@ -262,7 +261,7 @@ namespace WinterRose.WinterForgeSerializing
         /// <param name="format"></param>
         /// <param name="progressTracker"></param>
         /// <returns></returns>
-        public static WinterForgeSerializationTask SerializeStaticToStreamAsync(Type type, Stream stream, TargetFormat format = TargetFormat.Optimized, WinterForgeProgressTracker? progressTracker = null) => RunSerializeAsync(() => SerializeStaticToStream(type, stream, format, progressTracker));
+        public static WinterForgeSerializationTask SerializeStaticToStreamAsync(Type type, Stream stream, WinterForgeProgressTracker? progressTracker = null, CompilationOptions? compilationOptions = null) => RunSerializeAsync(() => SerializeStaticToStream(type, stream, progressTracker, compilationOptions));
 
         private static void FinishSerialization(Stream serialized, Stream opcodes, TargetFormat target)
         {
@@ -284,22 +283,21 @@ namespace WinterRose.WinterForgeSerializing
             {
                 if (target is TargetFormat.IntermediateRepresentation)
                 {
-                    new HumanReadableParser().Parse(serialized, outputStream);
+                    using MemoryStream bytecode = new();
+                    new HumanReadableBytecodeParser().Parse(serialized, bytecode, AllowCustomCompilers);
+                    bytecode.Position = 0;
+                    WriteInstructionText(bytecode, outputStream, readableOpcodes: false);
                 }
                 else if (target is TargetFormat.ReadableIntermediateRepresentation)
                 {
-                    using MemoryStream mem = new();
-                    new HumanReadableParser().Parse(serialized, mem);
-                    mem.Position = 0;
-                    new OpcodeToReadableOpcodeParser().Parse(mem, outputStream);
+                    using MemoryStream bytecode = new();
+                    new HumanReadableBytecodeParser().Parse(serialized, bytecode, AllowCustomCompilers);
+                    bytecode.Position = 0;
+                    WriteInstructionText(bytecode, outputStream, readableOpcodes: true);
                 }
                 else
                 {
-                    using MemoryStream s = new();
-                    new HumanReadableParser().Parse(serialized, s);
-                    s.Position = 0;
-                    OpcodeToByteCompiler compiler = new(s, outputStream, AllowCustomCompilers);
-                    compiler.Compile();
+                    new HumanReadableBytecodeParser().Parse(serialized, outputStream, AllowCustomCompilers);
                 }
             }
 
@@ -307,6 +305,46 @@ namespace WinterRose.WinterForgeSerializing
 
             if (CompressedStreams)
                 outputStream.Dispose(); // flushes and closes GZip wrapper without closing underlying opcodes stream
+        }
+
+        private static void WriteInstructionText(Stream bytecode, Stream destination, bool readableOpcodes)
+        {
+            InstructionStream instructionStream = ByteToOpcodeDecompiler.Parse(bytecode, threaded: false);
+            using StreamWriter writer = new(destination, Encoding.UTF8, leaveOpen: true);
+
+            for (int i = 0; i < instructionStream.Count; i++)
+            {
+                Instruction instruction = instructionStream[i];
+                string opcode = readableOpcodes
+                    ? instruction.Opcode.ToString()
+                    : ((int)instruction.Opcode).ToString(CultureInfo.InvariantCulture);
+
+                if (instruction.Args.Length == 0)
+                {
+                    writer.WriteLine(opcode);
+                    continue;
+                }
+
+                string args = string.Join(' ', instruction.Args.Select(FormatInstructionArg));
+                writer.WriteLine($"{opcode} {args}");
+            }
+
+            writer.Flush();
+        }
+
+        private static string FormatInstructionArg(object arg)
+        {
+            if (arg is null)
+                return "null";
+
+            if (arg is string s)
+            {
+                if (s.Contains(' ') || s.Length == 0)
+                    return $"\"{s.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+                return s;
+            }
+
+            return Convert.ToString(arg, CultureInfo.InvariantCulture) ?? string.Empty;
         }
 
 
@@ -701,17 +739,59 @@ namespace WinterRose.WinterForgeSerializing
             return outputStream;
         }
 
-        private static void DoStaticSerialization(ObjectSerializer serializer, Type type, Stream serialized, Stream opcodes, TargetFormat target)
+        private static void DoStaticSerialization(ObjectSerializer serializer, Type type, Stream opcodes, CompilationOptions? options)
         {
+            options = CompilationOptions.Merge(options, null);
+            var target = options.TargetFormat;
+
+            using MemoryStream serialized = new();
+            if (options.SkipAstConstruction && options.DirectBinaryEmit && target == TargetFormat.Optimized)
+            {
+                serializer.SerializeAsStatic(type, serialized);
+                serialized.Seek(0, SeekOrigin.Begin);
+                new HumanReadableBytecodeParser().Parse(serialized, opcodes, options, AllowCustomCompilers);
+                return;
+            }
+
             serializer.SerializeAsStatic(type, serialized);
             serialized.Seek(0, SeekOrigin.Begin);
-            FinishSerialization(serialized, opcodes, target);
+            if (options.EnableAggressiveOptimizations)
+                new HumanReadableBytecodeParser().Parse(serialized, opcodes, options, AllowCustomCompilers);
+            else
+                FinishSerialization(serialized, opcodes, target);
         }
-        private static void DoSerialization(ObjectSerializer serializer, object o, Stream serialized, Stream opcodes, TargetFormat target)
+
+        private static void DoSerialization(ObjectSerializer serializer, object o, Stream opcodes, CompilationOptions? options)
         {
-            serializer.Serialize(o, serialized);
+            options = CompilationOptions.Merge(options, null);
+            var target = options.TargetFormat;
+
+            using MemoryStream serialized = new();
+            if (options.SkipAstConstruction && options.DirectBinaryEmit && target == TargetFormat.Optimized)
+            {
+                serializer.Serialize(ref o, serialized, isRootCall: true);
+                serialized.Seek(0, SeekOrigin.Begin);
+
+                using StreamReader readerr = new(serialized);
+                Console.WriteLine(readerr.ReadToEnd());
+                serialized.Seek(0, SeekOrigin.Begin);
+
+                new HumanReadableBytecodeParser().Parse(serialized, opcodes, options, AllowCustomCompilers);
+                return;
+            }
+
+            serializer.Serialize(ref o, serialized, isRootCall: true);
             serialized.Seek(0, SeekOrigin.Begin);
-            FinishSerialization(serialized, opcodes, target);
+
+            using StreamReader reader = new(serialized);
+            Console.WriteLine(reader.ReadToEnd());
+            serialized.Seek(0, SeekOrigin.Begin);
+
+
+            if (options.EnableAggressiveOptimizations)
+                new HumanReadableBytecodeParser().Parse(serialized, opcodes, options, AllowCustomCompilers);
+            else
+                FinishSerialization(serialized, opcodes, target);
         }
 
         internal static IList CreateList(Type t)
