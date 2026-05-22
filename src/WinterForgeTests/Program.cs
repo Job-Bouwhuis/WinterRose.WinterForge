@@ -10,6 +10,7 @@ using WinterRose.WinterForgeSerializing.Compiling;
 using WinterRose.WinterForgeSerializing.Containers;
 using WinterRose.WinterForgeSerializing.Expressions;
 using WinterRose.WinterForgeSerializing.Formatting;
+using WinterRose.WinterForgeSerializing.Formatting.HumanReadable.Parsing;
 using WinterRose.WinterForgeSerializing.InclusionRules;
 using WinterRose.WinterForgeSerializing.Workers;
 

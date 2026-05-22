@@ -304,9 +304,9 @@ internal sealed class Compiler
 
         EmitDefine(type, assignedId, ctorArgCount);
 
-        if (HumanReadableStatementNodeExtensions.IsBlock(stmt))
+        if (stmt.IsBlock)
         {
-            CompileStatements(stmt.Children(), isBody, assignedId.ToString(CultureInfo.InvariantCulture));
+            CompileStatements(stmt.Children, isBody, assignedId.ToString(CultureInfo.InvariantCulture));
             EmitInt(OpCode.END, assignedId);
         }
         else
