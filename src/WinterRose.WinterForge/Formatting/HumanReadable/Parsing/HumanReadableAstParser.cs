@@ -884,7 +884,7 @@ internal static class HumanReadableAstParser
             {
                 while (true)
                 {
-                    HumanReadableExpressionNode item = ParseExpression(reader, 0);
+                    HumanReadableExpressionNode item = ParseCollectionItem(reader);
                     items.Add(item);
 
                     reader.SkipTrivia();
@@ -942,6 +942,34 @@ internal static class HumanReadableAstParser
         int dictionaryEnd = reader.PreviousOrCurrent().End();
         string dictionaryText = SafeSlice(reader.Source, startToken.Start, dictionaryEnd);
         return new HumanReadableDictionaryExpressionNode(keyType, valueType, entries, startToken.Start, dictionaryEnd, dictionaryText);
+    }
+
+    private static HumanReadableExpressionNode ParseCollectionItem(TokenReader reader)
+    {
+        reader.SkipTrivia();
+        HumanReadableExpressionNode expression = ParseExpression(reader, 0);
+
+        reader.SkipTrivia();
+        if (reader.Current.Kind == HumanReadableTokenKind.Colon)
+        {
+            HumanReadableExpressionNode head = expression;
+
+            Expect(reader, HumanReadableTokenKind.Colon, "Expected ':' after object declaration head.");
+            reader.SkipTrivia();
+
+            HumanReadableExpressionNode reference = ParseExpression(reader, 0);
+            reader.SkipTrivia();
+
+            HumanReadableBlockStatementNode? body = null;
+            if (reader.Current.Kind == HumanReadableTokenKind.OpenBrace)
+                body = ParseBlock(reader, StatementContext.General);
+
+            int end = body?.End ?? reference.End;
+            string text = SafeSlice(reader.Source, head.Start, end);
+            return new HumanReadableObjectDeclarationExpressionNode(head, reference, body, head.Start, end, text);
+        }
+
+        return expression;
     }
 
     private static HumanReadableTypeReferenceNode ParseTypeReference(TokenReader reader)

@@ -80,6 +80,18 @@ internal sealed class Compiler
 
     private void CompileStatement(HumanReadableStatementNode stmt, bool isBody, string? currentObjectId)
     {
+        // Handle AST-based object declarations with collection expressions
+        if (stmt.NodeKind == HumanReadableNodeKind.ObjectDeclarationStatement)
+        {
+            var objDecl = (HumanReadableObjectDeclarationStatementNode)stmt;
+            if (objDecl.Head.NodeKind == HumanReadableNodeKind.CollectionExpression ||
+                objDecl.Head.NodeKind == HumanReadableNodeKind.DictionaryExpression)
+            {
+                CompileAssignmentWithExpression(objDecl.Reference, objDecl.Head, isBody, currentObjectId);
+                return;
+            }
+        }
+
         string line = HeaderText(stmt);
 
         if (line.EndsWith(':') && !line.Contains('='))
@@ -208,6 +220,12 @@ internal sealed class Compiler
             return;
         }
 
+        if (line.Contains('=') && !line.Contains("->", StringComparison.Ordinal))
+        {
+            ParseAssignment(line, isBody, currentObjectId);
+            return;
+        }
+
         if (line.Contains("->", StringComparison.Ordinal))
         {
             HandleAccessing(line, isBody, currentObjectId);
@@ -236,6 +254,184 @@ internal sealed class Compiler
         throw Error("Unexpected statement.", stmt, line);
     }
 
+    private bool TryParseInlineObjectDefinition(string value, bool isBody, string? currentObjectId, out string? objectReference)
+    {
+        objectReference = null;
+
+        // Quick check: must contain colon and opening brace
+        int colonIndex = HRPHelpers.ContainsSequenceOutsideQuotes(value, ":");
+        int braceIndex = value.IndexOf('{');
+
+        // Must have both a colon and a brace, and the colon must come before the brace
+        if (colonIndex == -1 || braceIndex == -1 || colonIndex >= braceIndex)
+            return false;
+
+        // Parse the first line to extract type and id
+        string firstLine = value.Split('\n').First().Trim();
+        int firstLineColonIndex = firstLine.IndexOf(':');
+        if (firstLineColonIndex <= 0 || firstLine.IndexOf('{') == -1)
+            return false;
+
+        string left = firstLine[..firstLineColonIndex].Trim();
+        string right = firstLine[(firstLineColonIndex + 1)..].Trim();
+
+        // Extract ID from the right side (before any brace)
+        int rightBracePos = right.IndexOf('{');
+        if (rightBracePos == -1)
+            rightBracePos = right.Length;
+        string idRaw = right[..rightBracePos].Trim().TrimEnd('{').Trim();
+
+        // Validate that left is a valid type name and right contains a valid ID
+        // Type names should not contain spaces except before constructor parens
+        // and should not contain operators like '=>'
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(idRaw))
+            return false;
+
+        // Don't parse if it looks like dictionary syntax (has =>)
+        if (value.Contains("=>"))
+            return false;
+
+        // Don't parse if the ID part contains operators or invalid characters for identifiers
+        if (!IsValidIdentifierOrNumber(idRaw))
+            return false;
+
+        // Determine the assigned ID
+        int assignedId;
+        bool hasNumericId = int.TryParse(idRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int numericId);
+        if (hasNumericId)
+        {
+            assignedId = numericId;
+        }
+        else
+        {
+            assignedId = GetAutoID();
+        }
+
+        // Extract constructor arguments if present in left side
+        int ctorArgCount = 0;
+        bool hasParens = left.Contains('(') && left.Contains(')');
+        string type = left;
+
+        if (hasParens)
+        {
+            int open = left.IndexOf('(');
+            int close = left.LastIndexOf(')');
+            if (open < 0 || close < open)
+                return false;
+
+            type = left[..open].Trim();
+            string argList = left[(open + 1)..close].Trim();
+            var args = string.IsNullOrWhiteSpace(argList)
+                ? []
+                : HRPHelpers.SplitPreserveQuotesAndParentheses(argList, ',');
+
+            for (int i = 0; i < args.Count; i++)
+            {
+                string v = ValidateValue(args[i].Trim(), isBody, currentObjectId);
+                if (v != "#stack()")
+                    EmitPush(v);
+            }
+
+            ctorArgCount = args.Count;
+        }
+
+        if (type.Contains("Anonymous", StringComparison.Ordinal))
+            type = type.Replace(' ', '-');
+
+        // Emit the object definition
+        EmitDefine(type, assignedId, ctorArgCount);
+
+        // Extract and compile the object body if present
+        int openBrace = value.IndexOf('{');
+        int closeBrace = value.LastIndexOf('}');
+        if (openBrace != -1 && closeBrace > openBrace)
+        {
+            string body = value[(openBrace + 1)..closeBrace];
+            // Parse the body statements
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                ParseObjectBody(body, isBody, assignedId.ToString(CultureInfo.InvariantCulture));
+            }
+        }
+
+        EmitInt(OpCode.END, assignedId);
+
+        // Return reference to the created object
+        if (!hasNumericId)
+        {
+            bool isGlobal = false;
+            if (idRaw.StartsWith("global", StringComparison.Ordinal))
+            {
+                idRaw = idRaw["global".Length..].Trim();
+                isGlobal = true;
+            }
+
+            if (!isGlobal)
+            {
+                EmitSingleString(OpCode.FORCE_DEF_VAR, idRaw);
+                EmitSet(idRaw, $"#ref({assignedId})");
+                variables.Add(idRaw);
+                objectReference = $"#ref({assignedId})";
+            }
+            else
+            {
+                aliasMap[idRaw] = assignedId;
+                objectReference = $"#ref({assignedId})";
+            }
+        }
+        else
+        {
+            objectReference = $"#ref({assignedId})";
+        }
+
+        return true;
+    }
+
+    private bool IsValidIdentifierOrNumber(string str)
+    {
+        if (string.IsNullOrWhiteSpace(str))
+            return false;
+
+        // Check if it's a number
+        if (int.TryParse(str, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            return true;
+
+        // Check if it's a valid identifier (alphanumeric + underscore, no operators)
+        if (char.IsLetter(str[0]) || str[0] == '_')
+        {
+            foreach (char c in str)
+            {
+                if (!char.IsLetterOrDigit(c) && c != '_')
+                    return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ParseObjectBody(string body, bool isBody, string currentObjectId)
+    {
+        // Split body by semicolons to get individual statements
+        var statements = body.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var stmt in statements)
+        {
+            string trimmed = stmt.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+                continue;
+
+            // Parse field assignment (FieldName = value)
+            int eqIndex = trimmed.IndexOf('=');
+            if (eqIndex == -1)
+                continue;
+
+            string field = trimmed[..eqIndex].Trim();
+            string valueStr = trimmed[(eqIndex + 1)..].Trim();
+            string parsedValue = ValidateValue(valueStr, isBody, currentObjectId);
+            EmitSet(field, parsedValue);
+        }
+    }
+
     private bool TryParseObjectDefinition(HumanReadableStatementNode stmt, bool isBody, string? currentObjectId)
     {
         string line = HeaderText(stmt);
@@ -252,6 +448,7 @@ internal sealed class Compiler
             return false;
 
         string left = line[..colonIndex].Trim();
+
         string right = line[(colonIndex + 1)..].Trim().TrimEnd(';');
 
         string type;
@@ -689,6 +886,121 @@ internal sealed class Compiler
         EmitAnonymousSet(parts[0], parts[1], parsed);
     }
 
+    private void CompileAssignmentWithExpression(HumanReadableExpressionNode target, HumanReadableExpressionNode valueExpr, bool isBody, string? currentObjectId)
+    {
+        // Compile the value expression
+        CompileExpressionToStack(valueExpr, isBody, currentObjectId);
+
+        // Get the target field name
+        if (target.NodeKind != HumanReadableNodeKind.IdentifierExpression)
+            throw new WinterForgeFormatException("Assignment target must be an identifier");
+
+        var targetIdent = (HumanReadableIdentifierExpressionNode)target;
+        EmitSet(targetIdent.Name, "#stack()");
+    }
+
+    private void CompileExpressionToStack(HumanReadableExpressionNode expr, bool isBody, string? currentObjectId)
+    {
+        switch (expr.NodeKind)
+        {
+            case HumanReadableNodeKind.CollectionExpression:
+                CompileCollectionExpression((HumanReadableCollectionExpressionNode)expr, isBody, currentObjectId);
+                break;
+
+            case HumanReadableNodeKind.DictionaryExpression:
+                CompileDictionaryExpression((HumanReadableDictionaryExpressionNode)expr, isBody, currentObjectId);
+                break;
+
+            default:
+                throw new WinterForgeFormatException($"Unsupported expression type in assignment: {expr.NodeKind}");
+        }
+    }
+
+    private void CompileCollectionExpression(HumanReadableCollectionExpressionNode collection, bool isBody, string? currentObjectId)
+    {
+        EmitListStart(collection.ItemType.Text, null);
+
+        foreach (var item in collection.Items)
+        {
+            CompileCollectionItem(item, isBody, currentObjectId);
+        }
+
+        EmitNoArgs(OpCode.LIST_END);
+    }
+
+    private void CompileDictionaryExpression(HumanReadableDictionaryExpressionNode dict, bool isBody, string? currentObjectId)
+    {
+        EmitListStart(dict.KeyType.Text, dict.ValueType.Text);
+
+        foreach (var entry in dict.Entries)
+        {
+            CompileCollectionItem(entry.Key, isBody, currentObjectId);
+            CompileCollectionItem(entry.Value, isBody, currentObjectId);
+            EmitElement("#stack()", "#stack()");
+        }
+
+        EmitNoArgs(OpCode.LIST_END);
+    }
+
+    private void CompileCollectionItem(HumanReadableExpressionNode item, bool isBody, string? currentObjectId)
+    {
+        // If the item is an object declaration, handle it specially
+        if (item.NodeKind == HumanReadableNodeKind.ObjectDeclarationExpression)
+        {
+            var objExpr = (HumanReadableObjectDeclarationExpressionNode)item;
+            HandleCollectionObjectItem(objExpr, isBody, currentObjectId);
+        }
+        else if (item.NodeKind == HumanReadableNodeKind.LiteralExpression)
+        {
+            var lit = (HumanReadableLiteralExpressionNode)item;
+            EmitPush(lit.Text);
+            EmitElement("#stack()", null);
+        }
+        else
+        {
+            throw new WinterForgeFormatException($"Unsupported collection item type: {item.NodeKind}");
+        }
+    }
+
+    private void HandleCollectionObjectItem(HumanReadableObjectDeclarationExpressionNode objExpr, bool isBody, string? currentObjectId)
+    {
+        // objExpr.Head should be the type reference 
+        // objExpr.Reference should be the ID
+        string typeName = objExpr.Head.Text;
+
+        int id;
+        if (objExpr.Reference.NodeKind == HumanReadableNodeKind.IdentifierExpression)
+        {
+            var idExpr = (HumanReadableIdentifierExpressionNode)objExpr.Reference;
+            if (!int.TryParse(idExpr.Name, CultureInfo.InvariantCulture, out id))
+            {
+                id = GetAutoID();
+            }
+        }
+        else if (objExpr.Reference.NodeKind == HumanReadableNodeKind.LiteralExpression)
+        {
+            var litExpr = (HumanReadableLiteralExpressionNode)objExpr.Reference;
+            if (!int.TryParse(litExpr.Text.Trim('\"'), CultureInfo.InvariantCulture, out id))
+            {
+                id = GetAutoID();
+            }
+        }
+        else
+        {
+            id = GetAutoID();
+        }
+
+        string refName = id.ToString(CultureInfo.InvariantCulture);
+        EmitDefine(typeName, id, 0);
+
+        if (objExpr.Body is not null)
+        {
+            CompileStatements(objExpr.Body.Statements, true, refName);
+        }
+
+        EmitElement("#ref(" + refName + ")", null);
+    }
+
     private void ParseAssignment(string line, bool isBody, string? currentObjectId)
     {
         string clean = line.TrimEnd(';');
@@ -817,11 +1129,31 @@ internal sealed class Compiler
         if (typeOpen == -1 || blockOpen == -1 || blockClose < blockOpen)
             throw new WinterForgeFormatException("Expected typed collection syntax '<...>[...]'.");
 
-        string types = value[(typeOpen + 1)..value.IndexOf('>', typeOpen)].Trim();
-        string[] typeParts = types.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        bool dict = typeParts.Length == 2;
-        if (!dict && typeParts.Length != 1)
+        // Use the new helper to find the matching closing angle bracket
+        int typeClose = HRPHelpers.FindMatchingAngleBracketClose(value, typeOpen);
+        if (typeClose == -1)
+            throw new WinterForgeFormatException("Expected closing '>' for collection type.");
+
+        // Validate that the closing > is before the [
+        if (typeClose >= blockOpen)
+            throw new WinterForgeFormatException($"Invalid generic collection syntax: closing '>' at position {typeClose} should come before '[' at position {blockOpen}.");
+
+        string types = value[(typeOpen + 1)..typeClose].Trim();
+        // Use the new helper to properly split generic parameters while preserving nested generics
+        List<string> typeParts;
+        try
+        {
+            typeParts = HRPHelpers.SplitGenericParameters(types);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new WinterForgeFormatException($"Malformed generic type parameters: {ex.Message}");
+        }
+
+        bool dict = typeParts.Count == 2;
+        if (!dict && typeParts.Count != 1)
             throw new WinterForgeFormatException("Invalid generic parameter count for collection.");
+
 
         EmitListStart(typeParts[0], dict ? typeParts[1] : null);
 
@@ -871,6 +1203,12 @@ internal sealed class Compiler
 
         if (HRPHelpers.HasValidGenericFollowedByBracket(trimmed))
             return ParseCollectionValue(trimmed, isBody, currentObjectId);
+
+        // Check if this is an object definition (Type : id { ... })
+        if (TryParseInlineObjectDefinition(trimmed, isBody, currentObjectId, out string? objRef))
+        {
+            return objRef ?? "#stack()";
+        }
 
         if (HRPHelpers.ContainsExpressionOutsideQuotes(trimmed))
         {

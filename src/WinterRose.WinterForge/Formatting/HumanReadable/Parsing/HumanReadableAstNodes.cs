@@ -29,6 +29,7 @@ internal enum HumanReadableNodeKind
     DictionaryExpression,
     DictionaryEntry,
     GroupedExpression,
+    ObjectDeclarationExpression,
     TypeReference,
 
     ContainerDeclaration,
@@ -293,6 +294,15 @@ internal sealed record HumanReadableGroupedExpressionNode(
     int End,
     string Text)
     : HumanReadableExpressionNode(HumanReadableNodeKind.GroupedExpression, Start, End, Text);
+
+internal sealed record HumanReadableObjectDeclarationExpressionNode(
+    HumanReadableExpressionNode Head,
+    HumanReadableExpressionNode Reference,
+    HumanReadableBlockStatementNode? Body,
+    int Start,
+    int End,
+    string Text)
+    : HumanReadableExpressionNode(HumanReadableNodeKind.ObjectDeclarationExpression, Start, End, Text);
 
 internal sealed record HumanReadableUnaryExpressionNode(
     string OperatorText,

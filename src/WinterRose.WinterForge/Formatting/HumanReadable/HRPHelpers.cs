@@ -9,6 +9,9 @@ internal static class HRPHelpers
 
     public static bool ContainsExpressionOutsideQuotes(string input)
     {
+        if (input.Contains('\n'))
+            input = input.Split('\n').First();
+
         bool insideQuotes = false;
 
         int identifierCount = 0; // identifiers or typed literals
@@ -286,7 +289,11 @@ internal static class HRPHelpers
 
         bool inQuotes = false;
         bool escape = false;
+
+        int squareDepth = 0;
         int parenDepth = 0;
+        int angleDepth = 0;
+        int braceDepth = 0;
 
         foreach (char c in input)
         {
@@ -294,44 +301,204 @@ internal static class HRPHelpers
             {
                 current.Append(c);
                 escape = false;
+                continue;
             }
-            else if (c == '\\')
+
+            if (c == '\\')
             {
                 escape = true;
+                current.Append(c);
+                continue;
             }
-            else if (c == '"')
+
+            if (c == '"')
             {
                 inQuotes = !inQuotes;
                 current.Append(c);
+                continue;
             }
-            else if (c == '(' && !inQuotes)
-            {
-                parenDepth++;
-                current.Append(c);
-            }
-            else if (c == ')' && !inQuotes)
-            {
-                parenDepth--;
-                current.Append(c);
-            }
-            else if (c == separator && !inQuotes && parenDepth == 0)
-            {
-                // Split only if we're not in quotes and not inside parentheses
-                parts.Add(current.ToString().Trim());
-                current.Clear();
-            }
-            else
-            {
-                current.Append(c);
-            }
-        }
 
-        // add the last part
-        if (current.Length > 0)
-            parts.Add(current.ToString().Trim());
+            if (!inQuotes)
+            {
+                if (c == '[')
+                {
+                    squareDepth++;
+                    current.Append(c);
+                    continue;
+                }
 
-        return parts;
-    }
+                if (c == ']')
+                {
+                    squareDepth--;
+                    current.Append(c);
+                    continue;
+                }
+
+                if (c == '(')
+                {
+                    parenDepth++;
+                    current.Append(c);
+                    continue;
+                }
+
+                if (c == ')')
+                {
+                    parenDepth--;
+                    current.Append(c);
+                    continue;
+                }
+
+                if (c == '<')
+                {
+                    angleDepth++;
+                    current.Append(c);
+                    continue;
+                }
+
+                if (c == '>')
+                {
+                    angleDepth--;
+                    current.Append(c);
+                    continue;
+                }
+
+                if (c == '{')
+                {
+                    braceDepth++;
+                    current.Append(c);
+                    continue;
+                }
+
+                if (c == '}')
+                {
+                    braceDepth--;
+                    current.Append(c);
+                    continue;
+                }
+            }
+
+                     if (c == separator &&
+                        !inQuotes &&
+                        squareDepth == 1 &&
+                        parenDepth == 0 &&
+                        angleDepth == 0 &&
+                        braceDepth == 0)
+                    {
+                        parts.Add(current.ToString().Trim());
+                        current.Clear();
+                        continue;
+                    }
+
+                    current.Append(c);
+                }
+
+                if (current.Length > 0)
+                    parts.Add(current.ToString().Trim());
+
+
+                return parts;
+            }
+
+            public static List<string> SplitCollectionItems(string input, char separator)
+            {
+                List<string> parts = new List<string>();
+                StringBuilder current = new StringBuilder();
+
+                bool inQuotes = false;
+                bool escape = false;
+
+                int parenDepth = 0;
+                int angleDepth = 0;
+                int braceDepth = 0;
+
+                foreach (char c in input)
+                {
+                    if (escape)
+                    {
+                        current.Append(c);
+                        escape = false;
+                        continue;
+                    }
+
+                    if (c == '\\')
+                    {
+                        escape = true;
+                        current.Append(c);
+                        continue;
+                    }
+
+                    if (c == '"')
+                    {
+                        inQuotes = !inQuotes;
+                        current.Append(c);
+                        continue;
+                    }
+
+                    if (!inQuotes)
+                    {
+                        if (c == '(')
+                        {
+                            parenDepth++;
+                            current.Append(c);
+                            continue;
+                        }
+
+                        if (c == ')')
+                        {
+                            parenDepth--;
+                            current.Append(c);
+                            continue;
+                        }
+
+                        if (c == '<')
+                        {
+                            angleDepth++;
+                            current.Append(c);
+                            continue;
+                        }
+
+                        if (c == '>')
+                        {
+                            angleDepth--;
+                            current.Append(c);
+                            continue;
+                        }
+
+                        if (c == '{')
+                        {
+                            braceDepth++;
+                            current.Append(c);
+                            continue;
+                        }
+
+                        if (c == '}')
+                        {
+                            braceDepth--;
+                            current.Append(c);
+                            continue;
+                        }
+                    }
+
+                    // Split at top level (all depths at 0) when we see the separator
+                    if (c == separator &&
+                        !inQuotes &&
+                        parenDepth == 0 &&
+                        angleDepth == 0 &&
+                        braceDepth == 0)
+                    {
+                        parts.Add(current.ToString().Trim());
+                        current.Clear();
+                        continue;
+                    }
+
+                    current.Append(c);
+                }
+
+                if (current.Length > 0)
+                    parts.Add(current.ToString().Trim());
+
+                return parts;
+            }
     public static bool HasValidGenericFollowedByBracket(ReadOnlySpan<char> input)
     {
         int newlineIndex = input.IndexOf('\n');
@@ -362,6 +529,118 @@ internal static class HRPHelpers
         }
 
         return false;
+    }
+
+    public static int FindMatchingAngleBracketClose(string input, int openIndex)
+    {
+        if (openIndex < 0 || openIndex >= input.Length || input[openIndex] != '<')
+            return -1;
+
+        int depth = 0;
+        bool inQuotes = false;
+
+        for (int i = openIndex; i < input.Length; i++)
+        {
+            char c = input[i];
+
+            // Handle escape sequences in quotes
+            if (inQuotes && c == '\\' && i + 1 < input.Length)
+            {
+                i++;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+                continue;
+            }
+
+            if (inQuotes)
+                continue;
+
+            if (c == '<')
+                depth++;
+            else if (c == '>')
+            {
+                depth--;
+                if (depth == 0)
+                    return i;
+            }
+        }
+
+        return -1;
+    }
+
+    public static List<string> SplitGenericParameters(string input)
+    {
+        List<string> parts = [];
+        StringBuilder current = new();
+
+        int angleDepth = 0;
+        bool inQuotes = false;
+        bool escape = false;
+
+        foreach (char c in input)
+        {
+            if (escape)
+            {
+                current.Append(c);
+                escape = false;
+                continue;
+            }
+
+            if (c == '\\')
+            {
+                escape = true;
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+                current.Append(c);
+                continue;
+            }
+
+            if (inQuotes)
+            {
+                current.Append(c);
+                continue;
+            }
+
+            if (c == '<')
+            {
+                angleDepth++;
+                current.Append(c);
+            }
+            else if (c == '>')
+            {
+                angleDepth--;
+                current.Append(c);
+            }
+            else if (c == ',' && angleDepth == 0)
+            {
+                if (current.Length > 0)
+                    parts.Add(current.ToString().Trim());
+                current.Clear();
+            }
+            else if (!inQuotes && (c == '[' || c == ']'))
+            {
+                // Reject parameters containing brackets outside quotes, which indicates malformed syntax
+                throw new InvalidOperationException($"Invalid generic parameter: contains unexpected bracket '{c}'. Generic parameters should not contain '[' or ']'.");
+            }
+            else
+            {
+                current.Append(c);
+            }
+        }
+
+        if (current.Length > 0)
+            parts.Add(current.ToString().Trim());
+
+        return parts;
     }
 
     public static int ContainsSequenceOutsideBraces(StringBuilder sb, string sequence)
