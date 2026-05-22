@@ -35,6 +35,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         List<int> foundIds = [];
         List<string> variables = [];
         private int autoAsIDs;
+        private ParserErrorContext errorContext = new();
         private static readonly Dictionary<OpCode, int> opcodeMap = Enum
             .GetValues<OpCode>()
             .ToDictionary(op => op, op => (int)op);
@@ -74,7 +75,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             WriteLine("");
 
             while ((currentLine = ReadLine()) != null)
+            {
+                errorContext.AdvanceLine(currentLine);
                 ParseObjectOrAssignment(false);
+            }
 
             if (output is NetworkStream)
                 writer.WriteLine("WF_ENDOFDATA");
@@ -437,7 +441,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             else if (line.StartsWith("alias"))
             {
                 string[] parts = line.Split(' ');
-                int id = int.Parse(parts[1]);
+                if (parts.Length < 3)
+                    ThrowParseError("alias statement requires format: alias <id> <name>", line, line.Length - 1);
+
+                if (!int.TryParse(parts[1], out int id))
+                    ThrowParseError($"alias id must be a number, got '{parts[1]}'", line, line.IndexOf(parts[1]));
+
                 if (parts[2] is "as" && parts.Length > 2)
                     parts[2] = parts[3];
                 string alias = parts[2].EndsWith(';') ? parts[2][..^1] : parts[2];
@@ -466,7 +475,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 WriteLine($"{opcodeMap[OpCode.VOID_STACK_ITEM]}");
             }
             else
-                throw new Exception($"Unexpected top-level line: {line}");
+                ThrowParseError($"Unexpected top-level line", line, 0);
         }
 
         private void ParseGlobalVarCreation(bool isBody, string line, int eqI2)
@@ -821,7 +830,12 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             else if (line.StartsWith("alias"))
             {
                 string[] parts = line.Split(' ');
-                int aliasid = int.Parse(parts[0]);
+                if (parts.Length < 3)
+                    ThrowParseError("alias statement requires format: alias <id> <name>", line, line.Length - 1);
+
+                if (!int.TryParse(parts[0], out int aliasid))
+                    ThrowParseError($"alias id must be a number, got '{parts[0]}'", line, line.IndexOf(parts[0]));
+
                 WriteLine($"{opcodeMap[OpCode.ALIAS]} {aliasid} {parts[1]}");
             }
             else if (line.StartsWith("#template "))
@@ -867,7 +881,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             else
             {
-                throw new Exception($"unexpected block content: {line}");
+                ThrowParseError($"Unexpected block content", line, 0);
             }
 
             return null;
@@ -1124,17 +1138,17 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             string start = currentLine[typeOpen..blockOpen];
 
             if (typeOpen == -1 || blockOpen == -1 || blockOpen < typeOpen)
-                throw new Exception("Expected <TYPE> or <TYPE1, TYPE2> to indicate the type(s) of the collection before [");
+                ThrowParseError("Expected <TYPE> or <TYPE1, TYPE2> to indicate the type(s) of the collection before [", currentLine!, Math.Max(typeOpen, blockOpen));
 
             string types = start[1..^1];
             if (string.IsNullOrWhiteSpace(types))
-                throw new Exception("Failed to parse types: " + currentLine);
+                ThrowParseError("Failed to parse types", currentLine!, typeOpen);
 
             string[] typeParts = types.Split(',').Select(t => t.Trim()).ToArray();
             bool isDictionary = typeParts.Length == 2;
 
             if (!isDictionary && typeParts.Length != 1)
-                throw new Exception("Invalid generic parameter count — expected one <T> for list or two <K, V> for dicts");
+                ThrowParseError("Invalid generic parameter count — expected one <T> for list or two <K, V> for dicts", currentLine!, typeOpen);
 
             if (isDictionary)
                 WriteLine($"{opcodeMap[OpCode.LIST_START]} {typeParts[0]} {typeParts[1]}");
@@ -1181,8 +1195,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     currentElement.Append('\n');
             } while ((cur = ReadLine()) != null);
 
-            
-            throw new WinterForgeFormatException("Expected ']' to close list.");
+            ThrowParseError("Expected ']' to close list", currentLine ?? "", 0);
+            return CollectionParseResult.Failed; // Never reached, but satisfies compiler
         }
         int HandleChar(ref bool insideFunction, ref bool collectingString, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref bool isDictionary, ref int listDepth, char? currentChar, ref char prefStringChar, bool isBody)
         {
@@ -1344,7 +1358,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     int dictKVsplit = dictValueSplitterIndex == -1 ? currentElement.IndexOf("=>") : dictValueSplitterIndex;
                     if (dictKVsplit == -1)
-                        throw new WinterForgeFormatException(currentElement, "Dictionary key-value not properly written. Expected 'key => value'");
+                        ThrowParseError("Dictionary key-value not properly written. Expected 'key => value'", currentElement);
 
                     string rawKey = currentElement[..dictKVsplit].Trim();
                     string rawValue = currentElement[(dictKVsplit + 2)..].Trim();
@@ -1429,9 +1443,9 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             {
                 string[] parts = currentElement.Split("=>", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (parts.Length == 0)
-                    throw new WinterForgeFormatException(currentElement, "No dictionary key-value given");
+                    ThrowParseError("No dictionary key-value given", currentElement);
                 if (parts.Length == 1)
-                    throw new WinterForgeFormatException(currentElement, "Only a key was given for the dictionary");
+                    ThrowParseError("Only a key was given for the dictionary", currentElement);
 
                 parts[0] = ValidateValue(parts[0], isBody);
                 parts[1] = ValidateValue(parts[1], isBody);
@@ -1878,6 +1892,26 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         internal void EnqueueLines(List<string> lines)
         {
             lineBuffers.Push(new(lines));
+        }
+
+        /// <summary>
+        /// Throws a formatted parse error with line and column information.
+        /// </summary>
+        [DoesNotReturn]
+        private void ThrowParseError(string message, string? contextLine = null, int? columnOffset = null)
+        {
+            int column = columnOffset ?? errorContext.ColumnNumber;
+            string line = contextLine ?? errorContext.LineContent ?? currentLine ?? "";
+            throw new WinterForgeParseException(message, errorContext.LineNumber, column, line);
+        }
+
+        /// <summary>
+        /// Throws a formatted parse error at a specific position in a line.
+        /// </summary>
+        [DoesNotReturn]
+        private void ThrowParseError(string message, string line, int charIndex)
+        {
+            throw new WinterForgeParseException(message, errorContext.LineNumber, charIndex + 1, line);
         }
     }
 }
