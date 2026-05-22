@@ -1024,6 +1024,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     if (first.Contains('(') && first.Contains(')'))
                         return;
 
+                    // If allowNoRHS is true, allow processing without an RHS (e.g., for dictionary keys)
+                    if (allowNoRHS)
+                        return;
+
                     // not a function call and no RHS -> error (should have been caught earlier, but be safe)
                     throw new WinterForgeFormatException("Missing right-hand side for assignment.");
                 }
@@ -1543,7 +1547,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             }
             else if (HRPHelpers.ContainsSequenceOutsideQuotes(trimmed, "->") != -1)
             {
-                HandleAccessing(null, isBody, value);
+                HandleAccessing(null, isBody, value, allowNoRHS: true);
                 return "#stack()";
             }
             else if (trimmed.StartsWith("#type"))
