@@ -29,6 +29,12 @@ public class InstructionStream : IReadOnlyList<Instruction>
         _channel.Writer.TryComplete(ex);
     }
 
+    public void ThrowIfFailed()
+    {
+        if (_failure != null)
+            _failure.Throw();
+    } 
+
     // IReadOnlyList members
     public Instruction this[int index]
     {

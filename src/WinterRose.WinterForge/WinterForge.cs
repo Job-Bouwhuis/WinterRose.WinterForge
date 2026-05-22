@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -386,10 +387,9 @@ namespace WinterRose.WinterForgeSerializing
             serialized.Write(humanBytes, 0, humanBytes.Length);
             serialized.Seek(0, SeekOrigin.Begin);
 
-            new HumanReadableParser().Parse(serialized, opcodes);
-            opcodes.Seek(0, SeekOrigin.Begin);
-
-            var instructions = ByteToOpcodeDecompiler.Parse(serialized);
+            FinishSerialization(serialized, opcodes, TargetFormat.Optimized);
+            opcodes.Position = 0;
+            var instructions = ByteToOpcodeDecompiler.Parse(opcodes, false);
             DoDeserialization(out object? res, typeof(Nothing), instructions, progressTracker);
             return res;
         }

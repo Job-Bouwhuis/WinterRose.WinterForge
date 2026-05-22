@@ -10,14 +10,16 @@ public class ByteToOpcodeDecompiler
 {
     public static bool WaitIndefinitelyForData { get; set; } = false;
 
-    public static InstructionStream Parse(Stream byteStream, bool threaded = true)
+    public static InstructionStream Parse(Stream byteStream, bool threaded = false)
     {
         var instructionStream = new InstructionStream();
 
         if (threaded)
             ThreadPool.QueueUserWorkItem(_ => DoParsing(byteStream, instructionStream));
         else
-            DoParsing(byteStream, instructionStream); 
+            DoParsing(byteStream, instructionStream);
+
+        instructionStream.ThrowIfFailed();
         return instructionStream;
     }
 

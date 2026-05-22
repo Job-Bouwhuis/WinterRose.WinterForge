@@ -1130,7 +1130,9 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             WriteLine($"{opcodeMap[OpCode.CALL]} {methodName} {args.Count}");
         }
+
         private int GetAutoID() => int.MaxValue - 1000 - autoAsIDs++;
+
         private CollectionParseResult ParseCollection(bool isBody)
         {
             int typeOpen = currentLine!.IndexOf('<');
@@ -1240,6 +1242,14 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 return 1;
             }
 
+            if (character == '>' && collectingDefinition && depth == 0)
+            {
+                // Closing angle bracket for generic type
+                currentElement.Append(character);
+                collectingDefinition = false;
+                return 1;
+            }
+
             if (character == '}')
             {
                 depth--;
@@ -1280,7 +1290,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 if (prefStringChar == '}')
                     collectingDefinition = false;
                 int d = depth;
-                if (listDepth is 1 or 0 && !collectingDefinition)
+                if (listDepth is 1 or 0 && !collectingDefinition && depth == 0)
                 {
                     EmitElement(currentElement, isDictionary, -1, isBody);
                 }
@@ -1292,12 +1302,16 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             if (!insideFunction && character == '[')
             {
+                // Starting a nested collection
                 ldI++;
                 listDepth++;
                 collectingDefinition = true;
+                currentElement.Append(character);
 
                 if (listDepth is 5)
                     ;
+
+                return 1;
             }
 
             if (!insideFunction && character == ']')
@@ -1307,8 +1321,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     listDepth--;
                     ldD++;
-                    if (collectingDefinition)
-                        currentElement.Append(character);
+                    currentElement.Append(character);
                 }
                 else
                 {
@@ -1318,7 +1331,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
                 // If there's a pending element and we are not currently collecting an in-object definition,
                 // flush it before closing the list.
-                if (!collectingDefinition && listDepth > 0)
+                if (!collectingDefinition && listDepth > 0 && depth == 0)
                 {
                     EmitElement(currentElement, isDictionary, -1, isBody);
                 }

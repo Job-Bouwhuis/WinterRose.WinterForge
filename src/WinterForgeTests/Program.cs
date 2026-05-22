@@ -21,13 +21,79 @@ public enum Gender
     Other
 }
 
+public class sometest
+{
+    public string Locale { get; private set; }
+    public bool ShouldBeUsed { get; private set; }
+    public bool IsDefault { get; private set; }
+
+    public Dictionary<int, string> LEXICON { get; private set; } 
+}
+
+
 internal class Program
 {
     public static int data = 15;
     public static bool flag = false;
     
+
+
     private static void Main()
     {
+        string data = """
+                sometest : global lex {
+                    Locale = "en-UK";
+
+                    ShouldBeUsed = true;
+                    IsDefault = true;
+
+                    LEXICON = <int, string>[
+                        1 => "Token expired, please login again.",
+                        2 => "Invalid token signature.",
+                        3 => "Invalid token.",
+                        4 => "Authentication failed.",
+                        5 => "Invalid refresh token.",
+                        6 => "Invalid credentials.",
+                        7 => "Invalid current password.",
+                        8 => "Email already in use.",
+
+                        9 => "User not found.",
+                        10 => "Workshop does not exist.",
+                        11 => "Hoster does not exist.",
+                        12 => "Group not found.",
+                        13 => "Step not found.",
+                        14 => "Step number mismatch.",
+                        15 => "Forum not found.",
+                        16 => "Session not found.",
+                        17 => "You're currently not in a session.",
+                        18 => "Forbidden.",
+
+                        19 => "Saving object failed.",
+                        20 => "Loading object failed.",
+                        21 => "Storage key not found",
+
+                        22 => "An unexpected error occurred.",
+
+                        23 => "See issues for details.",
+                        24 => "JSON body could not be parsed.",
+                        25 => "One or more values could not be bound.",
+                        26 => "One or more validation errors occurred."
+                    ]
+
+                    IsDefault = True;
+                }
+
+                return lex
+                """;
+
+        
+
+        var tttt = WinterForge.DeserializeFromHumanReadableString(data);
+
+        return;
+        RunQuestSystemTest();
+        return;
+
         var factory = WinterForge.CreateFactory();
 
         var type = factory.DefineType(typeof(TestClass));
@@ -37,6 +103,32 @@ internal class Program
 
         string result = factory.Build();
         Console.WriteLine(result);
+    }
+
+    private static void RunQuestSystemTest()
+    {
+        Console.WriteLine("\n===== QUEST SYSTEM TEST =====\n");
+
+        // Create a complex quest system with nested dictionaries
+        QuestSystem questSystem = CreateQuestSystem();
+
+        Console.WriteLine("Original QuestSystem:");
+
+        // Serialize
+        Console.WriteLine("\nSerializing...");
+        string serializedPath = "quest_system.wf";
+        WinterForge.SerializeToFile(questSystem, serializedPath);
+        Console.WriteLine($"Serialized to {serializedPath}");
+
+        // Deserialize
+        Console.WriteLine("\nDeserializing...");
+        object? deserialized = WinterForge.DeserializeFromFile(serializedPath);
+
+        if (deserialized is not QuestSystem deserializedSystem)
+            throw new InvalidOperationException("Quest system test failed: deserialization resulted in wrong type.");
+
+        Console.WriteLine("\n[QUEST SYSTEM TEST OK] All validations passed!");
+        Console.WriteLine("===== QUEST SYSTEM TEST END =====\n");
     }
 
     private static void benchmark()
@@ -278,7 +370,7 @@ internal class Program
         }
     }
 
-    public static void Run()
+    public static void InclusionTests()
     {
         Console.WriteLine("=== WinterForge Inclusion Rule Test ===");
 
@@ -295,6 +387,82 @@ internal class Program
 
             Console.WriteLine($"[{(isStatic ? "STATIC" : "INST")}] {(included ? "✓ Included " : "Φ Excluded ")} - {member.Type,-8} - {member.Name}");
         }
+    }
+
+
+    private static QuestSystem CreateQuestSystem()
+    {
+        var system = new QuestSystem
+        {
+            SystemId = "quest_v2_advanced",
+            MaxActiveQuests = 10,
+            QuestTitles = new Dictionary<string, string>
+            {
+                { "combat_01", "Goblin Slayer" },
+                { "combat_02", "Dragon's End" },
+                { "exploration_01", "Lost Temple" },
+                { "exploration_02", "Ancient Ruins" },
+                { "crafting_01", "Master Smith" }
+            },
+            QuestsByCategory = new Dictionary<string, Dictionary<int, string>>
+            {
+                {
+                    "Combat", new Dictionary<int, string>
+                    {
+                        { 1, "Defeat 10 goblins in the forest" },
+                        { 2, "Slay the dragon boss at Mount Inferno" },
+                        { 3, "Clear the undead fortress" }
+                    }
+                },
+                {
+                    "Exploration", new Dictionary<int, string>
+                    {
+                        { 1, "Find the hidden temple in the desert" },
+                        { 2, "Visit all waypoints on the map" },
+                        { 3, "Discover the secret underwater cavern" }
+                    }
+                },
+                {
+                    "Crafting", new Dictionary<int, string>
+                    {
+                        { 1, "Craft 5 iron swords" },
+                        { 2, "Create a legendary amulet" }
+                    }
+                }
+            },
+            AvailableRewards = new List<QuestReward>
+            {
+                new QuestReward
+                {
+                    RewardId = "reward_gold_100",
+                    ExperiencePoints = 500,
+                    ItemRewards = new Dictionary<string, int>
+                    {
+                        { "gold", 100 },
+                        { "exp_scroll", 1 }
+                    }
+                },
+                new QuestReward
+                {
+                    RewardId = "reward_gold_500",
+                    ExperiencePoints = 2500,
+                    ItemRewards = new Dictionary<string, int>
+                    {
+                        { "gold", 500 },
+                        { "rare_gem", 2 },
+                        { "exp_scroll", 3 }
+                    }
+                }
+            },
+            CategoryDifficulties = new Dictionary<string, int>
+            {
+                { "Combat", 8 },
+                { "Exploration", 5 },
+                { "Crafting", 3 }
+            }
+        };
+
+        return system;
     }
 }
 
@@ -487,4 +655,82 @@ public class GameWorld
     public Dictionary<string, Region> Regions { get; set; }
     [WFInclude]
     public List<GameEvent> EventQueue { get; set; }
+}
+
+public class QuestSystem
+{
+    [WFInclude]
+    public string SystemId { get; set; }
+
+    [WFInclude]
+    public int MaxActiveQuests { get; set; }
+
+    [WFInclude]
+    public Dictionary<string, string> QuestTitles { get; set; }
+
+    /// <summary>
+    /// Nested dictionary: Category -> (QuestId -> Description)
+    /// For example: "Combat" -> { 1 -> "Defeat 10 goblins", 2 -> "Slay the dragon boss" }
+    ///             "Exploration" -> { 1 -> "Find the hidden temple", 2 -> "Visit all waypoints" }
+    /// </summary>
+    [WFInclude]
+    public Dictionary<string, Dictionary<int, string>> QuestsByCategory { get; set; }
+
+    [WFInclude]
+    public List<QuestReward> AvailableRewards { get; set; }
+
+    [WFInclude]
+    public Dictionary<string, int> CategoryDifficulties { get; set; }
+
+    public QuestSystem()
+    {
+        SystemId = "quest_system_v1";
+        MaxActiveQuests = 5;
+        QuestTitles = new();
+        QuestsByCategory = new();
+        AvailableRewards = new();
+        CategoryDifficulties = new();
+    }
+}
+
+public class QuestReward
+{
+    [WFInclude]
+    public string RewardId { get; set; }
+
+    [WFInclude]
+    public int ExperiencePoints { get; set; }
+
+    [WFInclude]
+    public Dictionary<string, int> ItemRewards { get; set; }
+
+    public QuestReward()
+    {
+        ItemRewards = new();
+    }
+}
+
+public class ComplexParserTestClass2
+{
+    [WFInclude]
+    public string name { get; set; }
+
+    [WFInclude]
+    public List<int> numbers { get; set; }
+
+    [WFInclude]
+    public List<string> tags { get; set; }
+
+    [WFInclude]
+    public Dictionary<string, int> scores { get; set; }
+
+    [WFInclude]
+    public string format { get; set; }
+
+    public ComplexParserTestClass2()
+    {
+        numbers = new();
+        tags = new();
+        scores = new();
+    }
 }
