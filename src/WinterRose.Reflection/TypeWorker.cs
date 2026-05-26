@@ -81,6 +81,173 @@ namespace WinterRose
         private static readonly ConcurrentDictionary<string, Type?> typeCache
             = new();
 
+        /// <summary>
+        /// Recursively searches for a nested type within the given type and its nested types.
+        /// Supports nested class notation like "Outer+Inner" and generic nested classes.
+        /// </summary>
+        private static Type? FindNestedType(Type parentType, string targetTypeName)
+        {
+            // If the target contains '+', handle nested notation (e.g., "Outer+Inner")
+            if (targetTypeName.Contains('+'))
+            {
+                string[] parts = targetTypeName.Split('+');
+                Type? current = parentType;
+
+                // Match the first part against current type
+                if (current.Name != parts[0] && current.FullName != parts[0])
+                    return null;
+
+                // Navigate through nested types
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    var nested = current.GetNestedTypes(
+                                            BindingFlags.Public |
+                                            BindingFlags.NonPublic
+                                        );
+                    Type? next = null;
+                    foreach (var n in nested)
+                    {
+                        if (n.Name == parts[i] || n.FullName == parts[i])
+                        {
+                            next = n;
+                            break;
+                        }
+                    }
+
+                    if (next == null)
+                        return null;
+
+                    current = next;
+                }
+
+                return current;
+            }
+
+            // Otherwise, search nested types recursively
+            var nestedTypes = parentType.GetNestedTypes(
+                                    BindingFlags.Public |
+                                    BindingFlags.NonPublic
+                                );
+            foreach (var nested in nestedTypes)
+            {
+                if (nested.Name == targetTypeName || nested.FullName == targetTypeName)
+                    return nested;
+
+                // Recursively search deeper nested types
+                var found = FindNestedType(nested, targetTypeName);
+                if (found != null)
+                    return found;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Recursively collects all types from an assembly, including nested types.
+        /// </summary>
+        private static List<Type> GetAllTypesIncludingNested(Assembly assembly)
+        {
+            List<Type> allTypes = new();
+            Type[] topLevelTypes;
+
+            try
+            {
+                topLevelTypes = assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                topLevelTypes = ex.Types.Where(t => t != null).ToArray()!;
+            }
+
+            foreach (var type in topLevelTypes)
+            {
+                if (type != null)
+                {
+                    allTypes.Add(type);
+                    CollectNestedTypesRecursive(type, allTypes);
+                }
+            }
+
+            return allTypes;
+        }
+
+        /// <summary>
+        /// Recursively collects nested types from a parent type.
+        /// </summary>
+        private static void CollectNestedTypesRecursive(Type parentType, List<Type> allTypes)
+        {
+            var nestedTypes = parentType.GetNestedTypes(
+                                    BindingFlags.Public |
+                                    BindingFlags.NonPublic
+                                );
+            foreach (var nested in nestedTypes)
+            {
+                allTypes.Add(nested);
+                CollectNestedTypesRecursive(nested, allTypes);
+            }
+        }
+
+        /// <summary>
+        /// Recursively searches for a nested type within the given type and its nested types.
+        /// Supports nested class notation like "Outer+Inner" and generic nested classes.
+        /// </summary>
+        private static Type? FindNestedTypeRecursive(Type parentType, string targetTypeName)
+        {
+            // If the target contains '+', handle nested notation (e.g., "Outer+Inner")
+            if (targetTypeName.Contains('+'))
+            {
+                string[] parts = targetTypeName.Split('+');
+                Type? current = parentType;
+
+                // Match the first part against current type
+                if (current.Name != parts[0] && current.FullName != parts[0])
+                    return null;
+
+                // Navigate through nested types
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    var nested = current.GetNestedTypes(
+                                            BindingFlags.Public |
+                                            BindingFlags.NonPublic
+                                        );
+                    Type? next = null;
+                    foreach (var n in nested)
+                    {
+                        if (n.Name == parts[i] || n.FullName == parts[i])
+                        {
+                            next = n;
+                            break;
+                        }
+                    }
+
+                    if (next == null)
+                        return null;
+
+                    current = next;
+                }
+
+                return current;
+            }
+
+            // Otherwise, search nested types recursively
+            var nestedTypes = parentType.GetNestedTypes(
+                                            BindingFlags.Public |
+                                            BindingFlags.NonPublic
+                                        );
+            foreach (var nested in nestedTypes)
+            {
+                if (nested.Name == targetTypeName || nested.FullName == targetTypeName)
+                    return nested;
+
+                // Recursively search deeper nested types
+                var found = FindNestedType(nested, targetTypeName);
+                if (found != null)
+                    return found;
+            }
+
+            return null;
+        }
+
         public static Type? FindType(string typeName, string assemblyName, string @namespace)
         {
             string key = string.Join('.', [@namespace, typeName]);
@@ -108,6 +275,14 @@ namespace WinterRose
                         type = x;
                         break;
                     }
+
+                    // Check nested types with matching namespace
+                    var nested = FindNestedTypeRecursive(x, typeName);
+                    if (nested != null && nested.Namespace == @namespace)
+                    {
+                        type = nested;
+                        break;
+                    }
                 }
             }
 
@@ -117,7 +292,7 @@ namespace WinterRose
             return type;
         }
 
-        public static Type FindType(string typeName, Assembly? targetAssembly = null)
+        public static Type? FindType(string typeName, Assembly? targetAssembly = null)
         {
             if (typeCache.TryGetValue(typeName, out var cachedType) && cachedType != null)
                 return cachedType;
@@ -134,6 +309,11 @@ namespace WinterRose
                             type = t;
                             goto Found;
                         }
+
+                        // Check nested types
+                        type = FindNestedTypeRecursive(t, typeName);
+                        if (type != null)
+                            goto Found;
                     }
                 }
             }
@@ -146,6 +326,11 @@ namespace WinterRose
                         type = t;
                         goto Found;
                     }
+
+                    // Check nested types
+                    type = FindNestedTypeRecursive(t, typeName);
+                    if (type != null)
+                        goto Found;
                 }
             }
 
@@ -177,11 +362,16 @@ namespace WinterRose
             {
                 foreach (var x in assembly.GetTypes())
                 {
-                    if (x.Name == typeName)
+                    if (x.Name == typeName || x.FullName == typeName)
                     {
                         type = x;
-                        break; // assuming only one match is needed
+                        break;
                     }
+
+                    // Check nested types
+                    type = FindNestedTypeRecursive(x, typeName);
+                    if (type != null)
+                        break;
                 }
             }
 
@@ -191,7 +381,7 @@ namespace WinterRose
             return type;
         }
         /// <summary>
-        /// Finds all types that have the given attribute.
+        /// Finds all types that have the given attribute, including nested types.
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns>An array of types that have the given attribute. if no type has the given attribute it returns an empty array</returns>
@@ -203,7 +393,8 @@ namespace WinterRose
             //see if the type matches the type name, and exists within the same namespace as given with the parameter
             foreach (var assembly in assemblies)
             {
-                foreach (var type in assembly.GetTypes())
+                var allTypes = GetAllTypesIncludingNested(assembly);
+                foreach (var type in allTypes)
                 {
                     var attributes = type.GetCustomAttributes();
                     foreach (var attribute in attributes)
@@ -224,11 +415,14 @@ namespace WinterRose
         {
             List<Type> types = new();
             Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            List<Type> allTypes = assemblies.SelectMany(x => x.GetTypes()).ToList();
-            foreach (Type type in allTypes)
+            foreach (var assembly in assemblies)
             {
-                if (type.IsAssignableTo(typeof(T)))
-                    types.Add(type);
+                var allTypes = GetAllTypesIncludingNested(assembly);
+                foreach (Type type in allTypes)
+                {
+                    if (type.IsAssignableTo(typeof(T)))
+                        types.Add(type);
+                }
             }
             return [.. types];
         }
@@ -240,17 +434,9 @@ namespace WinterRose
 
             foreach (Assembly assembly in assemblies)
             {
-                Type[] assemblyTypes;
-                try
-                {
-                    assemblyTypes = assembly.GetTypes();
-                }
-                catch (ReflectionTypeLoadException ex)
-                {
-                    assemblyTypes = ex.Types.Where(t => t != null).ToArray()!;
-                }
+                var allTypes = GetAllTypesIncludingNested(assembly);
 
-                foreach (Type type in assemblyTypes)
+                foreach (Type type in allTypes)
                 {
                     if (type is null || type.IsAbstract || type.IsInterface)
                         continue;
@@ -298,9 +484,9 @@ namespace WinterRose
             //see if the type matches the type name, and exists within the same namespace as given with the parameter
             foreach (var assembly in assemblies)
             {
-                // Get all types from the current assembly
-                var typesInAssembly = assembly.GetTypes();
-                foreach (var type in typesInAssembly)
+                // Get all types from the current assembly, including nested types
+                var allTypes = GetAllTypesIncludingNested(assembly);
+                foreach (var type in allTypes)
                 {
                     var interfaces = type.GetInterfaces();
                     bool implements = false;
@@ -330,7 +516,8 @@ namespace WinterRose
 
             foreach (var assembly in assemblies)
             {
-                foreach (var t in assembly.GetTypes())
+                var allTypes = GetAllTypesIncludingNested(assembly);
+                foreach (var t in allTypes)
                 {
                     foreach (var i in t.GetInterfaces())
                     {

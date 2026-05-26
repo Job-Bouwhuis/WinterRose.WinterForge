@@ -789,6 +789,7 @@ ExpressionBuilding:
                 $"Variable or Template with name {fieldName} does not exist on the container!");
         }
 
+
         AccessFilterCache.Validate(o is Type ? (Type)o : o.GetType(), AccessFilterKind.Blacklist, fieldName);
         ReflectionHelper rh = CreateReflectionHelper(ref o, out _);
         CurrentContext.ValueStack.Push(rh.GetValueFrom(fieldName));

@@ -967,8 +967,14 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     WriteLine($"{opcodeMap[OpCode.PUSH]} {firstRhs}");
                 else if (aliasMap.TryGetValue(firstRhs, out int aliasID))
                     WriteLine($"{opcodeMap[OpCode.PUSH]} #ref({aliasID})");
-                else // assume value is a type literal
-                    WriteLine($"{opcodeMap[OpCode.PUSH]} #type({firstRhs})");
+                else
+                {
+                    if(firstRhs.StartsWith("#type("))
+                        WriteLine($"{opcodeMap[OpCode.PUSH]} {firstRhs}");
+                    else
+                        WriteLine($"{opcodeMap[OpCode.PUSH]} #type({firstRhs})");
+
+                }
 
                 for (int i = 1; i < rhsParts.Count; i++)
                 {
@@ -1628,6 +1634,10 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                         {
                             ParseMethodCall(id, token.Text, isBody);
                         }
+                        else if (IsBuiltinFunction(token.Text))
+                        {
+                            HandleBuiltinFunction(token.Text);
+                        }
                         else
                             WriteLine($"{opcodeMap[OpCode.PUSH]} {token.Text}");
                         break;
@@ -1665,6 +1675,32 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                     default:
                         break;
                 }
+            }
+        }
+
+        private bool IsBuiltinFunction(string text)
+        {
+            return text.StartsWith("#ref(") && text.EndsWith(")") ||
+                   text.StartsWith("#type(") && text.EndsWith(")") ||
+                   text.StartsWith("#stack(") && text.EndsWith(")");
+        }
+
+        private void HandleBuiltinFunction(string text)
+        {
+            // Extract the function name and argument
+            if (text.StartsWith("#ref(") && text.EndsWith(")"))
+            {
+                string arg = text[5..^1].Trim(); // Extract content between #ref( and )
+                WriteLine($"{opcodeMap[OpCode.PUSH]} #{text}"); // Push as-is, will be processed during runtime
+            }
+            else if (text.StartsWith("#type(") && text.EndsWith(")"))
+            {
+                string arg = text[6..^1].Trim(); // Extract content between #type( and )
+                WriteLine($"{opcodeMap[OpCode.PUSH]} #{text}"); // Push as-is, will be processed during runtime
+            }
+            else if (text.StartsWith("#stack(") && text.EndsWith(")"))
+            {
+                WriteLine($"{opcodeMap[OpCode.PUSH]} #{text}"); // Push #stack(), will pop from stack during runtime
             }
         }
 

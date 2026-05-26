@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>26.2.1</Version>
+    <Version>26.2.3</Version>
     <RootNamespace>WinterRose.WinterForgeSerializing</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>WinterForge is a high-performance, reflection-powered serialization and behavior execution framework for .NET. 
@@ -40,10 +40,6 @@ It also allows accessing fields of already deserialzied objects, static classes.
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\WinterRose.Reflection\WinterRose.Reflection.csproj" />
   </ItemGroup>
 
   <ItemGroup>

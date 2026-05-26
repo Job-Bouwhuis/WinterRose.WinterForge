@@ -188,7 +188,8 @@ public static class ExpressionTokenizer
 
             // Identifiers (variables, functions, member chains, etc.)
             // Accepts: Name, Name.Member, Name.Member( ... ), Name->Member, chained combinations
-            if (char.IsLetter(c) || c == '_')
+            // Also accepts builtin functions starting with # (e.g., #ref, #type, #stack)
+            if (char.IsLetter(c) || c == '_' || c == '#')
             {
                 int start = i;
 
@@ -200,7 +201,7 @@ public static class ExpressionTokenizer
                     int segmentStart = i;
 
                     // Base identifier segment (letters/digits/underscore)
-                    while (i < input.Length && (char.IsLetterOrDigit(input[i]) || input[i] == '_'))
+                    while (i < input.Length && (char.IsLetterOrDigit(input[i]) || input[i] == '_' || input[i] == '#'))
                         i++;
 
                     identifier += input[segmentStart..i];

@@ -270,7 +270,8 @@ namespace WinterRose.Reflection
             if (propertysource is null && fieldsource is null)
                 throw new InvalidOperationException("This MemberData object is invalid");
 
-            if (obj.GetType().IsValueType && fieldsource is not null)
+
+            if (obj != null && obj.GetType().IsValueType && fieldsource is not null)
             {
                 TypedReference tr = __makeref(obj);
                 object? valueTypeVal = fieldsource.GetValueDirect(tr);

@@ -5,12 +5,7 @@ using System.Text.Json.Serialization;
 using WinterRose;
 using WinterRose.Reflection;
 using WinterRose.WinterForgeSerializing;
-using WinterRose.WinterForgeSerializing.Compiling;
-using WinterRose.WinterForgeSerializing.Containers;
-using WinterRose.WinterForgeSerializing.Expressions;
-using WinterRose.WinterForgeSerializing.Formatting;
 using WinterRose.WinterForgeSerializing.InclusionRules;
-using WinterRose.WinterForgeSerializing.Workers;
 
 namespace WinterForgeTests;
 
@@ -27,15 +22,22 @@ public class sometest
     public bool ShouldBeUsed { get; private set; }
     public bool IsDefault { get; private set; }
 
-    public Dictionary<int, string> LEXICON { get; private set; } 
+    public Dictionary<int, string> LEXICON { get; private set; }
 }
 
+public static class staticClass
+{
+    public static class NestedClass
+    {
+        public static int Value { get; set; } = 42;
+    }
+}
 
 internal class Program
 {
     public static int data = 15;
     public static bool flag = false;
-    
+
 
 
     private static void Main()
@@ -48,7 +50,7 @@ internal class Program
                     IsDefault = true;
 
                     LEXICON = <int, string>[
-                        1 => "Token expired, please login again.",
+                        #type(staticClass+NestedClass)->Value => "Token expired, please login again.",
                         2 => "Invalid token signature.",
                         3 => "Invalid token.",
                         4 => "Authentication failed.",
@@ -86,7 +88,7 @@ internal class Program
                 return lex
                 """;
 
-        
+
 
         var tttt = WinterForge.DeserializeFromHumanReadableString(data);
 
@@ -352,7 +354,7 @@ internal class Program
         private int logicField = 5; // excluded
         public int SimpleCustomLogic // included 
         {
-            get => logicField; 
+            get => logicField;
             set => logicField = value;
         }
 
