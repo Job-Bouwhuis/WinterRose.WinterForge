@@ -1273,8 +1273,7 @@ ExpressionBuilding:
     {
         var field = (string)args[0];
         var rawValue = args[1];
-        if (field == "Name")
-            ;
+
         // --- Determine target object or global scope ---
         object? target = null;
         int? instanceID = instanceIDStack.Count > 0 ? instanceIDStack.Peek() : null;
@@ -1722,7 +1721,10 @@ ExpressionBuilding:
     private static Type ParseTypeLiteral(string raw)
     {
         var inner = raw[6..^1];
-        return ResolveType(inner);
+        var result = ResolveType(inner);
+        if (result is null)
+            throw new WinterForgeExecutionException($"Unable to find type {inner}");
+        return result;
     }
 
     /// <summary>
@@ -1756,7 +1758,7 @@ ExpressionBuilding:
             Type baseType = TypeWorker.FindType(baseTypeName);
 
             Type[] resolvedGenericArgs = genericArgs
-                .Select(arg => ResolveType(arg))
+                .Select(ResolveType)
                 .ToArray();
 
             resolvedType = baseType.MakeGenericType(resolvedGenericArgs);
@@ -1764,6 +1766,7 @@ ExpressionBuilding:
         else
         {
             resolvedType = TypeWorker.FindType(typeName);
+            var test = TypeWorker.FindType("HBOGlobals");
         }
 
         if (resolvedType is not null)

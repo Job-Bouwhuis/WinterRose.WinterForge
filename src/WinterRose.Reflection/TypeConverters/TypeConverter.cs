@@ -403,6 +403,8 @@ public static class TypeConverter
                 {
                     if (srcArgs.Length == 1 && tgtArgs.Length == 2)
                         closed = template.MakeGenericType(srcArgs[0], tgtArgs[1]);
+                    if (srcArgs.Length == 2 && tgtArgs.Length == 2)
+                        closed = template.MakeGenericType(srcArgs[0], srcArgs[1]);
                     else
                         closed = template.MakeGenericType(srcArgs[0], tgtArgs[0]);
                 }
