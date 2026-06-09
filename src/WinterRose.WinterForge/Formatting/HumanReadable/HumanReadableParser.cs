@@ -1209,8 +1209,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
         int HandleChar(ref bool insideFunction, ref bool collectingString, StringBuilder currentElement, ref bool collectingDefinition, ref int depth, ref bool isDictionary, ref int listDepth, char? currentChar, ref char prefStringChar, bool isBody)
         {
             char character = currentChar.Value;
-            if (character is '\\')
-                ;
 
             if (collectingString)
             {
@@ -1244,6 +1242,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             if (character == '<' && !collectingDefinition)
             {
                 collectingDefinition = true;
+                if (character == ']')
+                    ;
                 currentElement.Append(character);
                 return 1;
             }
@@ -1259,7 +1259,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
             if (character == '}')
             {
                 depth--;
-
                 currentElement.Append(character);
 
                 if (listDepth is 0 or 1 && depth <= 0)
@@ -1314,9 +1313,6 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 collectingDefinition = true;
                 currentElement.Append(character);
 
-                if (listDepth is 5)
-                    ;
-
                 return 1;
             }
 
@@ -1327,7 +1323,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     listDepth--;
                     ldD++;
-                    currentElement.Append(character);
+                    if(currentElement.Length != 0)
+                        currentElement.Append(character);
                 }
                 else
                 {
@@ -1358,6 +1355,8 @@ namespace WinterRose.WinterForgeSerializing.Formatting
 
             //if (!collectingDefinition || listDepth is 0 or 1 && char.IsWhiteSpace(character))
             //    return 1;
+            if (character == ']')
+                ;
             currentElement.Append(character);
             return 0;
         }

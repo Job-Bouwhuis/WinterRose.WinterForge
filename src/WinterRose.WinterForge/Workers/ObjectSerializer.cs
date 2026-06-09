@@ -276,18 +276,44 @@ namespace WinterRose.WinterForgeSerializing.Workers
             progressTracker?.OnExitInstance();
         }
 
+        private static readonly Dictionary<Type, string> CSharpPrimitiveNames =
+            new()
+            {
+                [typeof(string)] = "string",
+                [typeof(int)] = "int",
+                [typeof(long)] = "long",
+                [typeof(short)] = "short",
+                [typeof(byte)] = "byte",
+                [typeof(sbyte)] = "sbyte",
+                [typeof(uint)] = "uint",
+                [typeof(ulong)] = "ulong",
+                [typeof(ushort)] = "ushort",
+                [typeof(bool)] = "bool",
+                [typeof(char)] = "char",
+                [typeof(float)] = "float",
+                [typeof(double)] = "double",
+                [typeof(decimal)] = "decimal",
+                [typeof(object)] = "object"
+            };
+
         private string GetTypeName(Type t)
         {
-            if (!t.IsGenericType)
-                return t.FullName ?? t.Name;
+            if (CSharpPrimitiveNames.TryGetValue(t, out string? primitiveName))
+                return primitiveName;
 
-            string mainTypeName = t.GetGenericTypeDefinition().FullName!;
-            mainTypeName = mainTypeName[..mainTypeName.IndexOf('`')]; // remove `N
+            if (!t.IsGenericType)
+                return t.Name;
+
+            string mainTypeName = t.GetGenericTypeDefinition().Name;
+            int backtickIndex = mainTypeName.IndexOf('`');
+            if (backtickIndex >= 0)
+                mainTypeName = mainTypeName[..backtickIndex];
 
             Type[] genericArgs = t.GetGenericArguments();
             string[] genericNames = new string[genericArgs.Length];
+
             for (int i = 0; i < genericArgs.Length; i++)
-                genericNames[i] = GetTypeName(genericArgs[i]); // recursively resolve nested generic types
+                genericNames[i] = GetTypeName(genericArgs[i]);
 
             return $"{mainTypeName}<{string.Join(", ", genericNames)}>";
         }
