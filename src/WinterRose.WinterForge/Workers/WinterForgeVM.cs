@@ -1506,9 +1506,6 @@ ExpressionBuilding:
         onDispatch ??= delegate { };
         object? value;
 
-        if (arg is string stringArg && stringArg.StartsWith('"') && stringArg.EndsWith('"'))
-            return stringArg[1..^1];
-
         if (arg is string plain && !plain.StartsWith("#") && !plain.StartsWith("_"))
         {
             var id = CurrentScope?.GetIdentifier(plain);
@@ -1579,6 +1576,9 @@ ExpressionBuilding:
                 Type enumNumType = Enum.GetUnderlyingType(desiredType);
                 object num = TypeWorker.CastPrimitive(s, enumNumType);
                 value = Enum.ToObject(desiredType, num);
+                break;
+            case string s when s.StartsWith('"') && s.EndsWith('"'):
+                value = s[1..^1];
                 break;
             default:
                 value = ParseLiteral(arg, desiredType);
