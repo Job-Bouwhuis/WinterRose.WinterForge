@@ -186,7 +186,7 @@ public class OpcodeToByteCompiler
                 writer.WriteLine(l);
 
             // append an 'END' opcode line with last argument to assist parser like original implementation
-            writer.WriteLine($"8 {lines[^1].Split(' ')[^1]}");
+            writer.WriteLine($"8 #ref({lines[^1].Split(' ')[^1]})");
             writer.Flush();
             ms.Position = 0;
 

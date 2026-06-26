@@ -255,6 +255,8 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 {
                     if (objType.BaseType == typeof(Anonymous))
                         WriteToStream(destinationStream, $"Anonymous as {objType.Name} : {id} {{\n");
+                    else if (objType.BaseType == typeof(object))
+                        WriteToStream(destinationStream, $"Anonymous : {id} {{\n");
                     else
                         WriteToStream(destinationStream, $"Anonymous as {objType.Name} inherits {objType.BaseType.FullName}: {id} {{\n");
 

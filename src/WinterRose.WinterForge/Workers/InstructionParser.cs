@@ -64,7 +64,7 @@ namespace WinterRose.WinterForgeSerializing
                     case OpCode.END:
                     case OpCode.RET:
                     case OpCode.AS:
-                        args.Add(int.Parse(parts[1]));
+                        args.Add(parts[1]);
                         break;
 
                     case OpCode.PUSH:

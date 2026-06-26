@@ -1,15 +1,23 @@
-//#import "human2.txt" (compiles into opcodes2.wfbin)
-//#import "human3.txt" (compiles into opcodes3.wfbin)
+//#import "human2.wf" // works but commented out because these files were removed from the repo to reduce clutter
+//#import "human3.wf"
 
 for var i = 0; i < 10; i = i + 1;
 {
 	Console->WriteLine(i);
 }
 
-while true
+
+isThisCool = true;
+if isThisCool // blocks can be written without braces if they only contain one statement
+	Console->WriteLine("yes");
+else
+	Console->WriteLine("no");
+
+while true // here too could braces be removed.
 {
 	Console->WriteLine("infinite loooooooooooooooop");
 }
+
 
 #container Foo
 {

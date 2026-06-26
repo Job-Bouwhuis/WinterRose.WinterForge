@@ -1323,7 +1323,7 @@ namespace WinterRose.WinterForgeSerializing.Formatting
                 {
                     listDepth--;
                     ldD++;
-                    if(currentElement.Length != 0)
+                    if(listDepth != 0)
                         currentElement.Append(character);
                 }
                 else

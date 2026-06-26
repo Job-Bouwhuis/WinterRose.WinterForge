@@ -359,8 +359,22 @@ namespace WinterRose.WinterForgeSerializing
         /// <returns></returns>
         public static object? DeserializeFromString(string opcodes, WinterForgeProgressTracker? progressTracker = null)
         {
-            using MemoryStream ops = new MemoryStream(Convert.FromBase64String(opcodes));
-            return DeserializeFromStream(ops, progressTracker);
+            try
+            {
+                using MemoryStream ops = new MemoryStream(Convert.FromBase64String(opcodes));
+                return DeserializeFromStream(ops, progressTracker);
+            }
+            catch
+            {
+                using var code = new MemoryStream(opcodes.ToArray().Select(c => (byte)c).ToArray());
+                using var ops = new MemoryStream();
+                FinishSerialization(code, ops, TargetFormat.Optimized);
+                ops.Position = 0;
+                return DeserializeFromStream(ops, progressTracker);
+            }
+
+
+            
         }
         /// <summary>
         /// Deserializes from the given string of opcodes

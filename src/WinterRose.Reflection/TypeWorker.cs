@@ -334,7 +334,7 @@ namespace WinterRose
                 }
             }
 
-            Found:
+Found:
 
             if (type != null)
                 typeCache.AddOrUpdate(typeName, type, (key, existing) => existing);
@@ -684,6 +684,18 @@ namespace WinterRose
                     throw new FailedToCastTypeException("could not cast source to ushort");
                 else
                     result = i;
+            }
+            else if (baseObjectType.IsEnum)
+            {
+                if (!Enum.TryParse(baseObjectType, $"{from}", out object? i))
+                    throw new FailedToCastTypeException("could not cast source to enum");
+                else
+                    result = i;
+            }
+            else if (baseObjectType.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                Type actual = baseObjectType.GetGenericArguments()[0];
+                result = CastPrimitive(from, actual);
             }
             else
                 throw new CastTypeNotSupportedException($"given type to cast to is not supported: {from.GetType().Name}, {to.Name}");

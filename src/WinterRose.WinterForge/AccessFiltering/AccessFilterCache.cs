@@ -311,7 +311,20 @@ namespace WinterRose.WinterForgeSerializing
     }
 
     internal class WinterForgeAccessIllegalException(string msg) : Exception(msg);
-
+    /// <summary>
+    /// Global default policy that WinterForge applies when evaluating <see cref="AccessFilter"/>s.
+    /// </summary>
+    public enum AccessFilterKind
+    {
+        /// <summary>
+        /// Members are permitted unless they are within the filter
+        /// </summary>
+        Blacklist,
+        /// <summary>
+        /// Members are permitted only when they are in the filter
+        /// </summary>
+        Whitelist
+    }
 
     [Serializable]
     internal class WinterForgeAccessFilterException : Exception
@@ -329,18 +342,5 @@ namespace WinterRose.WinterForgeSerializing
         }
     }
 
-    /// <summary>
-    /// Global default policy that WinterForge applies when evaluating <see cref="AccessFilter"/>s.
-    /// </summary>
-    public enum AccessFilterKind
-    {
-        /// <summary>
-        /// Members are permitted unless they are within the filter
-        /// </summary>
-        Blacklist,
-        /// <summary>
-        /// Members are permitted only when they are in the filter
-        /// </summary>
-        Whitelist
-    }
+
 }
