@@ -304,7 +304,7 @@ namespace WinterRose.WinterForgeSerializing.Workers
                 return primitiveName;
 
             if (!t.IsGenericType)
-                return t.Name;
+                return t.FullName;
 
             string mainTypeName = t.GetGenericTypeDefinition().Name;
             int backtickIndex = mainTypeName.IndexOf('`');

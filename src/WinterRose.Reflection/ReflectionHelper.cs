@@ -107,7 +107,7 @@ namespace WinterRose.Reflection
                     }
                 }
                 else
-                    throw new FieldNotFoundException($"field or property with name '{name}' does not exist");
+                    throw new FieldNotFoundException($"field or property with name '{name}' does not exist on type '{obj.GetType().FullName}'");
             }
                 
             if (res is 0)
