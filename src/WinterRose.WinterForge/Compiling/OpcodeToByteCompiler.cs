@@ -86,7 +86,7 @@ public class OpcodeToByteCompiler
 
             if (!ValidateLine(rawLine, out var parts, out var opcodeByte))
                 continue;
-
+            
             var opcode = (OpCode)opcodeByte;
 
             // DEFINE + custom compiler path: buffer subsequent lines until matching END found, then rehydrate & compile
@@ -621,13 +621,116 @@ public class OpcodeToByteCompiler
                     {
                         writer.Write((byte)ValuePrefix.DEFAULT);
                     }
+                    else if (TryResolveType(raw, out var type, out string rest))
+                    {
+                        ValuePrefix f = Enum.Parse<ValuePrefix>(TYPE_NAME_MAP[type], true);
+                        WritePrefered(writer, rest, f);
+                    }
                     else
                         WriteString(writer, raw);
                 }
                 else
-                    WriteString(writer, value.ToString());
+                    WriteString(writer, value?.ToString());
                 break;
         }
+    }
+    
+    private static readonly Dictionary<string, Type> TYPE_MAP = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        // int / Int32
+        { "int", typeof(int) },
+        { "int32", typeof(int) },
+
+        // long / Int64
+        { "long", typeof(long) },
+        { "int64", typeof(long) },
+
+        // short / Int16
+        { "short", typeof(short) },
+        { "int16", typeof(short) },
+
+        // uint / UInt32
+        { "uint", typeof(uint) },
+        { "uint32", typeof(uint) },
+
+        // ulong / UInt64
+        { "ulong", typeof(ulong) },
+        { "uint64", typeof(ulong) },
+
+        // ushort / UInt16
+        { "ushort", typeof(ushort) },
+        { "uint16", typeof(ushort) },
+
+        // byte / Byte
+        { "byte", typeof(byte) },
+
+        // sbyte / SByte
+        { "sbyte", typeof(sbyte) },
+
+        // bool / Boolean
+        { "bool", typeof(bool) },
+        { "boolean", typeof(bool) },
+
+        // string / String
+        { "string", typeof(string) },
+
+        // float / Single
+        { "float", typeof(float) },
+        { "single", typeof(float) },
+
+        // double
+        { "double", typeof(double) },
+
+        // decimal
+        { "decimal", typeof(decimal) },
+
+        // char / Char
+        { "char", typeof(char) },
+
+        // object
+        { "object", typeof(object) },
+    };
+    
+    private static readonly Dictionary<Type, string> TYPE_NAME_MAP = new Dictionary<Type, string>
+    {
+        { typeof(int), "int" },
+        { typeof(long), "long" },
+        { typeof(short), "short" },
+        { typeof(uint), "uint" },
+        { typeof(ushort), "ushort" },
+        { typeof(ulong), "ulong" },
+        { typeof(byte), "byte" },
+        { typeof(sbyte), "sbyte" },
+        { typeof(bool), "bool" },
+        { typeof(string), "string" },
+        { typeof(float), "float" },
+        { typeof(double), "double" },
+        { typeof(decimal), "decimal" },
+        { typeof(char), "char" },
+        { typeof(object), "object" }
+    };
+
+    public static bool TryResolveType(string input, out Type resolvedType, out string remainder)
+    {
+        resolvedType = null;
+        remainder = null;
+
+        if (string.IsNullOrEmpty(input))
+            return false;
+
+        int first = input.IndexOf('|');
+        if (first == -1)
+            return false;
+
+        int second = input.IndexOf('|', first + 1);
+        if (second == -1)
+            return false;
+
+        string typeToken = input.Substring(first + 1, second - first - 1);
+
+        remainder = input.Substring(second + 1);
+
+        return TYPE_MAP.TryGetValue(typeToken, out resolvedType);
     }
 
     private bool TryConvert<T>(object input, out T result)

@@ -57,11 +57,15 @@ public class ByteToOpcodeDecompiler
 
     private static void InternalParse(BinaryReader reader, InstructionStream instructions)
     {
+        List<Instruction> seenOpcodes = [];
+        
         try
         {
             while (true)
             {
                 byte peek = reader.ReadByte();
+                if (peek == 77)
+                    ;
                 if (peek == -1)
                 {
                     if (WaitIndefinitelyForData)
@@ -71,6 +75,11 @@ public class ByteToOpcodeDecompiler
                     }
                     else
                         break;
+                }
+
+                if (reader.PeekChar() == 77)
+                {
+                    
                 }
 
                 OpCode opcode = (OpCode)peek;
@@ -220,7 +229,7 @@ public class ByteToOpcodeDecompiler
                 }
 
                 instructions.Add(new Instruction(opcode, args.ToArray()));
-
+                seenOpcodes.Add(new Instruction(opcode, args.ToArray()));
                 if (opcode == OpCode.END_OF_DATA)
                     break;
             }

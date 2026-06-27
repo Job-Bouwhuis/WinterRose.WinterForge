@@ -8,12 +8,12 @@ namespace WinterRose.WinterForgeSerializing.BuildInValueProviders
         {
             if(value is string s && s.StartsWith('"') && s.EndsWith('"'))
                 return DateTime.Parse(s[1..^1]);
-            return DateTime.Parse((string)value);
+            return DateTime.FromBinary(Convert.ToInt64(value));
         }
 
         public override object CreateString(DateTime obj, ObjectSerializer serializer)
         {
-            return $"\"{obj}\"";
+            return obj.ToBinary();
         }
     }
 
