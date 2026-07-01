@@ -64,8 +64,6 @@ public class ByteToOpcodeDecompiler
             while (true)
             {
                 byte peek = reader.ReadByte();
-                if (peek == 77)
-                    ;
                 if (peek == -1)
                 {
                     if (WaitIndefinitelyForData)
@@ -225,6 +223,8 @@ public class ByteToOpcodeDecompiler
 
 
                     default:
+                        if(peek == 239)
+                            throw new InvalidOperationException($"Opcode {opcode} not supported in deserializer. Did you mean to deserialize from Human Readable file?");
                         throw new InvalidOperationException($"Opcode {opcode} not supported in deserializer.");
                 }
 
