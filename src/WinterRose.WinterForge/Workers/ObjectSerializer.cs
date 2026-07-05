@@ -87,13 +87,15 @@ namespace WinterRose.WinterForgeSerializing.Workers
             if (isRootCall && WinterForge.SupportedPrimitives.Contains(obj.GetType()))
             {
                 string reference = SerializeValue(obj, destinationStream);
-                WriteToStream(destinationStream, $$""""
-                    #template PrimitiveRoot {
-                        return {{reference}};
-                    }
-                    global result = PrimitiveRoot();
-                    return result;
-                    """");
+//                 WriteToStream(destinationStream, $$""""
+//                     #template PrimitiveRoot {
+//                         return {{reference}};
+//                     }
+//                     global result = PrimitiveRoot();
+//                     return result;
+//                     """");
+
+                WriteToStream(destinationStream, $"return {reference};");
                 return;
             }
 

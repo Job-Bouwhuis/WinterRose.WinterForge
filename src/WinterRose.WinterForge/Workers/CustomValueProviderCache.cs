@@ -17,7 +17,10 @@ internal static class CustomValueProviderCache
 
             CustomValueProviderINTERNAL instance = (CustomValueProviderINTERNAL)Activator.CreateInstance(serializer);
             if (instance != null)
-                valueProviders.Add(instance.Type, instance);
+            {
+                if(!valueProviders.TryGetValue(instance.Type, out _))
+                    valueProviders.Add(instance.Type, instance);
+            }
         }
     }
 
