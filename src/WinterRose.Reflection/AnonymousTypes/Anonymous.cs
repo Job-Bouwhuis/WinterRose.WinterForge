@@ -16,6 +16,11 @@ namespace WinterRose.AnonymousTypes;
 /// <remarks>This class inherits <see cref="DynamicObject"/></remarks>
 public class Anonymous() : DynamicObject
 {
+    /// <summary>
+    /// Whether or not to throw a <see cref="AnonymousFieldDoesntExistException"/> when trying to read a field that doesnt exist, or to return null
+    /// </summary>
+    public static bool ThrowOnMissingField { get; set; } = true;
+
     internal Dictionary<string, object?> runtimeVariables = new Dictionary<string, object?>();
 
     /// <summary>
@@ -35,16 +40,25 @@ public class Anonymous() : DynamicObject
             if (runtimeVariables.TryGetValue(identifier, out var value))
                 return value;
 
-            // last ditch effort to find the member using reflection
-            var member = new ReflectionHelper(this).GetMember(identifier);
-            if(member is not null)
-                return member.GetValue(this);
-            throw new AnonymousFieldDoesntExistException(identifier);
+            try
+            {
+                // last ditch effort to find the member using reflection
+                var member = new ReflectionHelper(this).GetMember(identifier);
+                if (member is not null)
+                    return member.GetValue(this);
+            }
+            catch
+            {
+
+            }
+
+
+            return ThrowOnMissingField
+                ? throw new AnonymousFieldDoesntExistException(identifier)
+                : null;
         }
-        set
-        {
-            runtimeVariables[identifier] = value;
-        }
+
+        set => runtimeVariables[identifier] = value;
     }
 
     public bool TryGet<T>(string identifier, out T? val)

@@ -221,7 +221,6 @@ public class ByteToOpcodeDecompiler
                         args.Add(ReadString(reader));
                         break;
 
-
                     default:
                         if(peek == 239)
                             throw new InvalidOperationException($"Opcode {opcode} not supported in deserializer. Did you mean to deserialize from Human Readable file?");
