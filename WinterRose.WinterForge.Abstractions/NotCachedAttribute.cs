@@ -14,7 +14,7 @@ namespace WinterRose
     /// attribute is part of a circle reference
     /// </remarks>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = true)]
-    class NotCachedAttribute : Attribute
+    public class NotCachedAttribute : Attribute
     {
     }
 }

@@ -43,6 +43,7 @@ It also allows accessing fields of already deserialzied objects, static classes.
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\WinterRose.WinterForge.Abstractions\WinterRose.WinterForge.Abstractions.csproj" />
     <ProjectReference Include="..\WinterRose.Reflection\WinterRose.Reflection.csproj" />
   </ItemGroup>
 

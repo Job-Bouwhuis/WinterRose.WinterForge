@@ -1072,9 +1072,17 @@ ExpressionBuilding:
         progressTracker?.OnField((string)instruction.Args[1], instructionIndexStack.Peek() + 1, instructionTotal);
 
         Type fieldType = ResolveType((string)instruction.Args[0]);
+        string memberName = (string)instruction.Args[1];
 
-        object val = GetArgumentValue(instruction.Args[2], 2, fieldType, val => { });
-        obj.SetMember((string)instruction.Args[1], ref val);
+        if(fieldType is null)
+        {
+            fieldType = ResolveType((string)instruction.Args[1]);
+            if(fieldType is not null)
+                throw new InvalidOperationException("Field type and name should be written as 'type:name' not 'name:type'");
+        }
+
+        object val = GetArgumentValue(instruction.Args[2], 2, fieldType!, val => { });
+        obj.SetMember(memberName, ref val);
     }
 
     (decimal, decimal) PopTwoDecimals()
@@ -1766,7 +1774,6 @@ ExpressionBuilding:
         else
         {
             resolvedType = TypeWorker.FindType(typeName);
-            var test = TypeWorker.FindType("HBOGlobals");
         }
 
         if (resolvedType is not null)
@@ -1790,6 +1797,10 @@ ExpressionBuilding:
             "char" => "System.Char",
             "string" => "System.String",
             "object" => "System.Object",
+            "uint" => "System.UInt32",
+            "ulong" => "System.UInt64",
+            "ushort" => "System.UInt16",
+            "sbyte" => "System.SByte",
             _ => typeName
         };
     }
